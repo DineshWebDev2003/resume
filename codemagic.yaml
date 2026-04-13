@@ -18,8 +18,10 @@ workflows:
           mkdir -p android
           echo "android.enableAapt2=true" >> android/gradle.properties
           echo "android.useNewCruncher=false" >> android/gradle.properties
+          # Force clean any old assets
+          rm -rf android/app/src/main/res/drawable-*
       - name: Expo Prebuild
-        script: npx expo prebuild
+        script: npx expo prebuild --clean
       - name: Build Android Release
         script: |
           cd android

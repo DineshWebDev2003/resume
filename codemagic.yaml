@@ -1,0 +1,31 @@
+workflows:
+  android-release:
+    name: Android Release Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      node: latest
+      groups:
+        - google_play # Defined in Codemagic UI for signing
+      vars:
+        PACKAGE_NAME: "com.resume"
+        GOOGLE_SERVICES_JSON: $GOOGLE_SERVICES_JSON_AUTH # Secret var
+    scripts:
+      - name: Install dependencies
+        script: npm install
+      - name: Create google-services.json
+        script: echo $GOOGLE_SERVICES_JSON | base64 --decode > google-services.json
+      - name: Expo Prebuild
+        script: npx expo prebuild
+      - name: Build Android Release
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab
+      - android/app/build/outputs/apk/release/*.apk
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com

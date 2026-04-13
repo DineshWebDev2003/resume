@@ -16,6 +16,7 @@ export function useThemeColor(
   if (colorFromProps) {
     return colorFromProps;
   } else {
-    return Colors[theme][colorName];
+    const themeColors = Colors?.[theme] || Colors?.['light'];
+    return themeColors?.[colorName] || '#000';
   }
 }

@@ -1,53 +1,57 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
-import { Platform } from 'react-native';
-
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
+    text: '#000000',
+    background: '#ffffff',
+    tint: '#FF69B4', // Light Pink
     icon: '#687076',
     tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    tabIconSelected: '#FF69B4',
+    surface: '#f8f9fa',
+    glass: 'rgba(255, 255, 255, 0.7)',
+    glassBorder: 'rgba(0, 0, 0, 0.1)',
+    textMuted: '#64748b',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
+    text: '#ffffff',
+    background: '#121212', // Material Dark
+    tint: '#FF69B4', // Light Pink
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    tabIconSelected: '#FF69B4',
+    surface: '#1e1e1e',
+    glass: 'rgba(0, 0, 0, 0.7)',
+    glassBorder: 'rgba(255, 255, 255, 0.1)',
+    textMuted: '#94a3b8',
   },
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+export const Theme = {
+  colors: {
+    primary: '#FF69B4', // Hot Pink
+    secondary: '#FFB6C1', // Light Pink
+    accent: '#FFC0CB', // Baby Pink
+    // Default to light, but components should use useColorScheme hook
+    background: '#ffffff',
+    surface: '#f8f9fa',
+    text: '#000000',
+    textMuted: '#64748b',
+    glass: 'rgba(255, 255, 255, 0.7)',
+    glassBorder: 'rgba(0, 0, 0, 0.1)',
+    success: '#10b981',
+    error: '#ef4444',
   },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
   },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+  borderRadius: {
+    sm: 8,
+    md: 12,
+    lg: 20,
+    xl: 30,
+    full: 9999,
+  }
+};

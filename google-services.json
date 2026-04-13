@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "721103059213",
+    "project_id": "resume-app-a3c51",
+    "storage_bucket": "resume-app-a3c51.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:721103059213:android:ce8216ce07e899f1c09844",
+        "android_client_info": {
+          "package_name": "com.resume"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "721103059213-s9ru15vv3kk302tahf97dl0k70sj6a4c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhtT26rqkVAOCvvyPAhUjWdQYPe-7iobY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "721103059213-s9ru15vv3kk302tahf97dl0k70sj6a4c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

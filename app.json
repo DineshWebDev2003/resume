@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Resume Elite",
-    "slug": "resume-elite",
+    "slug": "resume",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -50,6 +50,7 @@
       "eas": {
         "projectId": "8fbb434b-0d8e-48a7-9744-79c89f2f16cc"
       }
-    }
+    },
+    "owner": "levelup.dev"
   }
 }

@@ -11,6 +11,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Theme, Colors } from "@/constants/theme";
+import { useAuth } from "@/hooks/use-auth";
+import { signOut } from "@/services/auth";
 import { 
   Bell, 
   Search, 
@@ -23,7 +25,8 @@ import {
   Target,
   ArrowRight,
   Download,
-  Clock
+  Clock,
+  LogOut
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import Animated, { FadeInUp, FadeInDown } from "react-native-reanimated";
@@ -35,11 +38,21 @@ import { ResumeData } from "@/components/resume-templates";
 const { width } = Dimensions.get('window');
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.replace("/login");
+    } catch (e) {
+      console.error("Logout Error:", e);
+    }
+  };
 
   const quickActions = [
     { 
@@ -97,23 +110,38 @@ export default function Dashboard() {
                   Welcome back,
                 </Text>
                 <Text style={[styles.userName, { color: colors.text }]}>
-                  Alex Johnson 👋
+                  {user?.displayName || user?.email?.split('@')[0] || "User"} 👋
                 </Text>
               </View>
             </View>
-            <TouchableOpacity
-              onPress={() => router.push("/notifications")}
-              style={[
-                styles.notificationBtn,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.glassBorder,
-                },
-              ]}
-            >
-              <Bell size={24} color={colors.text} />
-              <View style={[styles.badge, { borderColor: colors.background }]} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => router.push("/notifications")}
+                style={[
+                  styles.notificationBtn,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.glassBorder,
+                  },
+                ]}
+              >
+                <Bell size={24} color={colors.text} />
+                <View style={[styles.badge, { borderColor: colors.background }]} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                onPress={handleLogout}
+                style={[
+                  styles.notificationBtn,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.glassBorder,
+                  },
+                ]}
+              >
+                <LogOut size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
           </View>
         </BlurView>
       </View>

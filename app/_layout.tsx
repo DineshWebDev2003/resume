@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useAuth, AuthProvider } from '@/hooks/use-auth';
@@ -19,8 +19,25 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+  
   const isDark = true;
   const colors = Colors.dark;
+
+  useEffect(() => {
+    if (loading) return;
+
+    const inAuthGroup = segments[0] === '(tabs)';
+
+    if (!user && segments[0] !== 'login') {
+      // Redirect to the login page if the user is not authenticated
+      router.replace('/login');
+    } else if (user && segments[0] === 'login') {
+      // Redirect to the dashboard if the user is authenticated
+      router.replace('/(tabs)');
+    }
+  }, [user, loading, segments]);
 
 
   if (loading) {
@@ -36,11 +53,8 @@ function RootLayoutNav() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <StatusBar style="dark" backgroundColor={Theme.colors.primary} translucent={false} />
         <Stack screenOptions={{ headerShown: false }}>
-          {!user ? (
-            <Stack.Screen name="login" />
-          ) : (
-            <Stack.Screen name="(tabs)" />
-          )}
+          <Stack.Screen name="login" />
+          <Stack.Screen name="(tabs)" />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
       </View>

@@ -28,6 +28,13 @@
       "expo-router",
       "@react-native-google-signin/google-signin",
       [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-2141805169615611~9116494229",
+          "iosAppId": "ca-app-pub-2141805169615611~9116494229"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

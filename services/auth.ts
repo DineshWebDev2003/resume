@@ -1,5 +1,5 @@
 import { auth } from './firebase';
-import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithCredential, updateProfile } from 'firebase/auth';
 
 let GoogleSignin: any = null;
 try {
@@ -50,3 +50,11 @@ export const signOut = async () => {
     await auth.signOut();
   }
 };
+
+export const updateUserPhoto = async (photoURL: string) => {
+  const user = auth.currentUser;
+  if (user) {
+    await updateProfile(user, { photoURL });
+  }
+};
+

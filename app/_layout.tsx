@@ -1,3 +1,16 @@
+import { Buffer } from 'buffer';
+global.Buffer = global.Buffer || Buffer;
+global.process = global.process || require('process');
+
+// Polyfill TextDecoder to handle 'ascii' encoding which is used by fontkit
+if (typeof TextDecoder !== 'undefined') {
+  const OriginalTextDecoder = TextDecoder;
+  global.TextDecoder = function(encoding, options) {
+    const enc = (encoding === 'ascii' || encoding === 'latin1') ? 'utf-8' : encoding;
+    return new OriginalTextDecoder(enc, options);
+  };
+  global.TextDecoder.prototype = OriginalTextDecoder.prototype;
+}
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +27,7 @@ import { OpenSans_400Regular, OpenSans_700Bold } from '@expo-google-fonts/open-s
 import { Lato_400Regular, Lato_700Bold } from '@expo-google-fonts/lato';
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
+import mobileAds from 'react-native-google-mobile-ads';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,7 +44,7 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(tabs)';
 
-    if (!user && segments[0] !== 'login') {
+    if (!user && segments[0] !== 'login' && segments[0] !== 'terms' && segments[0] !== 'privacy' && segments[0] !== 'category-templates') {
       // Redirect to the login page if the user is not authenticated
       router.replace('/login');
     } else if (user && segments[0] === 'login') {
@@ -79,6 +93,17 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
+    }
+    // Initialize AdMob safely
+    try {
+      const mobileAds = require('react-native-google-mobile-ads').default;
+      mobileAds()
+        .initialize()
+        .then(adapterStatuses => {
+          console.log('AdMob Initialized');
+        });
+    } catch (e) {
+      console.log('AdMob native module not found, skipping initialization');
     }
   }, [fontsLoaded]);
 

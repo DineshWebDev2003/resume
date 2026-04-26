@@ -7,8 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInUp, FadeInRight } from 'react-native-reanimated';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { API_CONFIG } from '@/constants/config';
 
 const { width } = Dimensions.get('window');
+const bannerId = __DEV__ ? TestIds.BANNER : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 const JobAdContainer = ({ colors }: any) => (
   <Animated.View entering={FadeInUp}>
@@ -220,12 +223,25 @@ export default function JobsScreen() {
                         </View>
                       </View>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.applyBtn}
-                      onPress={() => Linking.openURL(job.apply_options?.[0]?.link || job.share_link)}
-                    >
-                      <Text style={styles.applyBtnText}>Apply Now</Text>
-                    </TouchableOpacity>
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity 
+                        style={[styles.applyBtn, { flex: 2, flexDirection: 'row', gap: 6 }]}
+                        onPress={() => router.push({
+                          pathname: '/builder/ats',
+                          params: { jobUrl: job.apply_options?.[0]?.link || job.share_link, autoScan: 'true' }
+                        })}
+                      >
+                        <Zap size={14} color="#FFF" fill="#FFF" />
+                        <Text style={styles.applyBtnText}>Optimize & Apply</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.outlineBtn, { flex: 1 }]}
+                        onPress={() => Linking.openURL(job.apply_options?.[0]?.link || job.share_link)}
+                      >
+                        <Globe size={14} color={colors.text} />
+                        <Text style={[styles.outlineBtnText, { color: colors.text }]}>Apply</Text>
+                      </TouchableOpacity>
+                    </View>
                   </GlassCard>
                 </React.Fragment>
               ))
@@ -284,6 +300,16 @@ export default function JobsScreen() {
           </Animated.View>
         )}
       </ScrollView>
+
+      <View style={styles.bannerContainer}>
+        <BannerAd
+          unitId={bannerId}
+          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          requestOptions={{
+            requestNonPersonalizedAdsOnly: true,
+          }}
+        />
+      </View>
     </View>
   );
 }
@@ -428,10 +454,36 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   applyBtnText: {
-    fontWeight: '800',
-    fontSize: 15,
+    fontWeight: '900',
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  outlineBtn: {
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Theme.colors.glassBorder,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  outlineBtnText: {
+    fontWeight: '700',
+    fontSize: 13,
   },
   throneCard: {
     padding: 20,
@@ -548,5 +600,12 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '900',
     fontSize: 14,
+  },
+  bannerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    backgroundColor: 'transparent',
+    paddingBottom: 4,
   },
 });

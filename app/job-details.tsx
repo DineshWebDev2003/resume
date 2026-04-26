@@ -1,7 +1,9 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Theme, Colors } from '@/constants/theme';
+import { saveJobApplication } from '@/services/firestore';
+import { auth } from '@/services/firebase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
@@ -12,7 +14,8 @@ import {
   Calendar, 
   CheckCircle2, 
   Building2,
-  Share2
+  Share2,
+  Zap
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -35,6 +38,44 @@ export default function JobDetailsScreen() {
     workDays: 'Mon - Fri (9 AM - 6 PM)',
     applyLink: params.applyLink || 'https://google.com/jobs',
     isInternal: params.isInternal === 'true'
+  };
+
+  const handleApply = async () => {
+    if (!auth.currentUser) {
+      Alert.alert("Login Required", "Please login to apply for jobs.");
+      return;
+    }
+
+    try {
+      if (job.isInternal) {
+        router.push({
+            pathname: '/apply',
+            params: {
+                title: job.title,
+                company: job.company
+            }
+        });
+      } else {
+        await Linking.openURL(job.applyLink as string);
+      }
+      
+      // Track the application in Firestore
+      await saveJobApplication({
+        id: params.id as string,
+        title: job.title as string,
+        company: job.company as string,
+        location: job.location as string,
+        logo: job.logo as string
+      });
+      
+      Alert.alert("Success", "Application tracked successfully!");
+    } catch (error: any) {
+      if (error.message?.includes('already applied')) {
+        Alert.alert("Notice", error.message);
+      } else {
+        console.error("Apply error:", error);
+      }
+    }
   };
 
   return (
@@ -115,28 +156,26 @@ export default function JobDetailsScreen() {
         </View>
       </ScrollView>
 
-      {/* Footer Apply */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 20, borderTopColor: colors.glassBorder }]}>
-        <TouchableOpacity 
-          style={styles.applyBtn}
-          onPress={() => {
-            if (job.isInternal) {
-                router.push({
-                    pathname: '/apply',
-                    params: {
-                        title: job.title,
-                        company: job.company
-                    }
-                });
-            } else {
-              Linking.openURL(job.applyLink as string);
-            }
-          }}
-        >
-            <Text style={styles.applyBtnText}>
-              Apply Now
-            </Text>
-        </TouchableOpacity>
+      {/* Footer Actions */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 20, borderTopColor: colors.glassBorder, backgroundColor: colors.background + 'f0' }]}>
+        <View style={styles.footerActionRow}>
+          <TouchableOpacity 
+            style={[styles.applyBtn, { flex: 2, flexDirection: 'row', gap: 8 }]}
+            onPress={() => router.push({
+              pathname: '/builder/ats',
+              params: { jobUrl: job.applyLink, autoScan: 'true' }
+            })}
+          >
+            <Zap size={18} color="#FFF" fill="#FFF" />
+            <Text style={styles.applyBtnText}>Optimize & Apply</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.outlineBtn, { flex: 1.2 }]}
+            onPress={handleApply}
+          >
+            <Text style={[styles.outlineBtnText, { color: colors.text }]}>Apply Now</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -284,6 +323,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 20,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: Theme.colors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
@@ -291,8 +331,25 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   applyBtnText: {
-    color: '#000',
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '900',
+  },
+  footerActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  outlineBtn: {
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.colors.glassBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outlineBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

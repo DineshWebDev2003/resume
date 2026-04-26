@@ -1,642 +1,472 @@
-import { GlassCard } from "@/components/glass-card";
 import { Colors, Theme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { deleteResume, getResumes, UserResume } from "@/utils/storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ChevronLeft, Plus, Star, Trash2, Download } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
-import * as FileSystem from "expo-file-system";
-import { generateResumeHtml } from "@/components/resume-html-generator";
 import {
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  Platform,
-} from "react-native";
-import Animated, { FadeInUp } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const CATEGORIES = [
-  {
-    name: "Software IT",
-    image:
-      "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&q=80",
-    count: 45,
-    description: "Dev, Ops, Cloud",
-  },
-  {
-    name: "Business & Finance",
-    image:
-      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
-    count: 32,
-    description: "MBA, Finance, Sales",
-  },
-  {
-    name: "Healthcare",
-    image:
-      "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=800&q=80",
-    count: 28,
-    description: "Medical & Nursing",
-  },
-  {
-    name: "Creative & Design",
-    image:
-      "https://images.unsplash.com/photo-1558655146-d09347e92766?auto=format&fit=crop&w=800&q=80",
-    count: 35,
-    description: "UI/UX, Arts, Media",
-  },
-  {
-    name: "Education",
-    image:
-      "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=800&q=80",
-    count: 15,
-    description: "Teaching & Research",
-  },
-];
-
-const CATEGORY_CONTENT: Record<string, any> = {
-  "Software IT": {
-    name: "Sarah Chen",
-    role: "Senior Full Stack Cloud Architect",
-    summary:
-      "Expert in React, Node.js and AWS Cloud Infrastructure. 8+ years experience building scalable enterprise applications and leading cross-functional engineering teams to deliver high-performance digital solutions.",
-  },
-  "Business & Finance": {
-    name: "Michael Ross",
-    role: "Strategic Investment Analyst",
-    summary:
-      "Results-oriented financial advisor with a decade of expertise in equity research, risk mitigation, and portfolio optimization. Proven track record in managing $100M+ assets and delivering consistent ROI.",
-  },
-  Healthcare: {
-    name: "Dr. Emily Watson",
-    role: "Head Registered Nurse (Emergency Care)",
-    summary:
-      "Compassionate healthcare professional with 12 years of experience in high-volume trauma centers. Specialized in critical care coordination, patient advocacy, and mentorship of junior nursing staff.",
-  },
-  "Creative & Design": {
-    name: "Alex Rivera",
-    role: "Design Lead & UI/UX Strategist",
-    summary:
-      "Empathy-driven visual storyteller focused on crafting intuitive, accessible, and high-conversion digital products. Expertise in Figma, Adobe Creative Suite, and conversion rate optimization (CRO) through design.",
-  },
-  Education: {
-    name: "David Miller",
-    role: "Associate Professor of Computer Science",
-    summary:
-      "Dedicated educator and research fellow with a focus on artificial intelligence ethics and distributed systems. Published 15+ peer-reviewed papers and facilitated various award-winning STEM programs.",
-  },
-};
-
-const generateResumesForCategory = (category: string) => {
-  const resumes = [];
-  const templates = ["Executive", "Modern", "Creative"];
-  const colors = ["#FF1493", "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6"];
-  const content = CATEGORY_CONTENT[category] || {
-    name: "Alex Johnson",
-    role: "Professional",
-    summary: "Career details...",
-  };
-
-  for (let i = 1; i <= 20; i++) {
-    const isPremium = i > 10;
-    resumes.push({
-      id: `${category}-${i}`,
-      name: `${category} Template ${i}`,
-      userName: content.name,
-      userRole: content.role,
-      userSummary: content.summary,
-      template: templates[i % templates.length],
-      color: colors[i % colors.length],
-      isPremium,
-      hasPhoto: i % 3 === 0,
-    });
-  }
-  return resumes;
-};
-
+  Briefcase,
+  Code,
+  FileText,
+  GraduationCap,
+  Heart,
+  Layers,
+  Plus,
+  Trash2,
+  Zap,
+  ShieldCheck,
+  MoreVertical,
+  SlidersHorizontal,
+  ChevronRight,
+  Crown,
+} from "lucide-react-native";
 import {
   CreativeTemplate,
   ExecutiveTemplate,
   ModernTemplate,
   ProfessionalTemplate,
 } from "@/components/resume-templates";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Animated, {
+  Extrapolate,
+  FadeInDown,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const TemplateMiniPreview = ({
-  template,
-  name,
-  role,
-  summary,
-  isFeatured = false,
-}: any) => {
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+const CARD_WIDTH = SCREEN_WIDTH - 40;
+const SPACING = 15;
+const SIDE_PEEK = 20;
+
+const CATEGORIES = [
+  {
+    id: "it",
+    name: "IT & Software",
+    icon: Code,
+    image:
+      "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=400&q=80",
+  },
+  {
+    id: "accounts",
+    name: "Accounts",
+    icon: Briefcase,
+    image:
+      "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=400&q=80",
+  },
+  {
+    id: "marketing",
+    name: "Marketing",
+    icon: Zap,
+    image:
+      "https://images.unsplash.com/photo-1512486130939-2c4f79935e4f?auto=format&fit=crop&w=400&q=80",
+  },
+  {
+    id: "healthcare",
+    name: "Medical",
+    icon: Heart,
+    image:
+      "https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=400&q=80",
+  },
+  {
+    id: "education",
+    name: "Education",
+    icon: GraduationCap,
+    image:
+      "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80",
+  },
+];
+
+const ALL_TEMPLATES = [
+  { key: 't1', id: 'executive', name: 'Executive', isPro: false },
+  { key: 't2', id: 'modern', name: 'Modern', isPro: true },
+  { key: 't3', id: 'creative', name: 'Creative', isPro: false },
+  { key: 't4', id: 'professional', name: 'Professional', isPro: true },
+  { key: 't5', id: 'modern', name: 'Minimal', isPro: false },
+  { key: 't6', id: 'professional', name: 'Elite Pro', isPro: true },
+  { key: 't7', id: 'creative', name: 'Fancy Pink', isPro: false },
+  { key: 't8', id: 'executive', name: 'Classic Grey', isPro: false },
+  { key: 't9', id: 'modern', name: 'Bold Impact', isPro: true },
+  { key: 't10', id: 'professional', name: 'Developer', isPro: false },
+];
+
+const TemplateMiniPreview = ({ id, colors, isDark }: { id: string, colors: any, isDark: boolean }) => {
   const A4_WIDTH = 595;
   const A4_HEIGHT = 842;
-  const scale = isFeatured ? 0.2 : 0.28;
+  const scale = 0.26; 
 
-  const previewData = {
-    name: name || "Alex Johnson",
-    title: role || "Senior Software Systems Engineer",
-    summary:
-      summary ||
-      "Innovative and results-driven Software Engineer with over 7 years of experience in designing and implementing scalable cloud-native applications. Expert in React Native, Node.js, and Distributed Systems, with a passion for optimizing performance and enhancing user experience.",
-    email: "alex.johnson@example.com",
-    phone: "+1 (555) 234-5678",
-    skills: "React Native, TypeScript, Node.js, AWS (Lambda, S3, RDS), Docker, Kubernetes, GraphQL, Tailwind CSS, CI/CD, Agile Methodologies",
+  const mockData = {
+    name: "Alex Johnson",
+    title: "Senior Product Designer",
+    email: "alex.j@example.com",
+    phone: "+1 555 000 1234",
+    summary: "Creative designer with a focus on user-centric interfaces. 8 years experience.",
     experience: [
-      {
-        role: "Senior Systems Architect",
-        company: "TechFlow Solutions Inc.",
-        period: "2021-Present",
-        description: "Leading the development of a microservices architecture that handles 1M+ daily active users. Improved system latency by 45% through strategic caching and query optimization.",
-      },
-      {
-        role: "Lead Frontend Developer",
-        company: "Innovation Hub",
-        period: "2018-2021",
-        description: "Spearheaded the migration of legacy mobile apps to React Native, reducing development time by 30% and maintaining a 4.8-star rating on the App Store.",
-      },
-      {
-        role: "Software Engineer",
-        company: "Junior Dev Studios",
-        period: "2016-2018",
-        description: "Focused on developing interactive UI components and integrating third-party APIs for various fintech clients.",
-      },
+      { role: "Design Lead", company: "Pixel Studio", period: "2019 - Present", description: "Spearheaded rebranding for international clients." },
     ],
-    projects: [
-      {
-        id: "1",
-        title: "Global E-commerce Engine",
-        description: "Built a multi-tenant e-commerce platform supporting multiple currencies and languages with integrated Stripe payments.",
-      },
-      {
-        id: "2",
-        title: "AI Resume Builder",
-        description: "Developed an AI-powered tool that analyzes resumes against job descriptions to provide optimization scores and suggestions.",
-      },
-    ],
-    education: {
-      degree: "M.S. in Computer Science",
-      school: "Western Institute of Technology",
-      year: "2018",
-    },
+    skills: "UI/UX, Figma, React, Adobe Suite",
+    education: { degree: "BFA Design", school: "Design Academy", year: "2015" }
   };
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: "#fff",
-        overflow: "hidden",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <View
-        style={{
-          width: A4_WIDTH,
-          height: A4_HEIGHT,
-          backgroundColor: "#fff",
-          transform: [{ scale }],
-        }}
-      >
-        {template === "Executive" && (
-          <ExecutiveTemplate resumeData={previewData} selectedFont="Roboto" />
-        )}
-        {template === "Modern" && (
-          <ModernTemplate resumeData={previewData} selectedFont="Roboto" />
-        )}
-        {template === "Creative" && (
-          <CreativeTemplate resumeData={previewData} selectedFont="Roboto" />
-        )}
-        {template === "Professional" && (
-          <ProfessionalTemplate
-            resumeData={previewData}
-            selectedFont="Roboto"
-          />
-        )}
+    <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <View style={{ width: A4_WIDTH, height: A4_HEIGHT, transform: [{ scale }] }}>
+        {id === 'executive' && <ExecutiveTemplate resumeData={mockData} selectedFont="Roboto" />}
+        {id === 'modern' && <ModernTemplate resumeData={mockData} selectedFont="Roboto" />}
+        {id === 'creative' && <CreativeTemplate resumeData={mockData} selectedFont="Roboto" />}
+        {id === 'professional' && <ProfessionalTemplate resumeData={mockData} selectedFont="Roboto" />}
       </View>
     </View>
   );
 };
 
-export default function ResumesScreen() {
+function CategoryCard({
+  item,
+  index,
+  scrollX,
+  selectedCategory,
+  setSelectedCategory,
+  colors,
+  router,
+}: any) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const inputRange = [
+      (index - 1) * (CARD_WIDTH + SPACING),
+      index * (CARD_WIDTH + SPACING),
+      (index + 1) * (CARD_WIDTH + SPACING),
+    ];
+
+    const scale = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.92, 1, 0.92],
+      Extrapolate.CLAMP,
+    );
+
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.7, 1, 0.7],
+      Extrapolate.CLAMP,
+    );
+
+    return {
+      transform: [{ scale }],
+      opacity,
+    };
+  });
+
+  return (
+    <Animated.View
+      style={[animatedStyle, { width: CARD_WIDTH, marginRight: SPACING }]}
+    >
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => {
+          setSelectedCategory(item.id);
+          router.push({
+            pathname: "/category-templates",
+            params: { categoryId: item.id, categoryName: item.name }
+          } as any);
+        }}
+        style={[
+          styles.bigCatCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+          },
+        ]}
+      >
+        <View style={styles.bigCatImageContainer}>
+          <Image source={{ uri: item.image }} style={styles.bigCatImage} />
+          <LinearGradient
+            colors={["transparent", "rgba(0,0,0,0.4)", "rgba(0,0,0,0.9)"]}
+            style={styles.bigCatOverlay}
+          />
+          <View style={styles.bigCatInfo}>
+            <View
+              style={[
+                styles.catIconCircleBig,
+                { backgroundColor: "rgba(255, 255, 255, 0.25)" },
+              ]}
+            >
+              <item.icon size={22} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.bigCatName}>{item.name}</Text>
+              <Text style={styles.bigCatSub}>Professional Templates</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+
+
+export default function TemplatesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
 
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [myResumes, setMyResumes] = useState<UserResume[]>([]);
+  const [resumes, setResumes] = useState<UserResume[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState("it");
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
+  const scrollX = useSharedValue(0);
+
+  // Create looped data for infinite carousel
+  const [loopedData] = useState([...CATEGORIES, ...CATEGORIES, ...CATEGORIES]);
+  const totalItems = CATEGORIES.length;
+  const loopIndexOffset = totalItems; // Middle set start
+
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollX.value = event.contentOffset.x;
+  });
+
+  useEffect(() => {
+    // Initial scroll to middle set
+    setTimeout(() => {
+      flatListRef.current?.scrollToIndex({
+        index: loopIndexOffset,
+        animated: false,
+      });
+    }, 100);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // Auto-slide logic for looped data
+      const nextIndex = Math.round(scrollX.value / (CARD_WIDTH + SPACING)) + 1;
+
+      flatListRef.current?.scrollToIndex({
+        index: nextIndex,
+        animated: true,
+      });
+
+      // Handle loop reset silently in onMomentumScrollEnd
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [currentIndex]);
+
+  const loadData = async () => {
+    setLoading(true);
+    const data = await getResumes();
+    setResumes(data);
+    setLoading(false);
+  };
 
   useFocusEffect(
     useCallback(() => {
-      loadMyResumes();
+      loadData();
     }, []),
   );
 
-  const loadMyResumes = async () => {
-    const loaded = await getResumes();
-    setMyResumes(loaded);
-  };
-
   const handleDelete = (id: string) => {
-    Alert.alert("Delete Resume", "Are you sure you want to delete this resume?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          const success = await deleteResume(id);
-          if (success) {
-            setMyResumes((prev) => prev.filter((r) => r.id !== id));
-          }
+    Alert.alert(
+      "Delete Resume",
+      "Are you sure you want to delete this resume?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteResume(id);
+            loadData();
+          },
         },
-      },
-    ]);
-  };
-
-  const handleDownload = async (resume: UserResume) => {
-    try {
-      const html = generateResumeHtml(
-        resume.data,
-        resume.template,
-        resume.color || Theme.colors.primary,
-        "Roboto"
-      );
-
-      const { uri } = await Print.printToFileAsync({
-        html,
-        width: 794,
-        height: 1123,
-      });
-
-      const filename = `${resume.name.replace(/\s+/g, "_")}_Resume.pdf`;
-
-      if (Platform.OS === "android") {
-        const permissions =
-          await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-        if (permissions.granted) {
-          const base64Data = await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          const newFileUri =
-            await FileSystem.StorageAccessFramework.createFileAsync(
-              permissions.directoryUri,
-              filename,
-              "application/pdf"
-            );
-          await FileSystem.writeAsStringAsync(newFileUri, base64Data, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          Alert.alert("Success", "Resume saved to Downloads perfectly!");
-          return;
-        }
-      }
-
-      await Sharing.shareAsync(uri, {
-        UTI: "public.pdf",
-        dialogTitle: "Save your Resume",
-      });
-    } catch (error) {
-      console.error("Download error:", error);
-      Alert.alert("Error", "Could not generate or save PDF");
-    }
-  };
-
-  const renderCategoryList = () => (
-    <View style={styles.categoryContainer}>
-      {CATEGORIES.map((cat, index) => (
-        <Animated.View
-          key={cat.name}
-          entering={FadeInUp.delay(index * 150)
-            .duration(600)
-            .springify()}
-        >
-          <TouchableOpacity
-            style={[
-              styles.chatCard,
-              {
-                backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#f8f9fa",
-                borderColor: colors.glassBorder,
-              },
-            ]}
-            activeOpacity={0.7}
-            onPress={() => setSelectedCategory(cat.name)}
-          >
-            <View style={styles.chatAvatarContainer}>
-              <Image source={{ uri: cat.image }} style={styles.chatAvatar} />
-              <View
-                style={[
-                  styles.onlineStatus,
-                  { backgroundColor: Theme.colors.primary },
-                ]}
-              />
-            </View>
-
-            <View style={styles.chatInfo}>
-              <Text style={[styles.chatName, { color: colors.text }]}>
-                {cat.name}
-              </Text>
-              <Text
-                style={[styles.chatMessage, { color: colors.textMuted }]}
-                numberOfLines={1}
-              >
-                Browse {cat.description} templates
-              </Text>
-            </View>
-
-            <View style={styles.chatMeta}>
-              <Text style={[styles.chatTime, { color: colors.textMuted }]}>
-                {10 + index}m ago
-              </Text>
-              <View
-                style={[
-                  styles.chatBadge,
-                  { backgroundColor: Theme.colors.primary },
-                ]}
-              >
-                <Text style={styles.chatBadgeText}>{cat.count}</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-      ))}
-    </View>
-  );
-
-  const renderTemplateGrid = () => {
-    if (!selectedCategory) return null;
-    const resumes = generateResumesForCategory(selectedCategory);
-
-    return (
-      <View>
-        <TouchableOpacity
-          style={[
-            styles.backToCatBtn,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,255,255,0.05)"
-                : "rgba(0,0,0,0.05)",
-              borderColor: colors.glassBorder,
-            },
-          ]}
-          onPress={() => setSelectedCategory(null)}
-        >
-          <ChevronLeft size={20} color={colors.text} />
-          <Text style={[styles.backToCatText, { color: colors.text }]}>
-            Back to Categories
-          </Text>
-        </TouchableOpacity>
-
-        <Text style={[styles.gridHeadline, { color: colors.text }]}>
-          {selectedCategory} Resumes
-        </Text>
-
-        <View style={styles.grid}>
-          {resumes.map((resume) => (
-            <TouchableOpacity
-              key={resume.id}
-              style={styles.gridItem}
-              onPress={() =>
-                router.push({
-                  pathname: "/builder/manual",
-                  params: {
-                    theme: resume.template,
-                    color: resume.color,
-                    name: resume.userName,
-                    role: resume.userRole,
-                    summary: resume.userSummary,
-                  },
-                })
-              }
-            >
-              <View
-                style={[
-                  styles.resumePreview,
-                  {
-                    borderColor: "#eee",
-                    backgroundColor: isDark ? "#1e1e1e" : "#fff",
-                  },
-                ]}
-              >
-                {resume.isPremium && (
-                  <View style={styles.premiumRibbon}>
-                    <Star size={10} color="#fff" fill="#fff" />
-                    <Text style={styles.premiumText}>PRO</Text>
-                  </View>
-                )}
-                <TemplateMiniPreview
-                  template={resume.template}
-                  name={resume.userName}
-                  role={resume.userRole}
-                  summary={resume.userSummary}
-                />
-              </View>
-              <Text
-                style={[styles.resumeGridName, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {resume.name}
-              </Text>
-              <Text
-                style={[styles.resumeGridTemplate, { color: colors.textMuted }]}
-              >
-                {resume.template}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+      ],
     );
   };
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: insets.top + 5,
-          backgroundColor: colors.background,
-        },
-      ]}
-    >
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
-          Resumes
+          Templates
         </Text>
         <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => router.push({ pathname: "/builder/manual" })}
+          style={[styles.newButton, { backgroundColor: Theme.colors.primary }]}
+          onPress={() => router.push("/builder/manual")}
         >
-          <LinearGradient
-            colors={[Theme.colors.secondary, "#FF69B4"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.newButton}
-          >
-            <Plus size={18} color="#fff" />
-            <Text style={styles.newButtonText}>New Blank</Text>
-          </LinearGradient>
+          <Plus size={18} color="#000" />
+          <Text style={styles.newButtonText}>Quick Create</Text>
         </TouchableOpacity>
       </View>
 
+
+
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
-        {!selectedCategory ? (
-          <>
-            {myResumes.length > 0 && (
-              <View style={styles.featuredSection}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  My Resumes ({myResumes.length}/3)
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.featuredScroll}
-                >
-                  {myResumes.map((res) => (
-                    <TouchableOpacity
-                      key={res.id}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/builder/manual",
-                          params: { resumeId: res.id },
-                        })
-                      }
-                      onLongPress={() => handleDelete(res.id)}
-                    >
-                      <GlassCard
-                        style={[
-                          styles.featuredItem,
-                          {
-                            backgroundColor: colors.surface,
-                            borderColor: colors.glassBorder,
-                          },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.featuredPreview,
-                            {
-                              backgroundColor: isDark ? "#1e1e1e" : "#fff",
-                              borderColor: colors.glassBorder,
-                            },
-                          ]}
-                        >
-                          <TemplateMiniPreview
-                            template={res.template}
-                            name={res.name}
-                            role={res.role}
-                            summary={res.data.summary}
-                            isFeatured={true}
-                          />
-                          <TouchableOpacity
-                            style={styles.deleteBadge}
-                            onPress={() => handleDelete(res.id)}
-                          >
-                            <Trash2 size={12} color="#fff" />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.downloadBadge}
-                            onPress={() => handleDownload(res)}
-                          >
-                            <Download size={12} color="#fff" />
-                          </TouchableOpacity>
-                        </View>
-                        <Text
-                          style={[styles.featuredName, { color: colors.text }]}
-                          numberOfLines={1}
-                        >
-                          {res.role || "Untitled"}
-                        </Text>
-                      </GlassCard>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
 
-            <View style={styles.featuredSection}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Featured Layouts
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.featuredScroll}
+
+        {/* Categories Section - Auto Carousel */}
+        <View
+          style={[
+            styles.sectionHeader,
+            {
+              marginTop: 30,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Explore Fields
+          </Text>
+          <View style={styles.paginationDots}>
+            {CATEGORIES.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  {
+                    backgroundColor:
+                      currentIndex === i
+                        ? Theme.colors.primary
+                        : colors.glassBorder,
+                    width: currentIndex === i ? 20 : 8,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        <Animated.FlatList
+          ref={flatListRef}
+          data={loopedData}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToAlignment="center"
+          snapToInterval={CARD_WIDTH + SPACING}
+          decelerationRate="fast"
+          contentContainerStyle={{ paddingHorizontal: SIDE_PEEK }}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(
+              e.nativeEvent.contentOffset.x / (CARD_WIDTH + SPACING),
+            );
+
+            // Loop adjustment: if user scrolls too far left or right, jump to middle set
+            if (index < totalItems) {
+              flatListRef.current?.scrollToIndex({
+                index: index + totalItems,
+                animated: false,
+              });
+              setCurrentIndex((index + totalItems) % totalItems);
+            } else if (index >= totalItems * 2) {
+              flatListRef.current?.scrollToIndex({
+                index: index - totalItems,
+                animated: false,
+              });
+              setCurrentIndex((index - totalItems) % totalItems);
+            } else {
+              setCurrentIndex(index % totalItems);
+            }
+          }}
+          keyExtractor={(_, index) => `cat-loop-${index}`}
+          getItemLayout={(_, index) => ({
+            length: CARD_WIDTH + SPACING,
+            offset: (CARD_WIDTH + SPACING) * index,
+            index,
+          })}
+          renderItem={({ item, index }) => {
+            return (
+              <CategoryCard
+                item={item}
+                index={index}
+                scrollX={scrollX}
+                selectedCategory={selectedCategory}
+                setSelectedCategory={setSelectedCategory}
+                colors={colors}
+                router={router}
+              />
+            );
+          }}
+        />
+
+        {/* Explore Templates Section - 2 Column Grid */}
+        <View
+          style={[
+            styles.sectionHeader,
+            {
+              marginTop: 40,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Explore Templates
+          </Text>
+        </View>
+
+        <View style={styles.recentsGrid}>
+          {ALL_TEMPLATES.map((template, i) => (
+            <Animated.View
+              key={template.key}
+              entering={FadeInDown.delay(100 + i * 50)}
+              style={styles.recentCardWrapper}
+            >
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() =>
+                  router.push({
+                    pathname: "/builder/manual",
+                    params: { templateId: template.id },
+                  } as any)
+                }
+                style={[
+                  styles.templateRawCard,
+                  { borderColor: colors.glassBorder },
+                ]}
               >
-                {generateResumesForCategory("Software IT")
-                  .slice(0, 5)
-                  .map((res, i) => (
-                    <TouchableOpacity
-                      key={`feat-${i}`}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/builder/manual",
-                          params: {
-                            theme: res.template,
-                            color: res.color,
-                            name: res.userName,
-                            role: res.userRole,
-                            summary: res.userSummary,
-                          },
-                        })
-                      }
-                    >
-                      <GlassCard
-                        style={[
-                          styles.featuredItem,
-                          {
-                            backgroundColor: colors.surface,
-                            borderColor: colors.glassBorder,
-                          },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.featuredPreview,
-                            {
-                              backgroundColor: isDark ? "#1e1e1e" : "#fff",
-                              borderColor: colors.glassBorder,
-                            },
-                          ]}
-                        >
-                          <TemplateMiniPreview
-                            template={res.template}
-                            name={res.userName}
-                            role={res.userRole}
-                            summary={res.userSummary}
-                            isFeatured={true}
-                          />
-                        </View>
-                        <Text
-                          style={[styles.featuredName, { color: colors.text }]}
-                        >
-                          {res.template}
-                        </Text>
-                      </GlassCard>
-                    </TouchableOpacity>
-                  ))}
-              </ScrollView>
-            </View>
-
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Choose a Profession
-            </Text>
-            {renderCategoryList()}
-          </>
-        ) : (
-          renderTemplateGrid()
-        )}
+                <View style={[styles.recentImageContainer, { marginBottom: 0 }]}>
+                  <TemplateMiniPreview id={template.id} colors={colors} isDark={isDark} />
+                  {template.isPro && (
+                    <View style={styles.proBadgeMini}>
+                      <Crown size={10} color="#fff" />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.templateLabelOverlay}>
+                  <Text style={[styles.templateLabelText, { color: '#fff' }]} numberOfLines={1}>
+                    {template.name}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          ))}
+        </View>
       </ScrollView>
     </View>
   );
@@ -651,230 +481,244 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 20,
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: "800",
+    fontWeight: "900",
   },
   newButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     gap: 6,
   },
   newButtonText: {
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#fff",
     fontSize: 14,
   },
   scrollContent: {
+    paddingBottom: 120,
+  },
+  sectionHeader: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  categoryContainer: {
-    gap: 16,
-  },
-  categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#fff",
-  },
-  chatCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 20,
-    marginBottom: 4,
-    borderWidth: 1,
-  },
-  chatAvatarContainer: {
-    position: "relative",
-    marginRight: 16,
-  },
-  chatAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#ccc",
-  },
-  onlineStatus: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: "#000",
-  },
-  chatInfo: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  chatName: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  chatMessage: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  chatMeta: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 8,
-  },
-  chatTime: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  chatBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chatBadgeText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  backToCatBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
-    marginBottom: 24,
-    gap: 8,
-    borderWidth: 1,
-  },
-  backToCatText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  gridHeadline: {
-    fontSize: 22,
-    fontWeight: "800",
-    marginBottom: 16,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  gridItem: {
-    width: "48%",
-    marginBottom: 16,
-  },
-  resumePreview: {
-    width: "100%",
-    aspectRatio: 1 / 1.414,
-    borderRadius: 12,
-    borderWidth: 2,
-    overflow: "hidden",
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  premiumRibbon: {
-    position: "absolute",
-    top: 10,
-    right: -25,
-    backgroundColor: Theme.colors.secondary,
-    paddingHorizontal: 30,
-    paddingVertical: 4,
-    transform: [{ rotate: "45deg" }],
-    zIndex: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  premiumText: {
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  resumeGridName: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  resumeGridTemplate: {
-    fontSize: 12,
-    marginTop: 2,
+    marginBottom: 15,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 20,
+    fontSize: 22,
+    fontWeight: "900",
   },
-  featuredSection: {
-    marginBottom: 32,
-  },
-  featuredScroll: {
-    gap: 16,
-    paddingRight: 20,
-  },
-  featuredItem: {
-    width: 140,
-    padding: 12,
+
+  filterBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
     alignItems: "center",
+  },
+  recentsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 15,
+  },
+  recentCardWrapper: {
+    width: "50%",
+    padding: 6,
+  },
+  recentCard: {
     borderRadius: 20,
     borderWidth: 1,
-  },
-  featuredPreview: {
-    width: "100%",
-    aspectRatio: 1 / 1.4142,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 12,
     overflow: "hidden",
+    padding: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  featuredName: {
+  recentImageContainer: {
+    aspectRatio: 1 / 1.4142,
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.03)",
+  },
+  recentSnapshot: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  recentPlaceholder: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  recentInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  recentTextContainer: {
+    flex: 1,
+    marginRight: 6,
+  },
+  recentName: {
     fontSize: 14,
     fontWeight: "700",
   },
-  deleteBadge: {
-    position: "absolute",
+  recentTime: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 2,
+    opacity: 0.7,
+  },
+  recentMenu: {
+    padding: 4,
+  },
+  addCardGrid: {
+    aspectRatio: 1 / 1.35,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addCardText: {
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 10,
+  },
+  emptyPrompt: {
+    alignItems: "center",
+    marginHorizontal: 20,
+    paddingVertical: 32,
+    backgroundColor: "rgba(0,0,0,0.02)",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "rgba(0,0,0,0.1)",
+  },
+  emptyPromptText: {
+    fontSize: 14,
+    marginTop: 12,
+    fontWeight: "600",
+  },
+  proBadgeMini: {
+    position: 'absolute',
     top: 8,
     right: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(239, 68, 68, 0.9)",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
+    backgroundColor: Theme.colors.secondary,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
   },
-  downloadBadge: {
+  templateRawCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  templateLabelOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  templateLabelText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  paginationDots: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  dot: {
+    height: 8,
+    borderRadius: 4,
+  },
+  bigCatCard: {
+    width: "100%",
+    height: 180,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  bigCatImageContainer: {
+    width: "100%",
+    height: "100%",
+    position: "relative",
+  },
+  bigCatImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  bigCatOverlay: {
     position: "absolute",
-    top: 8,
-    left: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(16, 185, 129, 0.9)",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "100%",
+  },
+  bigCatInfo: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  catIconCircleBig: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  bigCatName: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  bigCatSub: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 2,
   },
 });

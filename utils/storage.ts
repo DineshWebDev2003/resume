@@ -12,10 +12,12 @@ export interface UserResume {
   color: string;
   data: ResumeData;
   lastModified: number;
+  snapshotUri?: string; // New field for image preview
+  resumeNumber?: string; // New field for #001 format
 }
 
 export const saveResume = async (
-  resume: Omit<UserResume, "id" | "lastModified">,
+  resume: Omit<UserResume, "id" | "lastModified" | "resumeNumber">,
   id?: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
@@ -32,14 +34,19 @@ export const saveResume = async (
     if (id) {
       updatedResumes = existingResumes.map((r) =>
         r.id === id 
-          ? { ...resume, id, lastModified: Date.now() } 
+          ? { ...r, ...resume, lastModified: Date.now() } 
           : r
       );
     } else {
+      // Find the highest number or just count
+      const nextNum = existingResumes.length + 1;
+      const resumeNumber = `#${nextNum.toString().padStart(3, '0')}`;
+      
       const newResume: UserResume = {
         ...resume,
         id: Date.now().toString(),
         lastModified: Date.now(),
+        resumeNumber,
       };
       updatedResumes = [newResume, ...existingResumes];
     }

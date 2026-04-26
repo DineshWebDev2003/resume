@@ -46,8 +46,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="resumes"
         options={{
-          title: 'Resumes',
-          tabBarIcon: ({ color }) => <FileText size={22} color={color} />,
+          title: 'Templates',
+          tabBarIcon: ({ color }) => <PenTool size={22} color={color} />,
         }}
       />
       <Tabs.Screen

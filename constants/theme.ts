@@ -27,9 +27,9 @@ export const Colors = {
 
 export const Theme = {
   colors: {
-    primary: '#FF69B4', // Hot Pink
-    secondary: '#FFB6C1', // Light Pink
-    accent: '#FFC0CB', // Baby Pink
+    primary: '#D81B60', // Deep Elite Pink
+    secondary: '#FF4081', // Hot Pink
+    accent: '#F06292', // Light Pink
     // Default to light, but components should use useColorScheme hook
     background: '#ffffff',
     surface: '#f8f9fa',

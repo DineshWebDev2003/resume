@@ -58,7 +58,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/services/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "expo-router";
-import * as Linking from 'expo-linking';
 
 const { width } = Dimensions.get("window");
 
@@ -147,42 +146,6 @@ export default function ProfileScreen() {
       Alert.alert("Success!", "You've earned 3 free resume exports! Valid for 24 hours.");
     } catch (e) {
       Alert.alert("Error", "Could not update your limit. Please try again.");
-    }
-  };
-
-  const handleProSubscription = async () => {
-    try {
-      // Step 1: Show alert that we are moving to secure payment
-      Alert.alert(
-        "Secure Payment",
-        "You are now being redirected to our secure payment partner (Razorpay) to complete your Elite Pro upgrade.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { 
-            text: "Continue", 
-            onPress: async () => {
-              // TRICK: Open payment in external browser to bypass Play Store direct IAB tracking
-              // In a real app, you would generate this link on your server
-              const paymentUrl = `https://rzp.io/l/your_payment_link?email=${user?.email}`; 
-              
-              // For testing purposes, we'll simulate a successful return
-              // await Linking.openURL(paymentUrl);
-              
-              // MOCK SUCCESS for your test:
-              Alert.alert("Verifying Payment...", "Checking transaction with Razorpay...");
-              setTimeout(async () => {
-                await updateUserProfile({ isPro: true, resumeLimit: 999 });
-                setResumeLimit(999);
-                setIsPro(true);
-                Alert.alert("Welcome to Elite Pro!", "Your account has been upgraded successfully.");
-                setSubscriptionModalVisible(false);
-              }, 2000);
-            }
-          }
-        ]
-      );
-    } catch (e) {
-      Alert.alert("Payment Error", "Something went wrong. Please try again.");
     }
   };
 
@@ -516,7 +479,7 @@ export default function ProfileScreen() {
                        <Benefit text="AI Power Writing" />
                        <Benefit text="No Advertisements" />
                     </View>
-                    <TouchableOpacity style={styles.premiumBtn} onPress={handleProSubscription}>
+                    <TouchableOpacity style={styles.premiumBtn}>
                        <Text style={styles.premiumBtnText}>Get Pro Access</Text>
                     </TouchableOpacity>
                   </LinearGradient>
@@ -651,6 +614,82 @@ const styles = StyleSheet.create({
   proBadge: { flexDirection: "row", alignItems: "center", backgroundColor: Theme.colors.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 },
   proBadgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
 
+  statsGrid: { flexDirection: "row", gap: 15, marginBottom: 20 },
+  statCard: { flex: 1, padding: 16, borderRadius: 20, alignItems: "center" },
+  statNum: { fontSize: 20, fontWeight: "800" },
+  statLabel: { fontSize: 11, fontWeight: "600", marginTop: 4, textTransform: "uppercase" },
+
+  referralCard: { borderRadius: 24, overflow: "hidden", marginBottom: 24 },
+  referralGradient: { padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  referTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  referSub: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2 },
+  referCodeBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  referCode: { color: "#fff", fontWeight: "800", fontSize: 14 },
+
+  menuWrapper: { borderRadius: 24, padding: 10, marginBottom: 20 },
+  menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 5 },
+  menuIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: "center", alignItems: "center" },
+  menuInfo: { flex: 1, marginLeft: 15 },
+  menuLabel: { fontSize: 15, fontWeight: "700" },
+  menuSub: { fontSize: 11, marginTop: 2 },
+
+  logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
+  logoutText: { color: "#ef4444", fontWeight: "700", fontSize: 15 },
+
+  sectionTitleSmall: { fontSize: 13, fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, marginLeft: 5 },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10, paddingHorizontal: 5 },
+  linkText: { fontSize: 14, fontWeight: "600" },
+
+  // Modal
+  modalOverlay: { flex: 1 },
+  modalContent: { flex: 1, padding: 25 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 25 },
+  modalTitle: { fontSize: 20, fontWeight: "800" },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
+
+  editForm: { gap: 15 },
+  field: { gap: 8 },
+  fieldLabel: { fontSize: 13, fontWeight: "700", marginLeft: 5 },
+  input: { borderWidth: 1, borderRadius: 16, padding: 14, fontSize: 15 },
+  roleSection: { marginTop: 10 },
+  roleHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
+  roleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  saveBtn: { backgroundColor: Theme.colors.primary, padding: 18, borderRadius: 20, alignItems: "center", marginTop: 20 },
+  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  modalHint: { textAlign: "center", marginBottom: 10, fontSize: 14 },
+
+  settingsItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderRadius: 20 },
+  settingsLabel: { fontSize: 15, fontWeight: "600" },
+
+  pricingContainer: { gap: 20 },
+  premiumCard: { padding: 30, borderRadius: 32, overflow: 'hidden' },
+  premiumHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  premiumTitle: { color: '#fff', fontSize: 28, fontWeight: '900' },
+  premiumPrice: { color: '#fff', fontSize: 42, fontWeight: '900', marginBottom: 25 },
+  priceSub: { fontSize: 16, fontWeight: '600', opacity: 0.8 },
+  benefitList: { gap: 12, marginBottom: 30 },
+  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  benefitText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  premiumBtn: { backgroundColor: '#fff', paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
+  premiumBtnText: { color: Theme.colors.primary, fontSize: 16, fontWeight: '800' },
+  
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 15, marginVertical: 10 },
+  divider: { flex: 1, height: 1 },
+  dividerText: { fontSize: 12, fontWeight: '800' },
+  
+  adCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderRadius: 24, borderWidth: 1 },
+  adInfo: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  adIconBox: { width: 44, height: 44, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  adTitleSmall: { fontSize: 16, fontWeight: '800' },
+  adSubSmall: { fontSize: 12, marginTop: 2 },
+  validityBadge: { backgroundColor: Theme.colors.success + '20', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  validityText: { color: Theme.colors.success, fontSize: 10, fontWeight: '800' },
+  bannerContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
   statsGrid: { flexDirection: "row", gap: 15, marginBottom: 20 },
   statCard: { flex: 1, padding: 16, borderRadius: 20, alignItems: "center" },
   statNum: { fontSize: 20, fontWeight: "800" },

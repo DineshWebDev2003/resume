@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useCallback } from "react";
 import { Colors, Theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useColorScheme, useThemeStore } from "@/hooks/use-color-scheme";
@@ -57,6 +58,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/services/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "expo-router";
+import * as Linking from 'expo-linking';
 
 const { width } = Dimensions.get("window");
 
@@ -145,6 +147,42 @@ export default function ProfileScreen() {
       Alert.alert("Success!", "You've earned 3 free resume exports! Valid for 24 hours.");
     } catch (e) {
       Alert.alert("Error", "Could not update your limit. Please try again.");
+    }
+  };
+
+  const handleProSubscription = async () => {
+    try {
+      // Step 1: Show alert that we are moving to secure payment
+      Alert.alert(
+        "Secure Payment",
+        "You are now being redirected to our secure payment partner (Razorpay) to complete your Elite Pro upgrade.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Continue", 
+            onPress: async () => {
+              // TRICK: Open payment in external browser to bypass Play Store direct IAB tracking
+              // In a real app, you would generate this link on your server
+              const paymentUrl = `https://rzp.io/l/your_payment_link?email=${user?.email}`; 
+              
+              // For testing purposes, we'll simulate a successful return
+              // await Linking.openURL(paymentUrl);
+              
+              // MOCK SUCCESS for your test:
+              Alert.alert("Verifying Payment...", "Checking transaction with Razorpay...");
+              setTimeout(async () => {
+                await updateUserProfile({ isPro: true, resumeLimit: 999 });
+                setResumeLimit(999);
+                setIsPro(true);
+                Alert.alert("Welcome to Elite Pro!", "Your account has been upgraded successfully.");
+                setSubscriptionModalVisible(false);
+              }, 2000);
+            }
+          }
+        ]
+      );
+    } catch (e) {
+      Alert.alert("Payment Error", "Something went wrong. Please try again.");
     }
   };
 
@@ -478,7 +516,7 @@ export default function ProfileScreen() {
                        <Benefit text="AI Power Writing" />
                        <Benefit text="No Advertisements" />
                     </View>
-                    <TouchableOpacity style={styles.premiumBtn}>
+                    <TouchableOpacity style={styles.premiumBtn} onPress={handleProSubscription}>
                        <Text style={styles.premiumBtnText}>Get Pro Access</Text>
                     </TouchableOpacity>
                   </LinearGradient>

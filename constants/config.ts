@@ -6,5 +6,6 @@ export const API_CONFIG = {
   ADMOB_IDS: {
     REWARDED_AD_UNIT_ID: 'ca-app-pub-2141805169615611/5003708990',
     BANNER_AD_UNIT_ID: 'ca-app-pub-2141805169615611/8423019767',
-  }
+  },
+  RAZORPAY_KEY: 'rzp_test_Sagbl4s866A2pV',
 };

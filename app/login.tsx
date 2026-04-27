@@ -10,8 +10,8 @@ import {
   TouchableOpacity,
   View,
   Image,
-  StatusBar,
 } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { signInWithGoogle } from "@/services/auth";
@@ -36,7 +36,7 @@ export default function LoginScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar style={isDark ? "light" : "dark"} />
       
       {/* Dynamic Background */}
       <View style={StyleSheet.absoluteFill}>

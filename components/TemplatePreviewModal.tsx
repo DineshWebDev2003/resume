@@ -7,6 +7,10 @@ import { WebView } from 'react-native-webview';
 import { generateResumeHtml } from './resume-html-generator';
 import { ResumeData } from './resume-templates';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { API_CONFIG } from '@/constants/config';
+
+const bannerId = __DEV__ ? TestIds.BANNER : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -50,7 +54,7 @@ export const TemplatePreviewModal = ({ visible, templateId, onClose, onSelect }:
           <View style={{ width: 40 }} />
         </View>
 
-        <View style={styles.previewImageContainer}>
+        <View style={[styles.previewImageContainer, { backgroundColor: isDark ? "#1e293b" : "#cbd5e1" }]}>
            <WebView
              originWhitelist={['*']}
              source={{ html: htmlContent }}
@@ -79,6 +83,14 @@ export const TemplatePreviewModal = ({ visible, templateId, onClose, onSelect }:
             <Text style={styles.editButtonText}>Use This Design</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.bannerWrapper}>
+          <BannerAd
+            unitId={bannerId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
+        </View>
       </View>
     </Modal>
   );
@@ -97,4 +109,10 @@ const styles = StyleSheet.create({
   actionFooter: { padding: 24 },
   editButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 18, borderRadius: 20, gap: 10 },
   editButtonText: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  bannerWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 4,
+    backgroundColor: 'transparent',
+  },
 });

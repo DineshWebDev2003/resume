@@ -44,10 +44,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="resumes"
+        name="templates"
         options={{
           title: 'Templates',
-          tabBarIcon: ({ color }) => <PenTool size={22} color={color} />,
+          tabBarIcon: ({ color }) => <FileText size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -82,7 +82,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <UserCircle size={22} color={color} />,

@@ -58,6 +58,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/services/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "expo-router";
+import { UserStorage } from "@/services/storage";
 
 const { width } = Dimensions.get("window");
 
@@ -104,6 +105,10 @@ export default function ProfileScreen() {
   const [linkedin, setLinkedin] = useState("");
   const [website, setWebsite] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+
+  // API Key States
+  const [userGroqKey, setUserGroqKey] = useState("");
+  const [userGeminiKey, setUserGeminiKey] = useState("");
 
   // AdMob States
   const [adsWatched, setAdsWatched] = useState(0);
@@ -191,6 +196,15 @@ export default function ProfileScreen() {
       }
     };
     fetchProfile();
+    
+    // Fetch user keys
+    const fetchKeys = async () => {
+      const groq = await UserStorage.getGroqKey();
+      const gemini = await UserStorage.getGeminiKey();
+      if (groq) setUserGroqKey(groq);
+      if (gemini) setUserGeminiKey(gemini);
+    };
+    fetchKeys();
   }, [user]);
 
   const pickImage = async () => {
@@ -237,6 +251,7 @@ export default function ProfileScreen() {
     { icon: FileText, label: "My Resumes", sub: "Manage your documents" },
     { icon: Users, label: "My Referrals", sub: "See who you invited" },
     { icon: CreditCard, label: "Subscription", sub: "Plan & Billing" },
+    { icon: Shield, label: "API Configuration", sub: "Use your own AI keys" },
   ];
 
   return (
@@ -318,48 +333,79 @@ export default function ProfileScreen() {
 
         {/* Professional Links & About */}
         {(portfolio || github || linkedin || website) ? (
-          <View style={[styles.menuWrapper, { backgroundColor: colors.surface, marginBottom: 20 }]}>
-            <Text style={[styles.sectionTitleSmall, { color: colors.text }]}>Professional Links</Text>
-            {portfolio ? (
-              <View style={styles.linkRow}>
-                <Globe size={18} color={Theme.colors.primary} />
-                <Text style={[styles.linkText, { color: colors.text }]} numberOfLines={1}>{portfolio.replace('https://','')}</Text>
-              </View>
-            ) : null}
-            {github ? (
-              <View style={styles.linkRow}>
-                <FileText size={18} color={Theme.colors.primary} />
-                <Text style={[styles.linkText, { color: colors.text }]} numberOfLines={1}>{github.replace('https://github.com/','')}</Text>
-              </View>
-            ) : null}
-            {linkedin ? (
-              <View style={styles.linkRow}>
-                <Users size={18} color={Theme.colors.primary} />
-                <Text style={[styles.linkText, { color: colors.text }]} numberOfLines={1}>{linkedin.replace('https://linkedin.com/in/','')}</Text>
-              </View>
-            ) : null}
+          <View style={styles.sectionContainer}>
+            <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>PROFESSIONAL LINKS</Text>
+            <View style={[styles.groupedContainer, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              {portfolio ? (
+                <View style={[styles.groupedItem, { borderBottomWidth: 1, borderBottomColor: colors.glassBorder }]}>
+                  <View style={[styles.itemIconBox, { width: 36, height: 36, borderRadius: 10, backgroundColor: Theme.colors.primary + '10' }]}>
+                    <Globe size={18} color={Theme.colors.primary} />
+                  </View>
+                  <Text style={[styles.linkText, { color: colors.text, marginLeft: 12, flex: 1 }]} numberOfLines={1}>{portfolio.replace('https://','')}</Text>
+                </View>
+              ) : null}
+              {github ? (
+                <View style={[styles.groupedItem, { borderBottomWidth: linkedin ? 1 : 0, borderBottomColor: colors.glassBorder }]}>
+                  <View style={[styles.itemIconBox, { width: 36, height: 36, borderRadius: 10, backgroundColor: Theme.colors.primary + '10' }]}>
+                    <FileText size={18} color={Theme.colors.primary} />
+                  </View>
+                  <Text style={[styles.linkText, { color: colors.text, marginLeft: 12, flex: 1 }]} numberOfLines={1}>{github.replace('https://github.com/','')}</Text>
+                </View>
+              ) : null}
+              {linkedin ? (
+                <View style={[styles.groupedItem]}>
+                  <View style={[styles.itemIconBox, { width: 36, height: 36, borderRadius: 10, backgroundColor: Theme.colors.primary + '10' }]}>
+                    <Users size={18} color={Theme.colors.primary} />
+                  </View>
+                  <Text style={[styles.linkText, { color: colors.text, marginLeft: 12, flex: 1 }]} numberOfLines={1}>{linkedin.replace('https://linkedin.com/in/','')}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         ) : null}
 
-        {/* Menu Section */}
-        <View style={[styles.menuWrapper, { backgroundColor: colors.surface }]}>
+        {/* Seamless Settings Menu */}
+        <View style={styles.seamlessContainer}>
           {menuItems.map((item, idx) => (
             <TouchableOpacity 
               key={idx} 
-              style={[styles.menuItem, idx !== menuItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.glassBorder }]}
-              onPress={() => setActiveModal(item.label)}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (item.label === "My Resumes") router.push("/my-resumes");
+                else setActiveModal(item.label);
+              }}
+              style={styles.simpleMenuItem}
             >
-              <View style={[styles.menuIcon, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }]}>
-                <item.icon size={20} color={Theme.colors.primary} />
-              </View>
-              <View style={styles.menuInfo}>
-                <Text style={[styles.menuLabel, { color: colors.text }]}>{item.label}</Text>
-                <Text style={[styles.menuSub, { color: colors.textMuted }]}>{item.sub}</Text>
-              </View>
+              <item.icon size={24} color={Theme.colors.primary} strokeWidth={2.5} />
+              <Text style={[styles.simpleMenuLabel, { color: colors.text }]}>{item.label}</Text>
               <ChevronRight size={18} color={colors.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Professional Links - Seamless */}
+        {(portfolio || github || linkedin || website) ? (
+          <View style={[styles.seamlessContainer, { marginTop: 10 }]}>
+            {portfolio && (
+               <View style={styles.simpleMenuItem}>
+                 <Globe size={24} color={Theme.colors.primary} strokeWidth={2.5} />
+                 <Text style={[styles.simpleMenuLabel, { color: colors.text }]}>{portfolio.replace('https://','')}</Text>
+               </View>
+            )}
+            {github && (
+               <View style={styles.simpleMenuItem}>
+                 <FileText size={24} color={Theme.colors.primary} strokeWidth={2.5} />
+                 <Text style={[styles.simpleMenuLabel, { color: colors.text }]}>{github.replace('https://github.com/','')}</Text>
+               </View>
+            )}
+            {linkedin && (
+               <View style={styles.simpleMenuItem}>
+                 <Users size={24} color={Theme.colors.primary} strokeWidth={2.5} />
+                 <Text style={[styles.simpleMenuLabel, { color: colors.text }]}>{linkedin.replace('https://linkedin.com/in/','')}</Text>
+               </View>
+            )}
+          </View>
+        ) : null}
 
         {/* Logout */}
         <TouchableOpacity onPress={handleSignOut} style={styles.logoutBtn}>
@@ -374,7 +420,7 @@ export default function ProfileScreen() {
       <Modal visible={activeModal !== null} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { paddingHorizontal: 25, marginTop: 15 }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{activeModal}</Text>
               <TouchableOpacity onPress={() => setActiveModal(null)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
                 <X size={20} color={colors.text} />
@@ -383,7 +429,7 @@ export default function ProfileScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {activeModal === "Edit Profile" && (
-                <View style={styles.editForm}>
+                <View style={[styles.editForm, { paddingHorizontal: 25 }]}>
                   <Field label="Full Name" value={name} onChange={setName} colors={colors} />
                   <Field label="Location" value={location} onChange={setLocation} colors={colors} />
                   <Field label="Education" value={education} onChange={setEducation} colors={colors} />
@@ -435,7 +481,7 @@ export default function ProfileScreen() {
               )}
 
               {activeModal === "Redeem Code" && (
-                <View style={styles.editForm}>
+                <View style={[styles.editForm, { paddingHorizontal: 25 }]}>
                    <Text style={[styles.modalHint, { color: colors.textMuted }]}>Enter a referral code to get +1 extra export limit.</Text>
                    <TextInput 
                     style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.glassBorder, fontSize: 24, textAlign: 'center', fontWeight: 'bold' }]}
@@ -467,46 +513,48 @@ export default function ProfileScreen() {
 
               {activeModal === "Subscription" && (
                 <View style={styles.pricingContainer}>
-                  <LinearGradient colors={['#D81B60', '#FF4081']} style={styles.premiumCard}>
-                    <View style={styles.premiumHeader}>
-                       <Crown size={32} color="#fff" />
-                       <Text style={styles.premiumTitle}>Elite Pro</Text>
+                  <View style={{ paddingHorizontal: 25, gap: 20 }}>
+                    <LinearGradient colors={['#D81B60', '#FF4081']} style={styles.premiumCard}>
+                      <View style={styles.premiumHeader}>
+                        <Crown size={32} color="#fff" />
+                        <Text style={styles.premiumTitle}>Elite Pro</Text>
+                      </View>
+                      <Text style={styles.premiumPrice}>₹19<Text style={styles.priceSub}>/month</Text></Text>
+                      <View style={styles.benefitList}>
+                        <Benefit text="Unlimited Exports" />
+                        <Benefit text="Premium Templates" />
+                        <Benefit text="AI Power Writing" />
+                        <Benefit text="No Advertisements" />
+                      </View>
+                      <TouchableOpacity style={styles.premiumBtn}>
+                        <Text style={styles.premiumBtnText}>Get Pro Access</Text>
+                      </TouchableOpacity>
+                    </LinearGradient>
+
+                    <View style={styles.dividerRow}>
+                      <View style={[styles.divider, { backgroundColor: colors.glassBorder }]} />
+                      <Text style={[styles.dividerText, { color: colors.textMuted }]}>OR</Text>
+                      <View style={[styles.divider, { backgroundColor: colors.glassBorder }]} />
                     </View>
-                    <Text style={styles.premiumPrice}>₹19<Text style={styles.priceSub}>/month</Text></Text>
-                    <View style={styles.benefitList}>
-                       <Benefit text="Unlimited Exports" />
-                       <Benefit text="Premium Templates" />
-                       <Benefit text="AI Power Writing" />
-                       <Benefit text="No Advertisements" />
-                    </View>
-                    <TouchableOpacity style={styles.premiumBtn}>
-                       <Text style={styles.premiumBtnText}>Get Pro Access</Text>
+
+                    <TouchableOpacity 
+                      style={[styles.adCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+                      onPress={showAd}
+                    >
+                      <View style={styles.adInfo}>
+                        <View style={[styles.adIconBox, { backgroundColor: Theme.colors.primary + '15' }]}>
+                          {isAdLoaded ? <Sparkles size={20} color={Theme.colors.primary} /> : <ActivityIndicator size="small" color={Theme.colors.primary} />}
+                        </View>
+                        <View>
+                          <Text style={[styles.adTitleSmall, { color: colors.text }]}>Free Daily Pass ({adsWatched}/3)</Text>
+                          <Text style={[styles.adSubSmall, { color: colors.textMuted }]}>Watch 3 Ads for 3 Free Exports</Text>
+                        </View>
+                      </View>
+                      <View style={styles.validityBadge}>
+                        <Text style={styles.validityText}>Valid 24h</Text>
+                      </View>
                     </TouchableOpacity>
-                  </LinearGradient>
-
-                  <View style={styles.dividerRow}>
-                    <View style={[styles.divider, { backgroundColor: colors.glassBorder }]} />
-                    <Text style={[styles.dividerText, { color: colors.textMuted }]}>OR</Text>
-                    <View style={[styles.divider, { backgroundColor: colors.glassBorder }]} />
                   </View>
-
-                  <TouchableOpacity 
-                    style={[styles.adCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
-                    onPress={showAd}
-                  >
-                    <View style={styles.adInfo}>
-                      <View style={[styles.adIconBox, { backgroundColor: Theme.colors.primary + '15' }]}>
-                         {isAdLoaded ? <Sparkles size={20} color={Theme.colors.primary} /> : <ActivityIndicator size="small" color={Theme.colors.primary} />}
-                      </View>
-                      <View>
-                        <Text style={[styles.adTitleSmall, { color: colors.text }]}>Free Daily Pass ({adsWatched}/3)</Text>
-                        <Text style={[styles.adSubSmall, { color: colors.textMuted }]}>Watch 3 Ads for 3 Free Exports</Text>
-                      </View>
-                    </View>
-                    <View style={styles.validityBadge}>
-                       <Text style={styles.validityText}>Valid 24h</Text>
-                    </View>
-                  </TouchableOpacity>
 
                   <View style={styles.bannerContainer}>
                     {bannerId ? (
@@ -524,7 +572,7 @@ export default function ProfileScreen() {
               )}
 
               {activeModal === "Settings" && (
-                <View style={styles.editForm}>
+                <View style={[styles.editForm, { paddingHorizontal: 25 }]}>
                   <View style={[styles.settingsItem, { backgroundColor: colors.surface }]}>
                     <Text style={[styles.settingsLabel, { color: colors.text }]}>Dark Mode</Text>
                     <Switch value={isDark} onValueChange={toggleTheme} />
@@ -533,6 +581,109 @@ export default function ProfileScreen() {
                     <Text style={[styles.settingsLabel, { color: colors.text }]}>Push Notifications</Text>
                     <Switch value={notifications} onValueChange={setNotifications} />
                   </View>
+                </View>
+              )}
+
+              {activeModal === "API Configuration" && (
+                <View style={[styles.editForm, { paddingHorizontal: 25 }]}>
+                  <Text style={[styles.modalHint, { color: colors.textMuted }]}>
+                    Enter your own API keys to bypass app limits. You can enter multiple keys separated by commas to enable automatic rotation.
+                  </Text>
+                  
+                  <View style={styles.instructionsBox}>
+                    <Text style={[styles.instructionsTitle, { color: colors.text }]}>How to get your keys:</Text>
+                    <View style={styles.instructionStep}>
+                      <View style={[styles.stepDot, { backgroundColor: Theme.colors.primary }]} />
+                      <Text style={[styles.stepText, { color: colors.textMuted }]}>Tap "Get Key" to visit the provider's console.</Text>
+                    </View>
+                    <View style={styles.instructionStep}>
+                      <View style={[styles.stepDot, { backgroundColor: Theme.colors.primary }]} />
+                      <Text style={[styles.stepText, { color: colors.textMuted }]}>Create a new API Key and copy it.</Text>
+                    </View>
+                    <View style={styles.instructionStep}>
+                      <View style={[styles.stepDot, { backgroundColor: Theme.colors.primary }]} />
+                      <Text style={[styles.stepText, { color: colors.textMuted }]}>Paste it below. You can add multiple keys using commas.</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.apiKeySection}>
+                    <View style={styles.apiHeaderRow}>
+                      <Text style={[styles.fieldLabel, { color: colors.text }]}>Groq API Key</Text>
+                    </View>
+                    <TextInput 
+                      style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.glassBorder }]}
+                      value={userGroqKey}
+                      onChangeText={setUserGroqKey}
+                      placeholder="gsk_..."
+                      placeholderTextColor={colors.textMuted}
+                      secureTextEntry
+                    />
+                    <TouchableOpacity 
+                      style={[styles.bigGetKeyBtn, { backgroundColor: Theme.colors.primary + '15' }]}
+                      onPress={() => require('react-native').Linking.openURL('https://console.groq.com/keys')}
+                    >
+                      <Sparkles size={14} color={Theme.colors.primary} />
+                      <Text style={[styles.bigGetKeyText, { color: Theme.colors.primary }]}>Get Groq API Key</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.apiKeySection}>
+                    <View style={styles.apiHeaderRow}>
+                      <Text style={[styles.fieldLabel, { color: colors.text }]}>Gemini API Key</Text>
+                    </View>
+                    <TextInput 
+                      style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.glassBorder }]}
+                      value={userGeminiKey}
+                      onChangeText={setUserGeminiKey}
+                      placeholder="AIzaSy..."
+                      placeholderTextColor={colors.textMuted}
+                      secureTextEntry
+                    />
+                    <TouchableOpacity 
+                      style={[styles.bigGetKeyBtn, { backgroundColor: Theme.colors.primary + '15' }]}
+                      onPress={() => require('react-native').Linking.openURL('https://aistudio.google.com/app/apikey')}
+                    >
+                      <Sparkles size={14} color={Theme.colors.primary} />
+                      <Text style={[styles.bigGetKeyText, { color: Theme.colors.primary }]}>Get Gemini API Key</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity 
+                    style={styles.saveBtn} 
+                    onPress={async () => {
+                      try {
+                        // Save locally
+                        if (userGroqKey) await UserStorage.saveGroqKey(userGroqKey);
+                        if (userGeminiKey) await UserStorage.saveGeminiKey(userGeminiKey);
+                        
+                        // Save to Firestore for cross-device sync
+                        await updateUserProfile({
+                          groqKey: userGroqKey,
+                          geminiKey: userGeminiKey
+                        });
+                        
+                        Alert.alert("Saved", "Your API keys have been updated and synced to your account.");
+                        setActiveModal(null);
+                      } catch (e) {
+                        console.error(e);
+                        Alert.alert("Error", "Failed to save keys.");
+                      }
+                    }}
+                  >
+                    <Text style={styles.saveBtnText}>Save Configuration</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.logoutBtn, { marginTop: 10 }]} 
+                    onPress={async () => {
+                      await UserStorage.clearKeys();
+                      setUserGroqKey("");
+                      setUserGeminiKey("");
+                      Alert.alert("Cleared", "Personal API keys removed. App will now use default keys.");
+                    }}
+                  >
+                    <Text style={[styles.logoutText, { color: colors.textMuted }]}>Reset to Default Keys</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -626,88 +777,15 @@ const styles = StyleSheet.create({
   referCodeBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   referCode: { color: "#fff", fontWeight: "800", fontSize: 14 },
 
-  menuWrapper: { borderRadius: 24, padding: 10, marginBottom: 20 },
-  menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 5 },
-  menuIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: "center", alignItems: "center" },
-  menuInfo: { flex: 1, marginLeft: 15 },
-  menuLabel: { fontSize: 15, fontWeight: "700" },
-  menuSub: { fontSize: 11, marginTop: 2 },
-
-  logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
-  logoutText: { color: "#ef4444", fontWeight: "700", fontSize: 15 },
-
-  sectionTitleSmall: { fontSize: 13, fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, marginLeft: 5 },
-  linkRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10, paddingHorizontal: 5 },
-  linkText: { fontSize: 14, fontWeight: "600" },
-
-  // Modal
-  modalOverlay: { flex: 1 },
-  modalContent: { flex: 1, padding: 25 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 25 },
-  modalTitle: { fontSize: 20, fontWeight: "800" },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
-
-  editForm: { gap: 15 },
-  field: { gap: 8 },
-  fieldLabel: { fontSize: 13, fontWeight: "700", marginLeft: 5 },
-  input: { borderWidth: 1, borderRadius: 16, padding: 14, fontSize: 15 },
-  roleSection: { marginTop: 10 },
-  roleHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  roleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-  saveBtn: { backgroundColor: Theme.colors.primary, padding: 18, borderRadius: 20, alignItems: "center", marginTop: 20 },
-  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  modalHint: { textAlign: "center", marginBottom: 10, fontSize: 14 },
-
-  settingsItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderRadius: 20 },
-  settingsLabel: { fontSize: 15, fontWeight: "600" },
-
-  pricingContainer: { gap: 20 },
-  premiumCard: { padding: 30, borderRadius: 32, overflow: 'hidden' },
-  premiumHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  premiumTitle: { color: '#fff', fontSize: 28, fontWeight: '900' },
-  premiumPrice: { color: '#fff', fontSize: 42, fontWeight: '900', marginBottom: 25 },
-  priceSub: { fontSize: 16, fontWeight: '600', opacity: 0.8 },
-  benefitList: { gap: 12, marginBottom: 30 },
-  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  benefitText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  premiumBtn: { backgroundColor: '#fff', paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
-  premiumBtnText: { color: Theme.colors.primary, fontSize: 16, fontWeight: '800' },
-  
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 15, marginVertical: 10 },
-  divider: { flex: 1, height: 1 },
-  dividerText: { fontSize: 12, fontWeight: '800' },
-  
-  adCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderRadius: 24, borderWidth: 1 },
-  adInfo: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-  adIconBox: { width: 44, height: 44, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-  adTitleSmall: { fontSize: 16, fontWeight: '800' },
-  adSubSmall: { fontSize: 12, marginTop: 2 },
-  validityBadge: { backgroundColor: Theme.colors.success + '20', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
-  validityText: { color: Theme.colors.success, fontSize: 10, fontWeight: '800' },
-  bannerContainer: {
-    marginTop: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
+  seamlessContainer: { marginBottom: 10 },
+  simpleMenuItem: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingVertical: 18, 
+    paddingHorizontal: 10, 
+    gap: 20 
   },
-  statsGrid: { flexDirection: "row", gap: 15, marginBottom: 20 },
-  statCard: { flex: 1, padding: 16, borderRadius: 20, alignItems: "center" },
-  statNum: { fontSize: 20, fontWeight: "800" },
-  statLabel: { fontSize: 11, fontWeight: "600", marginTop: 4, textTransform: "uppercase" },
-
-  referralCard: { borderRadius: 24, overflow: "hidden", marginBottom: 24 },
-  referralGradient: { padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  referTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  referSub: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2 },
-  referCodeBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
-  referCode: { color: "#fff", fontWeight: "800", fontSize: 14 },
-
-  menuWrapper: { borderRadius: 24, padding: 10, marginBottom: 20 },
-  menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 5 },
-  menuIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: "center", alignItems: "center" },
-  menuInfo: { flex: 1, marginLeft: 15 },
-  menuLabel: { fontSize: 15, fontWeight: "700" },
-  menuSub: { fontSize: 11, marginTop: 2 },
+  simpleMenuLabel: { flex: 1, fontSize: 16, fontWeight: "600" },
 
   logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
   logoutText: { color: "#ef4444", fontWeight: "700", fontSize: 15 },
@@ -718,7 +796,7 @@ const styles = StyleSheet.create({
 
   // Modal
   modalOverlay: { flex: 1 },
-  modalContent: { flex: 1, padding: 25 },
+  modalContent: { flex: 1 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 25 },
   modalTitle: { fontSize: 20, fontWeight: "800" },
   closeBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
@@ -733,6 +811,31 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: Theme.colors.primary, padding: 18, borderRadius: 20, alignItems: "center", marginTop: 20 },
   saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
   modalHint: { textAlign: "center", marginBottom: 10, fontSize: 14 },
+  
+  apiKeySection: { gap: 8, marginBottom: 15 },
+  apiHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: 5 },
+  bigGetKeyBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 8, 
+    paddingVertical: 12, 
+    borderRadius: 14,
+    marginTop: 4 
+  },
+  bigGetKeyText: { fontSize: 13, fontWeight: '800' },
+  instructionsBox: { 
+    backgroundColor: Theme.colors.primary + '05', 
+    padding: 16, 
+    borderRadius: 18, 
+    marginVertical: 15,
+    borderWidth: 1,
+    borderColor: Theme.colors.primary + '10'
+  },
+  instructionsTitle: { fontSize: 14, fontWeight: '800', marginBottom: 10 },
+  instructionStep: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  stepDot: { width: 6, height: 6, borderRadius: 3 },
+  stepText: { fontSize: 12, fontWeight: '600', flex: 1 },
 
   settingsItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderRadius: 20 },
   settingsLabel: { fontSize: 15, fontWeight: "600" },
@@ -760,10 +863,12 @@ const styles = StyleSheet.create({
   adSubSmall: { fontSize: 12, marginTop: 2 },
   validityBadge: { backgroundColor: Theme.colors.success + '20', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
   validityText: { color: Theme.colors.success, fontSize: 10, fontWeight: '800' },
+  pricingContent: { paddingHorizontal: 25, gap: 20 },
   bannerContainer: {
     marginTop: 20,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+    backgroundColor: 'transparent',
   },
 });

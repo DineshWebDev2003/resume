@@ -27,6 +27,8 @@ export interface UserProfile {
   resumeLimit: number;
   referralCode: string;
   referralCount: number;
+  groqKey?: string;
+  geminiKey?: string;
   createdAt: any;
   updatedAt: any;
 }
@@ -245,5 +247,77 @@ export const applyReferralCode = async (code: string) => {
     updatedAt: serverTimestamp(),
   });
 
+  return true;
+};
+
+// --- Global Job Caching (To save SerpAPI credits) ---
+
+export const getGlobalJobs = async (query: string, location: string) => {
+  const cacheId = `${query.toLowerCase().replace(/\s+/g, '_')}_${location.toLowerCase().replace(/\s+/g, '_')}`;
+  const docRef = doc(db, 'global_jobs', cacheId);
+  
+  try {
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const lastUpdated = data.updatedAt?.toDate() || new Date(0);
+      const hoursSinceUpdate = (new Date().getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
+      
+      // Cache valid for 12 hours
+      if (hoursSinceUpdate < 12) {
+        console.log("Using Global Job Cache for:", cacheId);
+        return data.jobs;
+      }
+    }
+  } catch (e) {
+    console.error("Global cache read error:", e);
+  }
+  return null;
+};
+
+export const saveGlobalJobs = async (query: string, location: string, jobs: any[]) => {
+  const cacheId = `${query.toLowerCase().replace(/\s+/g, '_')}_${location.toLowerCase().replace(/\s+/g, '_')}`;
+  const docRef = doc(db, 'global_jobs', cacheId);
+  
+  try {
+    await setDoc(docRef, {
+      jobs,
+      updatedAt: serverTimestamp(),
+      query,
+      location
+    });
+  } catch (e) {
+    console.error("Global cache save error:", e);
+  }
+};
+
+// --- Per-User Daily Fetch Limit ---
+
+export const canUserFetchJobs = async () => {
+  const user = auth.currentUser;
+  if (!user) return false;
+
+  const userDocRef = doc(db, 'users', user.uid);
+  const userDoc = await getDoc(userDocRef);
+  
+  if (userDoc.exists()) {
+    const data = userDoc.data();
+    const lastFetchDate = data.lastJobFetchDate?.toDate()?.toDateString();
+    const today = new Date().toDateString();
+    
+    if (lastFetchDate === today) {
+      if (data.dailyFetchCount >= 5) { // Giving them 5 instead of 3 as a buffer
+        return false;
+      }
+      await updateDoc(userDocRef, {
+        dailyFetchCount: increment(1)
+      });
+    } else {
+      await updateDoc(userDocRef, {
+        lastJobFetchDate: serverTimestamp(),
+        dailyFetchCount: 1
+      });
+    }
+  }
   return true;
 };

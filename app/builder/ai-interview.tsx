@@ -9,9 +9,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import LottieView from 'lottie-react-native';
-import { API_CONFIG } from '@/constants/config';
 import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
+import { useAuth } from '@/hooks/use-auth';
+import { db } from '@/services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useRewardedAd } from '@/hooks/use-rewarded-ad';
+import { callAI } from '@/services/ai';
+import { Alert } from 'react-native';
+import { Audio } from 'expo-av';
+import { AudioService } from '@/services/audio';
 
 const QUESTIONS = [
   { id: 'name', question: "Hello! I'm your AI Resume Architect. To get started, what is your full name?", key: 'name' },
@@ -20,6 +27,8 @@ const QUESTIONS = [
   { id: 'experience', question: "Tell me about your most significant work experience. Include the company name and one key achievement there.", key: 'experience_text' },
   { id: 'skills', question: "Finally, what are your top professional skills?", key: 'skills_text' },
 ];
+
+// Using project-wide AudioService singleton instead of local variables
 
 export default function AIInterviewScreen() {
   const router = useRouter();
@@ -33,16 +42,37 @@ export default function AIInterviewScreen() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [answers, setAnswers] = useState<any>({});
-  const [recording, setRecording] = useState<any>(null);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showTextInput, setShowTextInput] = useState(false);
   const [manualText, setManualText] = useState('');
   const [finalData, setFinalData] = useState<any>(null);
   const [isVocalWoken, setIsVocalWoken] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [lastTranscript, setLastTranscript] = useState<string>('');
+  const [isBusyUI, setIsBusyUI] = useState(false);
+  const { user } = useAuth();
+  const { loaded: adLoaded, showAd } = useRewardedAd();
 
   const lottieRef = useRef<LottieView>(null);
   const vocalBridgeRef = useRef<WebView>(null);
   const currentQuestion = QUESTIONS[currentStep];
+
+  useEffect(() => {
+    const checkPro = async () => {
+      if (user) {
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setIsPro(docSnap.data().isPro || false);
+        }
+      }
+    };
+    checkPro();
+    return () => {
+      AudioService.hardReset();
+      stopSpeech();
+    };
+  }, [user]);
 
   useEffect(() => {
     if (isVocalWoken) {
@@ -53,6 +83,9 @@ export default function AIInterviewScreen() {
         stopSpeech();
       };
     }
+    return () => {
+      AudioService.hardReset();
+    };
   }, [currentStep, isVocalWoken]);
 
   const wakeAssistant = () => {
@@ -101,68 +134,52 @@ export default function AIInterviewScreen() {
     speakThroughWeb(QUESTIONS[currentStep].question);
   };
 
-  const getAudioModule = () => {
-    try {
-      if (NativeModules.ExponentAV || NativeModules.ExpoAV) {
-        return require('expo-av').Audio;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  };
 
   const startRecording = async () => {
-    const Audio = getAudioModule();
-    if (!Audio) {
-      console.warn("Audio recording not supported");
+    if (AudioService.isBusy() || AudioService.isRecording() || isBusyUI) {
       return;
     }
 
     try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') return;
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(newRecording);
+      setIsBusyUI(true);
+      await AudioService.startRecording();
       setIsListening(true);
+      setLastTranscript(''); 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error('Failed to start recording', err);
+    } finally {
+      setIsBusyUI(false);
     }
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
+    if (AudioService.isBusy() || !AudioService.isRecording() || isBusyUI) return;
+    
     setIsListening(false);
     setIsProcessing(true);
+    setIsBusyUI(true);
     
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      if (!uri) throw new Error("No recording URI");
+      const uri = await AudioService.stopRecording();
+      
+      if (uri) {
+        const transcript = await transcribeAudio(uri);
+        setLastTranscript(transcript);
+        const newAnswers = { ...answers, [currentQuestion.key]: transcript };
+        setAnswers(newAnswers);
 
-      const transcript = await transcribeAudio(uri);
-      const newAnswers = { ...answers, [currentQuestion.key]: transcript };
-      setAnswers(newAnswers);
-
-      if (currentStep < QUESTIONS.length - 1) {
-        setCurrentStep(currentStep + 1);
-      } else {
-        await generateFinalStructure(newAnswers);
+        if (currentStep < QUESTIONS.length - 1) {
+          setCurrentStep(currentStep + 1);
+        } else {
+          await generateFinalStructure(newAnswers);
+        }
       }
     } catch (err) {
       console.error('Failed to stop recording', err);
     } finally {
       setIsProcessing(false);
-      setRecording(null);
+      setIsBusyUI(false);
     }
   };
 
@@ -204,30 +221,48 @@ export default function AIInterviewScreen() {
   };
 
   const generateFinalStructure = async (allAnswers: any) => {
+    if (!isPro) {
+      Alert.alert(
+        "Premium AI Feature",
+        "AI Interview Synthesis is a pro feature. Watch one short ad to unlock it for this resume?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Watch Ad", onPress: () => showAd(() => startSynthesis(allAnswers)) }
+        ]
+      );
+      return;
+    }
+    
+    startSynthesis(allAnswers);
+  };
+
+  const startSynthesis = async (allAnswers: any) => {
     setIsProcessing(true);
     try {
-      const prompt = `
-        Create professionally structured resume JSON: ${JSON.stringify(allAnswers)}
-        Return ONLY JSON:
-        { "name": "string", "role": "string", "summary": "string", "experience": [{"title": "string", "company": "string", "description": "string"}], "skills": ["string"] }
-      `;
+      const messages = [
+        { 
+          role: 'system' as const, 
+          content: 'Create professionally structured resume JSON. Return ONLY JSON.' 
+        },
+        { 
+          role: 'user' as const, 
+          content: `
+            Analyze these interview answers and generate a high-end JSON resume:
+            ${JSON.stringify(allAnswers)}
+            
+            JSON Format:
+            { "name": "string", "role": "string", "summary": "string", "experience": [{"title": "string", "company": "string", "description": "string"}], "skills": ["string"] }
+          ` 
+        }
+      ];
 
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${API_CONFIG.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' }
-        })
-      });
-
-      const data = await response.json();
-      const result = JSON.parse(data.choices[0].message.content);
+      const resultText = await callAI(messages, { jsonMode: true });
+      const result = JSON.parse(resultText);
       setFinalData(result);
       setShowTemplatePicker(true);
     } catch (error) {
       console.error("Synthesis Error:", error);
+      Alert.alert("Error", "Could not connect to AI. Please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -248,7 +283,7 @@ export default function AIInterviewScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { top: insets.top + 10 }]}>
+      <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { top: insets.top + 10, backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
         <ChevronLeft color={colors.text} size={28} />
       </TouchableOpacity>
 
@@ -302,6 +337,13 @@ export default function AIInterviewScreen() {
              <Text style={[styles.statusText, { color: Theme.colors.primary }]}>Listening to you...</Text>
           </View>
         )}
+
+        {lastTranscript ? (
+          <View style={[styles.transcriptCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+             <Text style={[styles.transcriptLabel, { color: Theme.colors.primary }]}>YOU SAID:</Text>
+             <Text style={[styles.transcriptText, { color: colors.text }]}>"{lastTranscript}"</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 40 }]}>
@@ -315,12 +357,12 @@ export default function AIInterviewScreen() {
 
            <TouchableOpacity 
             onPress={isListening ? stopRecording : startRecording}
-            disabled={isSpeaking || isProcessing}
+            disabled={isSpeaking || isProcessing || isBusyUI}
             style={[
               styles.micBtn, 
               { 
                 backgroundColor: isListening ? '#ef4444' : Theme.colors.primary,
-                opacity: (isSpeaking || isProcessing) ? 0.5 : 1
+                opacity: (isSpeaking || isProcessing || isBusyUI) ? 0.5 : 1
               }
             ]}
           >
@@ -374,7 +416,7 @@ export default function AIInterviewScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templateScroll}>
               {['Executive', 'Modern', 'Professional', 'Creative'].map((temp) => (
                 <TouchableOpacity key={temp} style={styles.templateCard} onPress={() => handleTemplateSelect(temp)}>
-                   <View style={[styles.templateIconBox, { backgroundColor: colors.background }]}>
+                   <View style={[styles.templateIconBox, { backgroundColor: colors.background, borderColor: colors.glassBorder }]}>
                       <LayoutIcon size={32} color={Theme.colors.primary} />
                    </View>
                    <Text style={[styles.templateName, { color: colors.text }]}>{temp}</Text>
@@ -395,7 +437,10 @@ export default function AIInterviewScreen() {
             const data = event.nativeEvent.data;
             if (data === 'speech_done') {
               setIsSpeaking(false);
-              if (getAudioModule()) startRecording();
+              // One full second delay to ensure native reset
+              setTimeout(() => {
+                startRecording();
+              }, 1000);
             } else if (data === 'vocal_woken') {
               // Immediately ask first question
               askQuestion();
@@ -412,9 +457,18 @@ const styles = StyleSheet.create({
   backBtn: {
     position: 'absolute',
     left: 20, zIndex: 10, width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
   },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
+  transcriptCard: {
+    marginTop: 25,
+    padding: 15,
+    borderRadius: 16,
+    width: '100%',
+    borderWidth: 1,
+  },
+  transcriptLabel: { fontSize: 10, fontWeight: '900', marginBottom: 6, letterSpacing: 1 },
+  transcriptText: { fontSize: 14, fontWeight: '600', fontStyle: 'italic', lineHeight: 20 },
   robotWrapper: { alignItems: 'center', justifyContent: 'center' },
   robotAnimation: { width: 280, height: 280 },
   wakePill: {
@@ -468,6 +522,6 @@ const styles = StyleSheet.create({
   modalSubtitle: { fontSize: 14, lineHeight: 20, marginBottom: 30 },
   templateScroll: { paddingBottom: 20, gap: 20 },
   templateCard: { width: 120, alignItems: 'center', gap: 12 },
-  templateIconBox: { width: 100, height: 140, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
+  templateIconBox: { width: 100, height: 140, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
   templateName: { fontSize: 14, fontWeight: '700' },
 });

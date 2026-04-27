@@ -1,6 +1,7 @@
 import { StyleSheet, View, ViewStyle, StyleProp } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { Theme } from '@/constants/theme';
+import { Theme, Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface GlassCardProps {
   children: React.ReactNode;
@@ -9,8 +10,22 @@ interface GlassCardProps {
 }
 
 export const GlassCard: React.FC<GlassCardProps> = ({ children, style, intensity = 20 }) => {
+  const colorScheme = useColorScheme();
+  const colors = colorScheme === 'dark' ? Colors.dark : Colors.light;
+
   return (
-    <BlurView intensity={intensity} style={[styles.card, style]}>
+    <BlurView 
+      intensity={intensity} 
+      style={[
+        styles.card, 
+        { 
+          backgroundColor: colors.glass,
+          borderColor: colors.glassBorder
+        }, 
+        style
+      ]}
+      tint={colorScheme === 'dark' ? 'dark' : 'light'}
+    >
       {children}
     </BlurView>
   );
@@ -20,8 +35,6 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: Theme.borderRadius.lg,
     borderWidth: 1,
-    borderColor: Theme.colors.glassBorder,
-    backgroundColor: Theme.colors.glass,
     overflow: 'hidden',
   },
 });

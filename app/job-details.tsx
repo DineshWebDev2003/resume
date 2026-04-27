@@ -98,7 +98,7 @@ export default function JobDetailsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Company Logo & Hero */}
         <View style={styles.heroSection}>
-          <View style={[styles.logoBox, { backgroundColor: '#fff', borderColor: colors.glassBorder }]}>
+        <View style={[styles.logoBox, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.glassBorder }]}>
             {job.logo ? (
               <Image source={{ uri: job.logo as string }} style={styles.logo} resizeMode="contain" />
             ) : (
@@ -316,7 +316,6 @@ const styles = StyleSheet.create({
     right: 0,
     padding: 20,
     borderTopWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.8)',
   },
   applyBtn: {
     backgroundColor: Theme.colors.primary,

@@ -1,22 +1,18 @@
 /**
  * resume-html-generator.ts
  *
- * ELITE CANVA TEMPLATE (Nina Lane Style)
+ * PRECISE RECREATION OF MODERN SIDEBAR TEMPLATE
  * 1. Strict A4 Standard (595pt x 842pt).
- * 2. 8pt Spacing System.
+ * 2. Solid Sidebar Layout.
  */
 
 export const generateResumeHtml = (
   data: any,
-  templateId: string = "Elite",
-  primaryColor: string = "#f59e0b",
+  templateId: string = "Modern",
+  primaryColor: string = "#1e293b",
   fontFamily: string = "Inter",
   isPrint: boolean = false,
 ): string => {
-  const PAGE_W = 595;
-  const PAGE_H = 842;
-  const SIDEBAR_W = 200;
-
   const esc = (s: string) =>
     String(s || "")
       .replace(/&/g, "&amp;")
@@ -28,187 +24,266 @@ export const generateResumeHtml = (
     .map((s: string) => s.trim())
     .filter(Boolean);
 
-  const skillBars = skills.map((s: string) => `
-    <div class="skill-item">
-      <div class="skill-name">${esc(s)}</div>
-      <div class="skill-track"><div class="skill-fill" style="width: ${Math.floor(Math.random() * 40) + 60}%"></div></div>
-    </div>
-  `).join("");
+  const languages = (data.languages || "")
+    .split(",")
+    .map((s: string) => s.trim())
+    .filter(Boolean);
 
-  const expItems = (data.experience || []).map((exp: any) => `
-    <div class="timeline-item" onclick="window.ReactNativeWebView.postMessage('edit:experience:${exp.id}')">
-      <div class="timeline-dot"></div>
-      <div class="exp-header">
+  const expItems = (data.experience || [])
+    .map(
+      (exp: any) => `
+    <div class="exp-item">
+      <div class="exp-row">
         <div class="exp-role">${esc(exp.role)}</div>
-        <div class="exp-period">${esc(exp.period)}</div>
+        <div class="exp-date">${esc(exp.period)}</div>
       </div>
       <div class="exp-company">${esc(exp.company)}</div>
       <div class="exp-desc">${esc(exp.description)}</div>
     </div>
-  `).join("");
+  `,
+    )
+    .join("");
 
-  const pageContent = `
-    <div class="page">
-      <div class="top-accent"></div>
-      <div class="photo-container" onclick="window.ReactNativeWebView.postMessage('edit:personal:photo')">
-        ${data.photo ? `<img src="${data.photo}" class="photo">` : ""}
-      </div>
-      <div class="sidebar">
-        <div class="s-name">${esc(data.name)}</div>
-        <div class="s-title">${esc(data.title)}</div>
-        <div class="s-section">
-          <div class="s-heading"><span class="s-icon">📞</span>Contact</div>
-          <div class="contact-item"><span class="contact-label">Email</span><div class="contact-value">${esc(data.email)}</div></div>
-          <div class="contact-item"><span class="contact-label">Phone</span><div class="contact-value">${esc(data.phone)}</div></div>
-          <div class="contact-item"><span class="contact-label">Location</span><div class="contact-value">${esc(data.location)}</div></div>
-        </div>
-        <div class="s-section">
-          <div class="s-heading"><span class="s-icon">⚙</span>Skills</div>
-          ${skillBars}
+  const sidebarContent = `
+    <div class="sidebar">
+      <div class="photo-wrapper">
+        <div class="photo-container">
+          ${data.photo ? `<img src="${data.photo}" class="photo">` : ""}
         </div>
       </div>
-      <div class="main">
-        <div class="m-section">
-          <div class="m-heading"><span class="m-icon">👤</span>Profile</div>
-          <div class="summary">${esc(data.summary)}</div>
+      
+      <div class="identity">
+        <div class="name">${esc(data.name)}</div>
+        <div class="title">${esc(data.title)}</div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-heading">CONTACT</div>
+        <div class="s-item"><span class="s-icon">📞</span> ${esc(data.phone)}</div>
+        <div class="s-item"><span class="s-icon">✉</span> ${esc(data.email)}</div>
+        <div class="s-item"><span class="s-icon">📍</span> ${esc(data.location)}</div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-heading">SKILLS</div>
+        <div class="s-list">
+          ${skills.map((s) => `<div class="s-list-item">• ${esc(s)}</div>`).join("")}
         </div>
-        <div class="m-section">
-          <div class="m-heading"><span class="m-icon">💼</span>Experience</div>
-          <div class="timeline">${expItems}</div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-heading">LANGUAGES</div>
+        <div class="s-list">
+          ${languages.map((l) => `<div class="s-list-item">• ${esc(l)}</div>`).join("")}
         </div>
-        <div class="m-section">
-          <div class="m-heading"><span class="m-icon">🎓</span>Education</div>
-          <div class="edu-item">
-            <div class="edu-degree">${esc(data.education.degree)}</div>
-            <div class="edu-school">${esc(data.education.school)}</div>
-            <div class="edu-year">${esc(data.education.year)}</div>
-          </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-heading">HOBBIES</div>
+        <div class="s-list">
+          <div class="s-list-item">• Writing</div>
+          <div class="s-list-item">• Cricket</div>
+          <div class="s-list-item">• Music</div>
         </div>
       </div>
     </div>
+  `;
+
+  const mainContent = `
+    <div class="main">
+      <div class="m-section">
+        <div class="m-heading">PROFILE</div>
+        <div class="m-text">${esc(data.summary)}</div>
+      </div>
+
+      <div class="m-section">
+        <div class="m-heading">WORK EXPERIENCE</div>
+        ${expItems}
+      </div>
+
+      <div class="m-section">
+        <div class="m-heading">EDUCATION</div>
+        <div class="edu-item">
+          <div class="edu-degree">${esc(data.education.degree)}</div>
+          <div class="edu-date">${esc(data.education.year)}</div>
+          <div class="edu-school">${esc(data.education.school)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const styles = `
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; }
+    body { font-family: 'Inter', sans-serif; }
+    
+    .page { 
+      width: 595pt; 
+      height: 842pt; 
+      display: flex; 
+      background: #fff; 
+      overflow: hidden; 
+    }
+
+    /* Sidebar */
+    .sidebar { 
+      width: 180pt; 
+      height: 100%; 
+      background: #1e293b; 
+      color: #fff; 
+      padding: 30pt 15pt;
+    }
+    .photo-wrapper { 
+      display: flex; 
+      justify-content: center; 
+      margin-bottom: 20pt; 
+    }
+    .photo-container { 
+      width: 100pt; 
+      height: 100pt; 
+      border-radius: 50%; 
+      border: 3pt solid #fff; 
+      overflow: hidden; 
+      background: #334155;
+    }
+    .photo { width: 100%; height: 100%; object-fit: cover; }
+    
+    .identity { text-align: center; margin-bottom: 30pt; }
+    .name { font-size: 20pt; font-weight: 800; margin-bottom: 4pt; }
+    .title { font-size: 10pt; font-weight: 500; opacity: 0.8; text-transform: uppercase; letter-spacing: 1pt; }
+
+    .s-section { margin-bottom: 20pt; }
+    .s-heading { 
+      font-size: 10pt; 
+      font-weight: 800; 
+      margin-bottom: 10pt; 
+      border-bottom: 1pt solid rgba(255,255,255,0.2); 
+      padding-bottom: 4pt;
+      letter-spacing: 1pt;
+    }
+    .s-item { font-size: 8.5pt; margin-bottom: 8pt; display: flex; align-items: center; gap: 6pt; opacity: 0.9; }
+    .s-icon { font-size: 10pt; }
+    .s-list-item { font-size: 8.5pt; margin-bottom: 5pt; opacity: 0.9; }
+
+    /* Main Content */
+    .main { flex: 1; padding: 40pt 30pt; }
+    .m-section { margin-bottom: 25pt; }
+    .m-heading { 
+      font-size: 12pt; 
+      font-weight: 800; 
+      color: #1e293b; 
+      margin-bottom: 12pt; 
+      border-bottom: 1.5pt solid #e2e8f0;
+      padding-bottom: 4pt;
+      letter-spacing: 1pt;
+    }
+    .m-text { font-size: 9.5pt; line-height: 1.6; color: #334155; text-align: justify; }
+
+    .exp-item { margin-bottom: 15pt; }
+    .exp-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2pt; }
+    .exp-role { font-size: 11pt; font-weight: 700; color: #1e293b; }
+    .exp-date { font-size: 8.5pt; font-weight: 600; color: #64748b; }
+    .exp-company { font-size: 9.5pt; font-weight: 600; color: #475569; margin-bottom: 6pt; }
+    .exp-desc { font-size: 9pt; line-height: 1.5; color: #334155; }
+
+    .edu-item { margin-top: 10pt; }
+    .edu-degree { font-size: 11pt; font-weight: 700; color: #1e293b; }
+    .edu-date { font-size: 9pt; font-weight: 600; color: #64748b; margin-top: 2pt; }
+    .edu-school { font-size: 10pt; font-weight: 500; color: #475569; margin-top: 4pt; }
+  `;
+
+  const printStyles = `
+    ${styles}
+    @page { size: 595pt 842pt; margin: 0; }
+    html, body { width: 595pt; height: 842pt; margin: 0; padding: 0; overflow: hidden; }
+    .page { width: 595pt; height: 842pt; margin: 0; padding: 0; }
   `;
 
   if (isPrint) {
     return `<!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-* { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; }
-@page { size: 595pt 842pt; margin: 0; }
-body { font-family: 'Inter', sans-serif; width: 595pt; height: 842pt; overflow: hidden; }
-.page { width: 595pt; height: 842pt; display: flex; position: relative; overflow: hidden; }
-.top-accent { position: absolute; top: 0; left: 0; width: 100%; height: 120pt; background: ${primaryColor}; z-index: 0; }
-.sidebar { width: ${SIDEBAR_W}pt; height: 100%; background: #1e293b; color: #fff; padding: 185pt 24pt 40pt; display: flex; flex-direction: column; z-index: 1; }
-.photo-container { position: absolute; top: 40pt; left: 32pt; width: 136pt; height: 136pt; border-radius: 50%; border: 6pt solid #fff; overflow: hidden; z-index: 2; }
-.photo { width: 100%; height: 100%; object-fit: cover; }
-.s-name { font-size: 24pt; font-weight: 800; color: ${primaryColor}; line-height: 1.1; margin-bottom: 8pt; }
-.s-title { font-size: 11pt; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5pt; color: #94a3b8; margin-bottom: 40pt; }
-.s-section { margin-bottom: 32pt; }
-.s-heading { display: flex; align-items: center; gap: 8pt; font-size: 11pt; font-weight: 700; text-transform: uppercase; margin-bottom: 16pt; }
-.s-icon { width: 18pt; height: 18pt; background: ${primaryColor}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10pt; }
-.contact-item { font-size: 8.5pt; margin-bottom: 14pt; color: #cbd5e1; display: flex; flex-direction: column; }
-.contact-label { font-weight: 700; color: #fff; margin-bottom: 3pt; font-size: 8pt; text-transform: uppercase; opacity: 0.7; }
-.contact-value { white-space: nowrap; }
-.skill-item { margin-bottom: 16pt; }
-.skill-name { font-size: 9pt; color: #fff; margin-bottom: 6pt; }
-.skill-track { height: 4pt; background: rgba(255,255,255,0.1); border-radius: 2pt; }
-.skill-fill { height: 100%; background: ${primaryColor}; border-radius: 2pt; }
-.main { flex: 1; padding: 145pt 40pt 40pt; z-index: 1; }
-.m-section { margin-bottom: 40pt; }
-.m-heading { display: flex; align-items: center; gap: 12pt; font-size: 13pt; font-weight: 800; text-transform: uppercase; margin-bottom: 24pt; color: #1e293b; }
-.m-icon { width: 24pt; height: 24pt; background: ${primaryColor}; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.m-heading::after { content: ''; flex: 1; height: 1.5pt; background: #f1f5f9; }
-.summary { font-size: 11pt; line-height: 1.8; color: #475569; text-align: justify; }
-.timeline { position: relative; padding-left: 20pt; border-left: 1.5pt solid #e2e8f0; }
-.timeline-item { position: relative; margin-bottom: 32pt; }
-.timeline-dot { position: absolute; left: -24.5pt; top: 4pt; width: 8pt; height: 8pt; background: ${primaryColor}; border-radius: 50%; border: 2pt solid #fff; }
-.exp-header { display: flex; justify-content: space-between; align-items: baseline; }
-.exp-role { font-size: 12.5pt; font-weight: 800; color: #1e293b; }
-.exp-period { font-size: 9pt; font-weight: 700; color: ${primaryColor}; }
-.exp-company { font-size: 10.5pt; font-weight: 700; color: #64748b; margin-bottom: 10pt; }
-.exp-desc { font-size: 10pt; line-height: 1.75; color: #475569; }
-.edu-item { margin-bottom: 16pt; }
-.edu-degree { font-size: 11pt; font-weight: 700; color: #1e293b; }
-.edu-school { font-size: 10pt; color: #64748b; }
-.edu-year { font-size: 9pt; font-weight: 600; color: ${primaryColor}; }
-</style>
+  <meta charset="utf-8">
+  <style>${printStyles}</style>
 </head>
-<body>${pageContent}</body>
+<body>
+  <div class="page">
+    ${sidebarContent}
+    ${mainContent}
+  </div>
+</body>
 </html>`;
   }
+
+  const previewStyles = `
+    ${styles}
+    html, body { 
+      background: #e2e8f0; 
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    #center-wrapper {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #resume-scaler { 
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform-origin: center center; 
+      width: 595pt; 
+      height: 842pt;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.25); 
+      background: #fff;
+      flex-shrink: 0;
+    }
+  `;
 
   return `<!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #cbd5e1; font-family: 'Inter', sans-serif; width: 100%; }
-#preview-container { display: flex; flex-direction: column; align-items: center; width: 100%; padding: 24pt 0; }
-#resume-scaler { transform-origin: top center; width: 595pt; }
-.page { width: 595pt; height: 842pt; background: #fff; display: flex; position: relative; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
-.top-accent { position: absolute; top: 0; left: 0; width: 100%; height: 120pt; background: ${primaryColor}; z-index: 0; }
-.sidebar { width: ${SIDEBAR_W}pt; height: 100%; background: #1e293b; color: #fff; padding: 160pt 24pt 40pt; display: flex; flex-direction: column; z-index: 1; }
-.photo-container { position: absolute; top: 40pt; left: 32pt; width: 136pt; height: 136pt; border-radius: 50%; border: 6pt solid #fff; overflow: hidden; z-index: 2; }
-.photo { width: 100%; height: 100%; object-fit: cover; }
-.s-name { font-size: 24pt; font-weight: 800; color: ${primaryColor}; line-height: 1.1; margin-bottom: 8pt; }
-.s-title { font-size: 11pt; font-weight: 500; text-transform: uppercase; color: #94a3b8; margin-bottom: 40pt; }
-.s-section { margin-bottom: 32pt; }
-.s-heading { display: flex; align-items: center; gap: 8pt; font-size: 11pt; font-weight: 700; text-transform: uppercase; margin-bottom: 16pt; }
-.s-icon { width: 18pt; height: 18pt; background: ${primaryColor}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10pt; }
-.contact-item { font-size: 8.5pt; margin-bottom: 14pt; color: #cbd5e1; display: flex; flex-direction: column; }
-.contact-label { font-weight: 700; color: #fff; margin-bottom: 3pt; font-size: 8pt; text-transform: uppercase; opacity: 0.7; }
-.contact-value { white-space: nowrap; }
-.skill-item { margin-bottom: 16pt; }
-.skill-name { font-size: 9pt; color: #fff; margin-bottom: 6pt; }
-.skill-track { height: 4pt; background: rgba(255,255,255,0.1); border-radius: 2pt; }
-.skill-fill { height: 100%; background: ${primaryColor}; border-radius: 2pt; }
-.main { flex: 1; padding: 140pt 40pt 40pt; z-index: 1; }
-.m-section { margin-bottom: 40pt; }
-.m-heading { display: flex; align-items: center; gap: 12pt; font-size: 13pt; font-weight: 800; text-transform: uppercase; margin-bottom: 24pt; color: #1e293b; }
-.m-icon { width: 24pt; height: 24pt; background: ${primaryColor}; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.m-heading::after { content: ''; flex: 1; height: 1.5pt; background: #f1f5f9; }
-.summary { font-size: 11pt; line-height: 1.8; color: #475569; text-align: justify; }
-.timeline { position: relative; padding-left: 20pt; border-left: 1.5pt solid #e2e8f0; }
-.timeline-item { position: relative; margin-bottom: 32pt; }
-.timeline-dot { position: absolute; left: -24.5pt; top: 4pt; width: 8pt; height: 8pt; background: ${primaryColor}; border-radius: 50%; border: 2pt solid #fff; }
-.exp-header { display: flex; justify-content: space-between; align-items: baseline; }
-.exp-role { font-size: 12.5pt; font-weight: 800; color: #1e293b; }
-.exp-period { font-size: 9pt; font-weight: 700; color: ${primaryColor}; }
-.exp-company { font-size: 10.5pt; font-weight: 700; color: #64748b; margin-bottom: 10pt; }
-.exp-desc { font-size: 10pt; line-height: 1.75; color: #475569; }
-.edu-item { margin-bottom: 16pt; }
-.edu-degree { font-size: 11pt; font-weight: 700; color: #1e293b; }
-.edu-school { font-size: 10pt; color: #64748b; }
-.edu-year { font-size: 9pt; font-weight: 600; color: ${primaryColor}; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>${previewStyles}</style>
 </head>
 <body>
-<div id="preview-container">
-  <div id="resume-scaler">
-    ${pageContent}
+  <div id="center-wrapper">
+    <div id="resume-scaler">
+      <div class="page">
+        ${sidebarContent}
+        ${mainContent}
+      </div>
+    </div>
   </div>
-</div>
-<script>
-  (function() {
-    var scaler = document.getElementById('resume-scaler');
-    var container = document.getElementById('preview-container');
-    function doScale() {
-      var winW = window.innerWidth;
-      var contentW = scaler.offsetWidth;
-      var scale = Math.min(1, (winW - 24) / contentW);
-      scaler.style.transform = 'scale(' + scale + ')';
-      container.style.height = (scaler.offsetHeight * scale + 60) + 'px';
-    }
-    window.addEventListener('resize', doScale);
-    doScale();
-    setTimeout(doScale, 500); 
-  })();
-</script>
+  <script>
+    (function() {
+      var scaler = document.getElementById('resume-scaler');
+      function doScale() {
+        var winW = document.documentElement.clientWidth || window.innerWidth;
+        var winH = document.documentElement.clientHeight || window.innerHeight;
+        var contentW = 595; 
+        var contentH = 842;
+        
+        // Much larger margins to ensure space on all devices
+        var scaleW = (winW - 120) / contentW;
+        var scaleH = (winH - 150) / contentH;
+        var scale = Math.min(scaleW, scaleH);
+        
+        if (scale > 1) scale = 1;
+        scaler.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+      }
+      window.addEventListener('resize', doScale);
+      doScale();
+      setTimeout(doScale, 300);
+      setTimeout(doScale, 1000);
+    })();
+  </script>
 </body>
 </html>`;
 };

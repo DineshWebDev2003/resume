@@ -1,25 +1,27 @@
 /**
- * manual.tsx  (app/resume/manual.tsx or wherever you placed it)
+ * manual.tsx
  *
- * FIXES vs original:
  * 1. WebView preview — pass isPrint=false so the HTML's JS scaler runs inside WebView.
- *    We no longer try to manually compute scale in React Native; the HTML itself scales.
- * 2. WebView — added injectedJavaScript to post the content height back so the
- *    WebView's own scroll area is correct.
- * 3. PDF — pass isPrint=true so the scaling script is omitted and @page CSS fires.
- *    expo-print with width=794, height=1123, all margins=0 produces pixel-perfect A4.
- * 4. Add/Remove experience entries with the Plus / Trash2 buttons.
- * 5. Education and Contact fields added to the Edit tab.
+ * 2. PDF — pass isPrint=true so the scaling script is omitted and @page CSS fires.
+ * 3. Add/Remove experience entries with the Plus / Trash2 buttons.
+ * 4. Education and Contact fields added to the Edit tab.
+ * 5. Full Dark Theme support with dynamic colors and Status Bar integration.
  */
 
+import React from "react";
 import { generateResumeHtml } from "@/components/resume-html-generator";
-import { Theme } from "@/constants/theme";
+import { Theme, Colors } from "@/constants/theme";
 import * as Print from "expo-print";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { ArrowLeft, Edit2, Eye, Plus, Save, Sparkles, Trash2 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import { Platform } from "react-native";
+import { ArrowLeft, Edit2, Eye, Plus, Sparkles, Trash2, Save, FolderOpen, History, ChevronDown, X } from "lucide-react-native";
 import { auth } from "@/services/firebase";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { callAI } from "@/services/ai";
+import { UserStorage } from "@/services/storage";
 import {
   ActivityIndicator,
   Alert,
@@ -28,11 +30,17 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Modal
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import * as Haptics from "expo-haptics";
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { API_CONFIG } from "@/constants/config";
+import { StatusBar } from "expo-status-bar";
+
+const bannerId = __DEV__ ? TestIds.BANNER : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 // ─── types ───────────────────────────────────────────────────────────────────
 interface Experience {
@@ -50,6 +58,13 @@ interface Education {
   honors: string;
 }
 
+interface Project {
+  id: string;
+  name: string;
+  link: string;
+  description: string;
+}
+
 interface ResumeData {
   name: string;
   title: string;
@@ -60,18 +75,13 @@ interface ResumeData {
   summary: string;
   experience: Experience[];
   education: Education;
+  projects: Project[];
   skills: string;
   languages: string;
   photo?: string;
-  projects: Array<{
-    id: string;
-    title: string;
-    year: string;
-    description: string;
-  }>;
 }
 
-// ─── sample / default data ───────────────────────────────────────────────────
+// ─── default data ────────────────────────────────────────────────────────────
 const INITIAL_DATA: ResumeData = {
   name: "DINESH KUMAR",
   title: "Full-Stack Developer",
@@ -96,23 +106,102 @@ const INITIAL_DATA: ResumeData = {
     year: "2018 – 2022",
     honors: "First Class with Distinction",
   },
+  projects: [
+    {
+      id: "1",
+      name: "Elite Resume Builder",
+      link: "https://github.com/dinesh/resume-builder",
+      description: "A premium AI-powered resume builder built with React Native and Expo.",
+    },
+  ],
   skills: "React Native, React, Node.js, TypeScript, Firebase, AWS",
   languages: "English, Tamil",
-  projects: [],
 };
 
-// ─── component ───────────────────────────────────────────────────────────────
 export default function ManualBuilderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const colors = isDark ? Colors.dark : Colors.light;
 
-  const [activeTab, setActiveTab] = useState<"edit" | "preview">("preview");
-  const [data, setData] = useState<ResumeData>(INITIAL_DATA);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [primaryColor, setPrimaryColor] = useState("#f59e0b"); // Elite Yellow
+  const [activeTab, setActiveTab] = React.useState<"edit" | "preview">("preview");
+  const [data, setData] = React.useState<ResumeData>(INITIAL_DATA);
+  const [isGenerating, setIsGenerating] = React.useState(false);
+  const [primaryColor, setPrimaryColor] = React.useState("#f59e0b");
 
-  // ── Sync User Profile ──────────────────────────────────────────────────────
-  useEffect(() => {
+  // Version States
+  const [versions, setVersions] = React.useState<any[]>([]);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [showSaveModal, setShowSaveModal] = React.useState(false);
+  const [newVersionName, setNewVersionName] = React.useState("");
+  const [showVersionDropdown, setShowVersionDropdown] = React.useState(false);
+
+  const fetchVersions = async () => {
+    const v = await UserStorage.getResumeVersions();
+    setVersions(v);
+  };
+
+  React.useEffect(() => {
+    fetchVersions();
+  }, []);
+
+  const handleSaveVersion = async () => {
+    if (!newVersionName.trim()) {
+      Alert.alert("Name required", "Please enter a name for this version.");
+      return;
+    }
+    try {
+      setIsSaving(true);
+      await UserStorage.saveResumeVersion(newVersionName.trim(), data);
+      await fetchVersions();
+      setShowSaveModal(false);
+      setNewVersionName("");
+      Alert.alert("Saved", "Resume version saved successfully.");
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLoadVersion = (version: any) => {
+    Alert.alert(
+      "Load Version",
+      `Overwrite current content with "${version.name}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Load", 
+          onPress: () => {
+            setData(version.data);
+            setShowVersionDropdown(false);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } 
+        }
+      ]
+    );
+  };
+
+  const handleDeleteVersion = async (name: string) => {
+    Alert.alert(
+      "Delete Version",
+      `Are you sure you want to delete "${name}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            await UserStorage.deleteResumeVersion(name);
+            await fetchVersions();
+          } 
+        }
+      ]
+    );
+  };
+
+  React.useEffect(() => {
     const user = auth.currentUser;
     if (user) {
       setData(prev => ({
@@ -124,24 +213,48 @@ export default function ManualBuilderScreen() {
     }
   }, []);
 
+  const { importData } = useLocalSearchParams<{ importData?: string }>();
+
+  React.useEffect(() => {
+    if (importData) {
+      try {
+        const parsed = JSON.parse(importData);
+        setData(prev => ({
+          ...prev,
+          title: parsed.title || prev.title,
+          summary: parsed.summary || prev.summary,
+          experience: parsed.experience ? parsed.experience.map((e: any) => ({
+            ...e,
+            id: Math.random().toString(36).substr(2, 9)
+          })) : prev.experience,
+          projects: parsed.projects ? parsed.projects.map((p: any) => ({
+            ...p,
+            id: Math.random().toString(36).substr(2, 9)
+          })) : prev.projects,
+          skills: parsed.skills || prev.skills,
+        }));
+        // Switch to edit tab to show the imported data
+        setActiveTab("edit");
+        // Clear params to avoid re-importing on refresh
+        router.setParams({ importData: undefined });
+        Alert.alert("Success", "Optimized content has been imported into the editor!");
+      } catch (e) {
+        console.error("Import error:", e);
+      }
+    }
+  }, [importData]);
+
   const THEME_COLORS = [
-    "#1e293b", // Slate
-    "#0f172a", // Dark
-    "#3b82f6", // Blue
-    "#d946ef", // Fuchsia
-    "#10b981", // Emerald
-    "#f59e0b", // Amber
-    "#ef4444", // Red
+    "#1e293b", "#0f172a", "#3b82f6", "#d946ef", "#10b981", "#f59e0b", "#ef4444",
   ];
 
-  // ── field helpers ──────────────────────────────────────────────────────────
-  const set = useCallback(
+  const set = React.useCallback(
     <K extends keyof ResumeData>(key: K, value: ResumeData[K]) =>
       setData((prev) => ({ ...prev, [key]: value })),
     [],
   );
 
-  const setEdu = useCallback(
+  const setEdu = React.useCallback(
     <K extends keyof Education>(key: K, value: string) =>
       setData((prev) => ({
         ...prev,
@@ -150,7 +263,7 @@ export default function ManualBuilderScreen() {
     [],
   );
 
-  const setExp = useCallback(
+  const setExp = React.useCallback(
     (id: string, key: keyof Experience, value: string) =>
       setData((prev) => ({
         ...prev,
@@ -161,7 +274,7 @@ export default function ManualBuilderScreen() {
     [],
   );
 
-  const addExp = useCallback(
+  const addExp = React.useCallback(
     () =>
       setData((prev) => ({
         ...prev,
@@ -179,7 +292,7 @@ export default function ManualBuilderScreen() {
     [],
   );
 
-  const removeExp = useCallback(
+  const removeExp = React.useCallback(
     (id: string) =>
       setData((prev) => ({
         ...prev,
@@ -188,18 +301,48 @@ export default function ManualBuilderScreen() {
     [],
   );
 
-  // ── PDF export ─────────────────────────────────────────────────────────────
+  const setProj = React.useCallback(
+    (id: string, key: keyof Project, value: string) =>
+      setData((prev) => ({
+        ...prev,
+        projects: prev.projects.map((p) =>
+          p.id === id ? { ...p, [key]: value } : p,
+        ),
+      })),
+    [],
+  );
+
+  const addProj = React.useCallback(
+    () =>
+      setData((prev) => ({
+        ...prev,
+        projects: [
+          ...prev.projects,
+          {
+            id: Date.now().toString(),
+            name: "",
+            link: "",
+            description: "",
+          },
+        ],
+      })),
+    [],
+  );
+
+  const removeProj = React.useCallback(
+    (id: string) =>
+      setData((prev) => ({
+        ...prev,
+        projects: prev.projects.filter((p) => p.id !== id),
+      })),
+    [],
+  );
+
   const handleDownloadPDF = async () => {
     if (isGenerating) return;
     try {
       setIsGenerating(true);
-      const html = generateResumeHtml(
-        data,
-        "Elite",
-        primaryColor,
-        "Inter",
-        true,
-      );
+      const html = generateResumeHtml(data, "Elite", primaryColor, "Inter", true);
 
       const { uri } = await Print.printToFileAsync({
         html,
@@ -208,83 +351,107 @@ export default function ManualBuilderScreen() {
         margins: { left: 0, right: 0, top: 0, bottom: 0 },
       });
 
-      await Sharing.shareAsync(uri, {
-        mimeType: "application/pdf",
-        dialogTitle: "Save your Resume",
-        UTI: "com.adobe.pdf",
+      const fileName = `Resume_${data.name.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+      const newPath = `${FileSystem.documentDirectory}${fileName}`;
+
+      await FileSystem.copyAsync({
+        from: uri,
+        to: newPath
       });
+
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(newPath);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1,
+          type: 'application/pdf',
+        });
+      } else {
+        await Sharing.shareAsync(newPath, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Download Resume',
+        });
+      }
     } catch (err) {
       console.error(err);
-      Alert.alert("Error", "Failed to generate PDF. Please try again.");
+      Alert.alert("Error", "Failed to generate PDF.");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const previewHtml = useMemo(
-    () =>
-      generateResumeHtml(data, "Elite", primaryColor, "Inter", false),
+  const [enhancingField, setEnhancingField] = React.useState<string | null>(null);
+
+  const handleEnhance = async (text: string, fieldId: string, type: string, onUpdate: (newText: string) => void) => {
+    if (!text || text.trim().length < 5) {
+      Alert.alert("Text too short", "Please enter more content to enhance.");
+      return;
+    }
+    
+    try {
+      setEnhancingField(fieldId);
+      const messages = [
+        { 
+          role: 'system' as const, 
+          content: 'You are an expert resume writer. Fix grammar, improve vocabulary, and make the text more professional. Keep it concise and impactful. Return ONLY the improved text, no extra commentary.' 
+        },
+        { 
+          role: 'user' as const, 
+          content: `Enhance this ${type}: ${text}` 
+        }
+      ];
+
+      const result = await callAI(messages, { jsonMode: false });
+      if (result) {
+        onUpdate(result.trim().replace(/^"|"$/g, ''));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("AI Enhancement Failed", "There was an error processing your request. Please try again.");
+    } finally {
+      setEnhancingField(null);
+    }
+  };
+
+  const previewHtml = React.useMemo(
+    () => generateResumeHtml(data, "Elite", primaryColor, "Inter", false),
     [data, primaryColor],
   );
 
-  // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Premium Header */}
-      <View style={styles.header}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.glassBorder }]}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <ArrowLeft size={22} color="#1e293b" />
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9' }]}>
+            <ArrowLeft size={22} color={colors.text} />
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTitle}>Elite Studio</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Elite Studio</Text>
             <View style={styles.headerStatusRow}>
               <View style={styles.liveIndicator} />
-              <Text style={styles.headerSub}>Auto-syncing to PDF</Text>
+              <Text style={[styles.headerSub, { color: colors.textMuted }]}>Auto-syncing to PDF</Text>
             </View>
           </View>
         </View>
         
         <TouchableOpacity
           onPress={handleDownloadPDF}
-          style={[styles.saveBtn, isGenerating && styles.saveBtnDisabled]}
+          style={[styles.saveBtn, isGenerating && styles.saveBtnDisabled, { backgroundColor: isDark ? Theme.colors.primary : '#1e293b' }]}
           disabled={isGenerating}
         >
           {isGenerating ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={isDark ? "#000" : "#fff"} />
           ) : (
             <>
-              <Sparkles size={16} color="#fff" />
-              <Text style={styles.saveBtnText}>Export PDF</Text>
+              <Sparkles size={16} color={isDark ? "#000" : "#fff"} />
+              <Text style={[styles.saveBtnText, { color: isDark ? "#000" : "#fff" }]}>Export PDF</Text>
             </>
           )}
         </TouchableOpacity>
-      </View>
-
-      {/* Segmented Tabs */}
-      <View style={styles.tabBar}>
-        <View style={styles.segmentedContainer}>
-          <TouchableOpacity
-            onPress={() => {
-              setActiveTab("edit");
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            style={[styles.segment, activeTab === "edit" && styles.activeSegment]}
-          >
-            <Edit2 size={16} color={activeTab === "edit" ? "#fff" : "#64748b"} />
-            <Text style={[styles.segmentText, activeTab === "edit" && styles.activeSegmentText]}>Editor</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              setActiveTab("preview");
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            style={[styles.segment, activeTab === "preview" && styles.activeSegment]}
-          >
-            <Eye size={16} color={activeTab === "preview" ? "#fff" : "#64748b"} />
-            <Text style={[styles.segmentText, activeTab === "preview" && styles.activeSegmentText]}>Preview</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {activeTab === "edit" ? (
@@ -294,10 +461,58 @@ export default function ManualBuilderScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Section: Theme Selection */}
+          {/* Version Management Section */}
           <View style={styles.editorSection}>
-            <Text style={styles.sectionTitle}>Elite Theme</Text>
-            <View style={[styles.sectionCard, { flexDirection: 'row', gap: 12, flexWrap: 'wrap' }]}>
+             <View style={styles.versionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Resume Versions</Text>
+                <View style={styles.versionActions}>
+                   <TouchableOpacity 
+                    onPress={() => setShowVersionDropdown(!showVersionDropdown)}
+                    style={[styles.dropdownBtn, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+                   >
+                      <FolderOpen size={16} color={Theme.colors.primary} />
+                      <Text style={[styles.dropdownBtnText, { color: colors.text }]}>Load Version</Text>
+                      <ChevronDown size={14} color={colors.textMuted} />
+                   </TouchableOpacity>
+                   <TouchableOpacity 
+                    onPress={() => setShowSaveModal(true)}
+                    style={[styles.saveVersionIconBtn, { backgroundColor: Theme.colors.primary + '15' }]}
+                   >
+                      <Save size={18} color={Theme.colors.primary} />
+                   </TouchableOpacity>
+                </View>
+             </View>
+
+             {showVersionDropdown && (
+               <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                  {versions.length === 0 ? (
+                    <Text style={[styles.emptyVersions, { color: colors.textMuted }]}>No saved versions yet (Max 3)</Text>
+                  ) : (
+                    versions.map((v) => (
+                      <TouchableOpacity 
+                        key={v.name} 
+                        style={[styles.dropdownItem, { borderBottomColor: colors.glassBorder }]}
+                        onPress={() => handleLoadVersion(v)}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.versionName, { color: colors.text }]}>{v.name}</Text>
+                          <Text style={[styles.versionDate, { color: colors.textMuted }]}>
+                            Saved {new Date(v.updatedAt).toLocaleDateString()}
+                          </Text>
+                        </View>
+                        <TouchableOpacity onPress={() => handleDeleteVersion(v.name)}>
+                          <Trash2 size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    ))
+                  )}
+               </View>
+             )}
+          </View>
+
+          <View style={styles.editorSection}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Elite Theme</Text>
+            <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder, flexDirection: 'row', gap: 12, flexWrap: 'wrap' }]}>
               {THEME_COLORS.map((color) => (
                 <TouchableOpacity 
                   key={color}
@@ -315,31 +530,36 @@ export default function ManualBuilderScreen() {
             </View>
           </View>
 
-          {/* Section: Personal */}
           <View style={styles.editorSection}>
-            <Text style={styles.sectionTitle}>Personal Details</Text>
-            <View style={styles.sectionCard}>
-              <Field label="Full Name" value={data.name} onChange={(v) => set("name", v)} icon="user" />
-              <Field label="Headline" value={data.title} onChange={(v) => set("title", v)} icon="briefcase" />
-              <Field label="Profile Photo URL" value={data.photo || ""} onChange={(v) => set("photo", v)} placeholder="https://example.com/photo.jpg" />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Personal Details</Text>
+            <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              <Field label="Full Name" value={data.name} onChange={(v: string) => set("name", v)} colors={colors} />
+              <Field label="Headline" value={data.title} onChange={(v: string) => set("title", v)} colors={colors} />
               <View style={styles.rowFields}>
                 <View style={{ flex: 1 }}>
-                  <Field label="Email" value={data.email} onChange={(v) => set("email", v)} keyboardType="email-address" />
+                  <Field label="Email" value={data.email} onChange={(v: string) => set("email", v)} keyboardType="email-address" colors={colors} />
                 </View>
                 <View style={{ width: 12 }} />
                 <View style={{ flex: 1 }}>
-                  <Field label="Phone" value={data.phone} onChange={(v) => set("phone", v)} keyboardType="phone-pad" />
+                  <Field label="Phone" value={data.phone} onChange={(v: string) => set("phone", v)} keyboardType="phone-pad" colors={colors} />
                 </View>
               </View>
-              <Field label="Location" value={data.location} onChange={(v) => set("location", v)} />
-              <Field label="Professional Summary" value={data.summary} onChange={(v) => set("summary", v)} multiline />
+              <Field label="Location" value={data.location} onChange={(v: string) => set("location", v)} colors={colors} />
+              <Field 
+                label="Summary" 
+                value={data.summary} 
+                onChange={(v: string) => set("summary", v)} 
+                multiline 
+                colors={colors}
+                onEnhance={() => handleEnhance(data.summary, 'summary', 'professional summary', (v) => set("summary", v))}
+                isEnhancing={enhancingField === 'summary'}
+              />
             </View>
           </View>
 
-          {/* Section: Experience */}
           <View style={styles.editorSection}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Work Experience</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Work Experience</Text>
               <TouchableOpacity onPress={addExp} style={styles.addSectionBtn}>
                 <Plus size={16} color={Theme.colors.primary} />
                 <Text style={styles.addSectionText}>Add New</Text>
@@ -347,91 +567,193 @@ export default function ManualBuilderScreen() {
             </View>
             
             {data.experience.map((exp, idx) => (
-              <View key={exp.id} style={styles.sectionCard}>
-                <View style={styles.cardTop}>
+              <View key={exp.id} style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                <View style={[styles.cardTop, { borderBottomColor: colors.glassBorder }]}>
                   <Text style={styles.cardIndex}>Experience #{idx + 1}</Text>
                   <TouchableOpacity onPress={() => removeExp(exp.id)} style={styles.deleteBtn}>
                     <Trash2 size={16} color="#ef4444" />
                   </TouchableOpacity>
                 </View>
-                <Field label="Company" value={exp.company} onChange={(v) => setExp(exp.id, "company", v)} />
-                <Field label="Role" value={exp.role} onChange={(v) => setExp(exp.id, "role", v)} />
-                <Field label="Duration" value={exp.period} onChange={(v) => setExp(exp.id, "period", v)} placeholder="e.g. 2022 – Present" />
-                <Field label="Description" value={exp.description} onChange={(v) => setExp(exp.id, "description", v)} multiline />
+                <Field label="Company" value={exp.company} onChange={(v: string) => setExp(exp.id, "company", v)} colors={colors} />
+                <Field label="Role" value={exp.role} onChange={(v: string) => setExp(exp.id, "role", v)} colors={colors} />
+                <Field label="Duration" value={exp.period} onChange={(v: string) => setExp(exp.id, "period", v)} colors={colors} />
+                <Field 
+                  label="Description" 
+                  value={exp.description} 
+                  onChange={(v: string) => setExp(exp.id, "description", v)} 
+                  multiline 
+                  colors={colors} 
+                  onEnhance={() => handleEnhance(exp.description, `exp-${exp.id}`, 'job description', (v) => setExp(exp.id, "description", v))}
+                  isEnhancing={enhancingField === `exp-${exp.id}`}
+                />
               </View>
             ))}
           </View>
 
-          {/* Section: Education */}
           <View style={styles.editorSection}>
-            <Text style={styles.sectionTitle}>Education</Text>
-            <View style={styles.sectionCard}>
-              <Field label="School / University" value={data.education.school} onChange={(v) => setEdu("school", v)} />
-              <Field label="Degree" value={data.education.degree} onChange={(v) => setEdu("degree", v)} />
-              <View style={styles.rowFields}>
-                <View style={{ flex: 1 }}>
-                  <Field label="Year" value={data.education.year} onChange={(v) => setEdu("year", v)} placeholder="2018 – 2022" />
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Personal Projects</Text>
+              <TouchableOpacity onPress={addProj} style={styles.addSectionBtn}>
+                <Plus size={16} color={Theme.colors.primary} />
+                <Text style={styles.addSectionText}>Add Project</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {data.projects.map((proj, idx) => (
+              <View key={proj.id} style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                <View style={[styles.cardTop, { borderBottomColor: colors.glassBorder }]}>
+                  <Text style={styles.cardIndex}>Project #{idx + 1}</Text>
+                  <TouchableOpacity onPress={() => removeProj(proj.id)} style={styles.deleteBtn}>
+                    <Trash2 size={16} color="#ef4444" />
+                  </TouchableOpacity>
                 </View>
-                <View style={{ width: 12 }} />
-                <View style={{ flex: 1 }}>
-                  <Field label="GPA / Honors" value={data.education.honors} onChange={(v) => setEdu("honors", v)} />
-                </View>
+                <Field label="Project Name" value={proj.name} onChange={(v: string) => setProj(proj.id, "name", v)} colors={colors} />
+                <Field label="Link (GitHub/Live)" value={proj.link} onChange={(v: string) => setProj(proj.id, "link", v)} colors={colors} />
+                <Field 
+                  label="Description" 
+                  value={proj.description} 
+                  onChange={(v: string) => setProj(proj.id, "description", v)} 
+                  multiline 
+                  colors={colors} 
+                  onEnhance={() => handleEnhance(proj.description, `proj-${proj.id}`, 'project description', (v) => setProj(proj.id, "description", v))}
+                  isEnhancing={enhancingField === `proj-${proj.id}`}
+                />
               </View>
+            ))}
+          </View>
+
+          <View style={styles.editorSection}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Education</Text>
+            <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              <Field label="School" value={data.education.school} onChange={(v: string) => setEdu("school", v)} colors={colors} />
+              <Field label="Degree" value={data.education.degree} onChange={(v: string) => setEdu("degree", v)} colors={colors} />
+              <Field label="Year" value={data.education.year} onChange={(v: string) => setEdu("year", v)} colors={colors} />
             </View>
           </View>
 
-          {/* Section: Skills & More */}
           <View style={styles.editorSection}>
-            <Text style={styles.sectionTitle}>Skills & Languages</Text>
-            <View style={styles.sectionCard}>
-              <Field label="Skills (comma separated)" value={data.skills} onChange={(v) => set("skills", v)} multiline />
-              <Field label="Languages" value={data.languages} onChange={(v) => set("languages", v)} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Skills & Languages</Text>
+            <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              <Field label="Skills" value={data.skills} onChange={(v: string) => set("skills", v)} multiline colors={colors} />
+              <Field label="Languages" value={data.languages} onChange={(v: string) => set("languages", v)} colors={colors} />
             </View>
           </View>
 
           <View style={{ height: 100 }} />
         </ScrollView>
       ) : (
-        <View style={styles.previewContainer}>
-          <View style={styles.previewHeader}>
-            <View style={styles.statusDot} />
-            <Text style={styles.previewHeaderText}>Live Preview · A4 Standard</Text>
+        <View style={[styles.previewContainer, { backgroundColor: isDark ? colors.background : "#0f172a" }]}>
+          <View style={[styles.webviewWrapper, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
+            <WebView
+              originWhitelist={["*"]}
+              source={{ html: previewHtml }}
+              style={styles.webview}
+              scalesPageToFit={true}
+              scrollEnabled={true}
+              javaScriptEnabled={true}
+            />
           </View>
-          <WebView
-            originWhitelist={["*"]}
-            source={{ html: previewHtml }}
-            style={styles.webview}
-            scalesPageToFit={true}
-            scrollEnabled={true}
-            javaScriptEnabled={true}
-            setSupportMultipleWindows={false}
-            onMessage={(event) => {
-              const message = event.nativeEvent.data;
-              if (message.startsWith('edit:')) {
-                setActiveTab("edit");
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                // Optional: add logic to scroll to specific field
-              }
-            }}
-          />
         </View>
       )}
+
+      <View style={[styles.tabBar, { backgroundColor: colors.surface, borderTopColor: colors.glassBorder }]}>
+        <View style={[styles.segmentedContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9' }]}>
+          <TouchableOpacity
+            onPress={() => setActiveTab("edit")}
+            style={[styles.segment, activeTab === "edit" && { backgroundColor: Theme.colors.primary }]}
+          >
+            <Edit2 size={16} color={activeTab === "edit" ? "#fff" : colors.textMuted} />
+            <Text style={[styles.segmentText, { color: activeTab === "edit" ? "#fff" : colors.textMuted }]}>Editor</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveTab("preview")}
+            style={[styles.segment, activeTab === "preview" && { backgroundColor: Theme.colors.primary }]}
+          >
+            <Eye size={16} color={activeTab === "preview" ? "#fff" : colors.textMuted} />
+            <Text style={[styles.segmentText, { color: activeTab === "preview" ? "#fff" : colors.textMuted }]}>Preview</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={[styles.bannerContainer, { backgroundColor: colors.background }]}>
+        <BannerAd
+          unitId={bannerId}
+          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+        />
+      </View>
+
+      {/* Save Version Modal */}
+      <Modal visible={showSaveModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.saveModal, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Save Current Version</Text>
+              <TouchableOpacity onPress={() => setShowSaveModal(false)}>
+                <X size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalSub, { color: colors.textMuted }]}>
+              Enter a name for this version (e.g. Google Tailored). Max 3 versions allowed.
+            </Text>
+            <TextInput 
+              style={[styles.modalInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.glassBorder }]}
+              value={newVersionName}
+              onChangeText={setNewVersionName}
+              placeholder="Version Name"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+            <TouchableOpacity 
+              style={[styles.confirmSaveBtn, isSaving && { opacity: 0.7 }]}
+              onPress={handleSaveVersion}
+              disabled={isSaving}
+            >
+              {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmSaveBtnText}>Save Resume</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// ─── Sub-Components ─────────────────────────────────────────────────────────
-
-function Field({ label, value, onChange, multiline, placeholder, keyboardType }: any) {
+function Field({ label, value, onChange, multiline, placeholder, keyboardType, colors, onEnhance, isEnhancing }: any) {
   return (
     <View style={styles.fieldContainer}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.fieldHeader}>
+        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+        {onEnhance && (
+          <TouchableOpacity 
+            onPress={onEnhance} 
+            disabled={isEnhancing}
+            style={styles.enhanceBtn}
+          >
+            {isEnhancing ? (
+              <ActivityIndicator size="small" color={Theme.colors.primary} />
+            ) : (
+              <>
+                <Sparkles size={12} color={Theme.colors.primary} />
+                <Text style={[styles.enhanceBtnText, { color: Theme.colors.primary }]}>AI Enhance</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
       <TextInput
-        style={[styles.input, multiline && styles.inputMultiline]}
+        style={[
+          styles.input, 
+          multiline && styles.inputMultiline, 
+          { 
+            backgroundColor: colors.background, 
+            borderColor: colors.glassBorder,
+            color: colors.text 
+          }
+        ]}
         value={value}
         onChangeText={onChange}
         placeholder={placeholder ?? label}
-        placeholderTextColor="#94a3b8"
+        placeholderTextColor={colors.textMuted}
         multiline={multiline}
         keyboardType={keyboardType ?? "default"}
         autoCapitalize="none"
@@ -441,56 +763,45 @@ function Field({ label, value, onChange, multiline, placeholder, keyboardType }:
   );
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  
-  // Header
+  container: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 15 },
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: "#f1f5f9",
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
+  headerTitle: { fontSize: 18, fontWeight: "800" },
   headerStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
   liveIndicator: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
-  headerSub: { fontSize: 11, color: "#64748b", fontWeight: "600" },
+  headerSub: { fontSize: 11, fontWeight: "600" },
   saveBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: '#1e293b', // Dark Navy
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
   },
   saveBtnDisabled: { opacity: 0.7 },
-  saveBtnText: { color: "#fff", fontWeight: "800", fontSize: 13, letterSpacing: 0.5 },
-
-  // Tabs
-  tabBar: { paddingHorizontal: 20, paddingVertical: 15 },
+  saveBtnText: { fontWeight: "800", fontSize: 13 },
+  tabBar: { 
+    paddingHorizontal: 20, 
+    paddingVertical: 10,
+    borderTopWidth: 1,
+  },
   segmentedContainer: {
     flexDirection: "row",
-    backgroundColor: "#f1f5f9",
     padding: 4,
     borderRadius: 14,
   },
@@ -503,12 +814,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
   },
-  activeSegment: { backgroundColor: Theme.colors.primary, elevation: 2 },
-  segmentText: { fontSize: 13, fontWeight: "700", color: "#64748b" },
-  activeSegmentText: { color: "#fff" },
-
-  // Editor
-  editorContent: { paddingHorizontal: 20 },
+  segmentText: { fontSize: 13, fontWeight: "700" },
+  editorContent: { paddingHorizontal: 20, paddingTop: 20 },
   editorSection: { marginBottom: 25 },
   sectionHeader: {
     flexDirection: "row",
@@ -516,22 +823,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "800", color: "#334155", marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: "800", marginBottom: 12 },
   addSectionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
-  addSectionText: { fontSize: 13, fontWeight: "700", color: Theme.colors.primary },
-  
+  addSectionText: { fontSize: 13, fontWeight: "700" },
   sectionCard: {
-    backgroundColor: "#fff",
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.03)",
     marginBottom: 15,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.05,
-    shadowRadius: 15,
-    elevation: 4,
   },
   cardTop: {
     flexDirection: "row",
@@ -540,40 +839,39 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#f8fafc",
   },
-  cardIndex: { fontSize: 12, fontWeight: "700", color: "#94a3b8", textTransform: "uppercase" },
+  cardIndex: { fontSize: 12, fontWeight: "700" },
   deleteBtn: { padding: 4 },
-
   rowFields: { flexDirection: "row" },
   fieldContainer: { marginBottom: 16 },
-  fieldLabel: { fontSize: 12, fontWeight: "700", color: "#64748b", marginBottom: 8, marginLeft: 2 },
+  fieldHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  fieldLabel: { fontSize: 12, fontWeight: "700" },
+  enhanceBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2, paddingHorizontal: 8, borderRadius: 8, backgroundColor: Theme.colors.primary + '10' },
+  enhanceBtnText: { fontSize: 10, fontWeight: '800' },
   input: {
-    backgroundColor: "#fcfdfe",
     borderWidth: 1.5,
-    borderColor: "#edf2f7",
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 14,
-    color: "#1a202c",
     fontWeight: "600",
   },
   inputMultiline: { height: 110, paddingTop: 14 },
-
-  // Preview
-  previewContainer: { flex: 1, backgroundColor: "#cbd5e1" },
-  previewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 8,
-    backgroundColor: "rgba(0,0,0,0.05)",
+  previewContainer: { flex: 1 },
+  webviewWrapper: { 
+    flex: 1, 
+    margin: 15,
+    marginTop: 20,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#10b981" },
-  previewHeaderText: { fontSize: 10, fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: 1 },
   webview: { flex: 1, backgroundColor: "transparent" },
+  bannerContainer: {
+    paddingTop: 4,
+    paddingBottom: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   colorCircle: {
     width: 36,
     height: 36,
@@ -584,11 +882,48 @@ const styles = StyleSheet.create({
   activeColorCircle: {
     borderColor: '#fff',
     borderWidth: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
+  versionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  versionActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dropdownBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 12, 
+    borderWidth: 1 
+  },
+  dropdownBtnText: { fontSize: 13, fontWeight: '700' },
+  saveVersionIconBtn: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  dropdownMenu: { 
+    borderRadius: 18, 
+    borderWidth: 1, 
+    overflow: 'hidden', 
+    marginBottom: 10 
+  },
+  dropdownItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 14, 
+    borderBottomWidth: 1 
+  },
+  versionName: { fontSize: 14, fontWeight: '700' },
+  versionDate: { fontSize: 10, marginTop: 2 },
+  emptyVersions: { textAlign: 'center', padding: 20, fontSize: 13 },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  saveModal: { width: '100%', borderRadius: 24, padding: 24, borderWidth: 1 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  modalTitle: { fontSize: 18, fontWeight: '800' },
+  modalSub: { fontSize: 13, lineHeight: 18, marginBottom: 20 },
+  modalInput: { borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 15, marginBottom: 20 },
+  confirmSaveBtn: { backgroundColor: Theme.colors.primary, paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
+  confirmSaveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });
-

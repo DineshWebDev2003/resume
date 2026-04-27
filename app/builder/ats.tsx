@@ -9,9 +9,16 @@ import {
   Dimensions,
   Platform,
   Modal,
-  ActivityIndicator,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { useAuth } from '@/hooks/use-auth';
+import { db } from '@/services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useRewardedAd } from '@/hooks/use-rewarded-ad';
+import { callAI } from '@/services/ai';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { 
   ChevronLeft, 
@@ -48,12 +55,14 @@ import * as DocumentPicker from 'expo-document-picker';
 import { WebView } from 'react-native-webview';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
 import { X, Eye } from 'lucide-react-native';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { uploadToCloudinary } from '@/services/cloudinary';
 import { useRef } from 'react';
 
 const { width } = Dimensions.get('window');
+const bannerId = __DEV__ ? TestIds.BANNER : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 export default function ATSScanner() {
   const router = useRouter();
@@ -79,7 +88,25 @@ export default function ATSScanner() {
   const [pdfHtml, setPdfHtml] = useState<string | null>(null);
   const [extractedText, setExtractedText] = useState('');
   const viewShotRef = useRef<any>(null); // Ref for image capture
+  const [isPro, setIsPro] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizedData, setOptimizedData] = useState<any>(null);
+  const { user } = useAuth();
+  const { loaded: adLoaded, showAd } = useRewardedAd();
   const scrollRef = useRef<ScrollView>(null);
+
+  React.useEffect(() => {
+    const checkPro = async () => {
+      if (user) {
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setIsPro(docSnap.data().isPro || false);
+        }
+      }
+    };
+    checkPro();
+  }, [user]);
 
   const scrollY = useSharedValue(0);
   const modalScrollY = useSharedValue(0);
@@ -252,29 +279,39 @@ export default function ATSScanner() {
       const html = `
         <html>
           <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
           </head>
           <body>
             <div id="pdf-container"></div>
             <script>
-              const pdfData = atob("${base64}");
-              const loadingTask = pdfjsLib.getDocument({data: pdfData});
+              const base64 = "${base64}";
+              const binaryString = window.atob(base64);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              
+              pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+              
+              const loadingTask = pdfjsLib.getDocument({data: bytes.buffer});
               loadingTask.promise.then(pdf => {
+                const container = document.getElementById('pdf-container');
+                for (let i = 1; i <= pdf.numPages; i++) {
+                  pdf.getPage(i).then(page => {
+                    const viewport = page.getViewport({scale: 1.5});
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    container.appendChild(canvas);
+                    page.render({canvasContext: context, viewport: viewport});
+                  });
+                }
+
+                // Also extract text for analysis
                 let fullText = "";
                 const pagePromises = [];
-                
-                // Show first page immediately
-                pdf.getPage(1).then(page => {
-                  const viewport = page.getViewport({scale: 1.5});
-                  const canvas = document.createElement('canvas');
-                  const context = canvas.getContext('2d');
-                  canvas.height = viewport.height;
-                  canvas.width = viewport.width;
-                  document.getElementById('pdf-container').appendChild(canvas);
-                  page.render({canvasContext: context, viewport: viewport});
-                });
-
-                // Extract text from all pages
                 for (let i = 1; i <= pdf.numPages; i++) {
                   pagePromises.push(
                     pdf.getPage(i).then(page => 
@@ -284,18 +321,20 @@ export default function ATSScanner() {
                     )
                   );
                 }
-
                 Promise.all(pagePromises).then(() => {
                   window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: 'text_extracted',
                     text: fullText
                   }));
                 });
+              }).catch(err => {
+                document.body.innerHTML = '<h1>Error loading PDF: ' + err.message + '</h1>';
               });
             </script>
             <style>
-              body { margin: 0; background: ${isDark ? '#121212' : '#f8fafc'}; }
-              canvas { width: 100%; height: auto; margin-bottom: 10px; }
+              body { margin: 0; padding: 10px; background: ${isDark ? '#121212' : '#f8fafc'}; }
+              canvas { width: 100%; height: auto; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-radius: 8px; }
+              h1 { color: red; font-size: 16px; font-family: sans-serif; }
             </style>
           </body>
         </html>
@@ -317,53 +356,59 @@ export default function ATSScanner() {
       alert("Still processing your resume text. Please wait a second...");
       return;
     }
-    
+
+    if (!isPro) {
+      Alert.alert(
+        "Premium AI Scan",
+        "ATS Analysis is a pro feature. Watch one short ad to unlock it for this scan?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Watch Ad", onPress: () => showAd(() => startAnalysis()) }
+        ]
+      );
+      return;
+    }
+
+    startAnalysis();
+  };
+
+  const startAnalysis = async () => {
     setIsAnalyzing(true);
     setImprovements([]);
     setHighlights([]);
     
     try {
-      // 1. Prepare Groq AI Prompt
-      const prompt = `
-        You are an elite ATS (Applicant Tracking System) scanner. 
-        Analyze this Resume vs Job Description.
-        
-        RESUME:
-        ${extractedText.substring(0, 4000)}
-        
-        JOB DESCRIPTION:
-        ${jobDescription.substring(0, 2000)}
-        
-        Return ONLY a JSON object in this exact format:
-        {
-          "score": number (0-100),
-          "improvements": [
-            {"title": "string", "desc": "string", "type": "critical"|"important"|"suggestion"}
-          ],
-          "highlights": [
-            {"title": "string", "desc": "string"}
-          ]
-        }
-        Do not add any other text. Give 3 improvements and 2 highlights.
-      `;
-
-      // 2. Call Groq API
-      const response = await fetch(API_CONFIG.ATS_ENGINE_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_CONFIG.GROQ_API_KEY}`
+      const messages = [
+        { 
+          role: 'system' as const, 
+          content: 'You are an elite ATS (Applicant Tracking System) scanner. Analyze the Resume vs Job Description.' 
         },
-        body: JSON.stringify({
-          model: API_CONFIG.MODEL,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          response_format: { type: "json_object" }
-        })
-      });
+        { 
+          role: 'user' as const, 
+          content: `
+            RESUME:
+            ${extractedText.substring(0, 4000)}
+            
+            JOB DESCRIPTION:
+            ${jobDescription.substring(0, 2000)}
+            
+            Return ONLY a JSON object in this exact format:
+            {
+              "score": number (0-100),
+              "improvements": [
+                {"title": "string", "desc": "string", "type": "critical"|"important"|"suggestion"}
+              ],
+              "highlights": [
+                {"title": "string", "desc": "string"}
+              ]
+            }
+            Do not add any other text. Give 3 improvements and 2 highlights.
+          ` 
+        }
+      ];
 
-      const data = await response.json();
-      const result = JSON.parse(data.choices[0].message.content);
+      const resultText = await callAI(messages, { jsonMode: true });
+      const result = JSON.parse(resultText);
 
       if (result) {
         setScore(result.score || 70);
@@ -386,14 +431,82 @@ export default function ATSScanner() {
       await loadHistory();
       setShowResults(true);
     } catch (error) {
-       console.error("Groq AI Error:", error);
-       // Basic Fallback if AI fails
+       console.error("AI Analysis Error:", error);
        setScore(65);
-       setImprovements([{ title: 'AI Analysis Error', desc: 'Could not connect to Groq AI. Falling back to basic scan.', type: 'important' }]);
+       setImprovements([{ title: 'AI Analysis Error', desc: 'Could not connect to AI. Please try again.', type: 'important' }]);
        setShowResults(true);
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const handleOptimize = async () => {
+    if (!jobDescription || !extractedText) return;
+
+    setIsOptimizing(true);
+    try {
+      // Get user profile for better optimization
+      let userProfile = "";
+      if (user) {
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+           const d = docSnap.data();
+           userProfile = `User Info: Name: ${d.name}, Role: ${d.jobRoles?.join(', ')}, Education: ${d.education}`;
+        }
+      }
+
+      const messages = [
+        { 
+          role: 'system' as const, 
+          content: 'You are an elite resume optimizer. Rewrite the resume to perfectly match the job description while keeping the truth. Focus on keywords and impact.' 
+        },
+        { 
+          role: 'user' as const, 
+          content: `
+            JOB DESCRIPTION:
+            ${jobDescription.substring(0, 2000)}
+            
+            CURRENT RESUME TEXT:
+            ${extractedText.substring(0, 3000)}
+            
+            ${userProfile}
+
+            Return ONLY a valid JSON object in this format (do not add any other text):
+            {
+              "title": "Optimized Job Title",
+              "summary": "Professional summary focused on job keywords",
+              "experience": [
+                {"company": "...", "role": "...", "period": "...", "description": "Optimized description with keywords"}
+              ],
+              "skills": "Skill1, Skill2, Skill3...",
+              "projects": [
+                 {"name": "...", "description": "..."}
+              ]
+            }
+          ` 
+        }
+      ];
+
+      const resultText = await callAI(messages, { jsonMode: true });
+      const result = JSON.parse(resultText);
+      setOptimizedData(result);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error("Optimization Error:", error);
+      Alert.alert("Optimization Failed", "Could not generate optimized content. Please try again.");
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const handleCreateResume = () => {
+    if (!optimizedData) return;
+    router.push({
+      pathname: '/builder/manual',
+      params: { importData: JSON.stringify(optimizedData) }
+    });
+    setShowResults(false);
   };
 
   const openHistoryItem = (item: any) => {
@@ -418,7 +531,12 @@ export default function ATSScanner() {
         }} 
       />
 
-      <Modal visible={isAnalyzing} transparent animationType="fade">
+      <Modal 
+        visible={isAnalyzing} 
+        transparent 
+        animationType="fade"
+        onRequestClose={() => setIsAnalyzing(false)}
+      >
         <View style={styles.loadingOverlay}>
           <View style={[styles.loadingPopup, { backgroundColor: colors.surface }]}>
              <LottieView 
@@ -433,7 +551,11 @@ export default function ATSScanner() {
         </View>
       </Modal>
 
-      <Modal visible={showResults} animationType="slide">
+      <Modal 
+        visible={showResults} 
+        animationType="slide"
+        onRequestClose={() => setShowResults(false)}
+      >
         <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
           <Animated.View style={[styles.modalHeader, { paddingTop: insets.top + 10 }, modalHeaderStyle]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Analysis Results</Text>
@@ -489,6 +611,55 @@ export default function ATSScanner() {
                 </View>
               </Animated.View>
             ))}
+
+            <View style={styles.optimizeSection}>
+              <View style={[styles.divider, { backgroundColor: colors.glassBorder, marginVertical: 30 }]} />
+              <Text style={[styles.optimizeTitle, { color: colors.text }]}>Resume Optimization</Text>
+              <Text style={[styles.optimizeSub, { color: colors.textMuted }]}>
+                We can rewrite your resume content to perfectly align with this job's keywords and requirements.
+              </Text>
+              
+              {optimizedData ? (
+                <Animated.View entering={FadeInDown} style={[styles.optimizedCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                  <View style={styles.optimizedHeader}>
+                    <Sparkles size={20} color={Theme.colors.primary} />
+                    <Text style={[styles.optimizedHeaderText, { color: colors.text }]}>AI Optimized Content Ready</Text>
+                  </View>
+                  <Text style={[styles.optimizedPreview, { color: colors.textMuted }]} numberOfLines={3}>
+                    {optimizedData.summary}
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.createResumeBtn}
+                    onPress={handleCreateResume}
+                  >
+                    <LinearGradient
+                      colors={['#10B981', '#059669']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.buttonGradient}
+                    >
+                      <Zap size={18} color="#fff" />
+                      <Text style={styles.buttonText}>Open in Builder</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </Animated.View>
+              ) : (
+                <TouchableOpacity 
+                  style={[styles.optimizeBtn, isOptimizing && { opacity: 0.7 }]}
+                  onPress={handleOptimize}
+                  disabled={isOptimizing}
+                >
+                  {isOptimizing ? (
+                    <ActivityIndicator color={Theme.colors.primary} />
+                  ) : (
+                    <>
+                      <Sparkles size={18} color={Theme.colors.primary} />
+                      <Text style={[styles.optimizeBtnText, { color: Theme.colors.primary }]}>Optimize Full Content</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </Animated.ScrollView>
         </View>
       </Modal>
@@ -617,21 +788,19 @@ export default function ATSScanner() {
             source={{ html: pdfHtml || '' }} 
             style={{ flex: 1 }}
             originWhitelist={['*']}
+            javaScriptEnabled={true}
+            allowFileAccess={true}
+            allowUniversalAccessFromFileURLs={true}
             scalesPageToFit
           />
-          <View style={[styles.adContainer, { paddingBottom: insets.bottom + 10, backgroundColor: colors.surface }]}>
-             <GlassCard style={styles.adCard}>
-                <View style={styles.adBadge}>
-                  <Text style={styles.adBadgeText}>AD</Text>
-                </View>
-                <View style={styles.adContent}>
-                  <Text style={[styles.adTitle, { color: colors.text }]}>Unlock Premium Templates</Text>
-                  <Text style={[styles.adSub, { color: colors.textMuted }]}>Get 50+ ATS-friendly designs today!</Text>
-                </View>
-                <TouchableOpacity style={styles.adBtn}>
-                   <Text style={styles.adBtnText}>Upgrade</Text>
-                </TouchableOpacity>
-             </GlassCard>
+          <View style={[styles.adContainer, { paddingBottom: insets.bottom + 10, backgroundColor: colors.background, alignItems: 'center' }]}>
+            <BannerAd
+              unitId={bannerId}
+              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+              requestOptions={{
+                requestNonPersonalizedAdsOnly: true,
+              }}
+            />
           </View>
         </View>
       </Modal>
@@ -1101,5 +1270,64 @@ const styles = StyleSheet.create({
   },
   historyDate: {
     fontSize: 11,
+  },
+  optimizeSection: {
+    marginTop: 20,
+    paddingBottom: 40,
+  },
+  divider: {
+    height: 1,
+    width: '100%',
+  },
+  optimizeTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  optimizeSub: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  optimizeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Theme.colors.primary,
+    borderStyle: 'dashed',
+  },
+  optimizeBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  optimizedCard: {
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 15,
+  },
+  optimizedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  optimizedHeaderText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  optimizedPreview: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  createResumeBtn: {
+    height: 54,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 5,
   },
 });

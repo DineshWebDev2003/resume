@@ -107,7 +107,7 @@ export default function CategoryTemplatesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.surface }]}>
           <ChevronLeft color={colors.text} size={28} />
         </TouchableOpacity>
         <View style={styles.headerTitleRow}>
@@ -165,24 +165,24 @@ export default function CategoryTemplatesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, gap: 15 },
-  backButton: { width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.03)" },
+  backButton: { width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center" },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerTitle: { fontSize: 24, fontWeight: "900" },
   filterSection: { marginBottom: 10 },
   filterScroll: { paddingHorizontal: 20, gap: 12 },
-  filterTab: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#f8fafc' },
+  filterTab: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
   filterTabText: { fontSize: 13, fontWeight: "700" },
   listContent: { padding: 15, gap: 15 },
   columnWrapper: { justifyContent: 'space-between', gap: 15 },
   cardWrapper: { width: '48%' },
   card: { borderRadius: 20, borderWidth: 1, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
-  imageContainer: { width: "100%", aspectRatio: 0.8, backgroundColor: "#fff", overflow: 'hidden' },
-  thumbnailOuter: { flex: 1, backgroundColor: '#fff' },
+  imageContainer: { width: "100%", aspectRatio: 0.8, backgroundColor: 'transparent', overflow: 'hidden' },
+  thumbnailOuter: { flex: 1, backgroundColor: '#fff' }, // Resume itself stays white
   thumbnailWebView: { flex: 1, backgroundColor: 'transparent', opacity: 0.9 },
   badgeContainer: { position: "absolute", top: 10, right: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, zIndex: 10 },
   badgeText: { color: "#000", fontSize: 9, fontWeight: "900" },
-  infoContainer: { padding: 14, backgroundColor: '#fff' },
-  templateName: { fontSize: 13, fontWeight: "800", color: "#1e293b" },
+  infoContainer: { padding: 14 },
+  templateName: { fontSize: 13, fontWeight: "800" },
   tagRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  templateDesc: { fontSize: 10, fontWeight: "600", color: "#64748b" },
+  templateDesc: { fontSize: 10, fontWeight: "600" },
 });

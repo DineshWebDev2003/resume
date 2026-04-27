@@ -12,6 +12,12 @@ import { WebView } from 'react-native-webview';
 import { API_CONFIG } from '@/constants/config';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useAuth } from '@/hooks/use-auth';
+import { db } from '@/services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useRewardedAd } from '@/hooks/use-rewarded-ad';
+import { callAI } from '@/services/ai';
+import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -31,7 +37,23 @@ export default function LinkedInSyncScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [pdfHtml, setPdfHtml] = useState<string | null>(null);
+  const [isPro, setIsPro] = useState(false);
+  const { user } = useAuth();
+  const { loaded: adLoaded, showAd } = useRewardedAd();
   const webviewRef = useRef<WebView>(null);
+
+  useEffect(() => {
+    const checkPro = async () => {
+      if (user) {
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setIsPro(docSnap.data().isPro || false);
+        }
+      }
+    };
+    checkPro();
+  }, [user]);
 
   const subSteps = [
     { label: 'Initializing Intelligent Scraper...', icon: ShieldCheck, color: '#0077B5' },
@@ -107,71 +129,65 @@ export default function LinkedInSyncScreen() {
   };
 
   const handleAnalyzeProfile = async (rawText: string) => {
-    setIsAnalyzing(true);
-    setCurrentSubStep(3); 
-    
-    // Check for login wall or blocked content
-    const isSmallText = rawText.length < 300;
-    const isLoginWall = rawText.toLowerCase().includes('sign in') || rawText.toLowerCase().includes('login');
-    
-    if (isSmallText || isLoginWall || rawText === "TIMEOUT_OR_BLOCKED") {
-       console.warn("LinkedIn Scraper was likely blocked or timed out.");
-       setIsBlocked(true);
-       setScrapingUrl(null);
-       setExtractedData({
-         name: url.split('/').pop()?.replace(/-/g, ' ') || 'Professional User',
-         role: 'Profile Sync Success (Review Required)',
-         summary: 'We synchronized your identity, but LinkedIn has blocked full content extraction to protect your privacy. Please verify and fill in your details below.',
-         experience: [],
-         skills: []
-       });
-       setStep('completed');
-       setIsAnalyzing(false);
+    if (!isPro) {
+       Alert.alert(
+         "Premium AI Sync",
+         "Full LinkedIn Analysis is a pro feature. Watch one short ad to unlock it for this profile?",
+         [
+           { text: "Cancel", style: "cancel", onPress: () => {
+             // Fallback to basic sync if ad cancelled
+             setExtractedData({
+               name: 'Professional User',
+               role: 'Basic Sync (Ad Cancelled)',
+               summary: 'We found your profile but couldn\'t perform deep AI analysis. Please refine manually.',
+               experience: [],
+               skills: []
+             });
+             setStep('completed');
+             setIsAnalyzing(false);
+           }},
+           { text: "Watch Ad", onPress: () => showAd(() => startAnalysis(rawText)) }
+         ]
+       );
        return;
     }
 
+    startAnalysis(rawText);
+  };
+
+  const startAnalysis = async (rawText: string) => {
+    setIsAnalyzing(true);
+    setCurrentSubStep(3);
+
     try {
-      const prompt = `
-        Analyze this LinkedIn profile text and extract professional details for a resume.
-        Return ONLY a JSON object with:
-        {
-          "name": "string",
-          "role": "string",
-          "summary": "string",
-          "experience": [{"title": "string", "company": "string", "period": "string"}],
-          "skills": ["string"]
-        }
-        
-        Text: ${rawText.substring(0, 6000)}
-      `;
-
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${API_CONFIG.GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
+      const messages = [
+        { 
+          role: 'system' as const, 
+          content: 'Analyze LinkedIn profile text and extract professional details for a resume. Return ONLY JSON.' 
         },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' }
-        })
-      });
+        { 
+          role: 'user' as const, 
+          content: `
+            {
+              "name": "string",
+              "role": "string",
+              "summary": "string",
+              "experience": [{"title": "string", "company": "string", "period": "string"}],
+              "skills": ["string"]
+            }
+            
+            Text: ${rawText.substring(0, 6000)}
+          ` 
+        }
+      ];
 
-      const data = await response.json();
-      
-      if (!data.choices || !data.choices[0]) {
-        console.error("Groq API Error Details:", JSON.stringify(data, null, 2));
-        throw new Error("Invalid AI Response: " + (data.error?.message || "Unknown error"));
-      }
-
-      const result = JSON.parse(data.choices[0].message.content);
+      const resultText = await callAI(messages, { jsonMode: true });
+      const result = JSON.parse(resultText);
       setExtractedData(result);
       setCurrentSubStep(4);
       setTimeout(() => setStep('completed'), 1500);
     } catch (error: any) {
       console.error("LinkedIn AI Full Error:", error);
-      // Premium Fallback
       setExtractedData({
         name: 'Professional User',
         role: 'Extracted Specialist',
@@ -390,12 +406,12 @@ export default function LinkedInSyncScreen() {
                     <Text style={styles.statVal}>{extractedData?.skills?.length || 0}</Text>
                     <Text style={[styles.statLabel, { color: colors.textMuted }]}>Skills</Text>
                   </View>
-                  <View style={styles.divider} />
+                  <View style={[styles.divider, { backgroundColor: colors.text }]} />
                   <View style={styles.stat}>
                     <Text style={styles.statVal}>{extractedData?.experience?.length || 0}</Text>
                     <Text style={[styles.statLabel, { color: colors.textMuted }]}>Roles</Text>
                   </View>
-                  <View style={styles.divider} />
+                  <View style={[styles.divider, { backgroundColor: colors.text }]} />
                   <View style={styles.stat}>
                     <Text style={styles.statVal}>{extractedData?.summary ? '1' : '0'}</Text>
                     <Text style={[styles.statLabel, { color: colors.textMuted }]}>Highlights</Text>
@@ -417,7 +433,11 @@ export default function LinkedInSyncScreen() {
       </ScrollView>
 
       {/* Sync Assistant Modal */}
-      <Modal visible={showAssistant} animationType="slide">
+      <Modal 
+        visible={showAssistant} 
+        animationType="slide"
+        onRequestClose={() => setShowAssistant(false)}
+      >
         <View style={[styles.modalContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
           <View style={styles.modalHeader}>
              <TouchableOpacity onPress={() => setShowAssistant(false)}>
@@ -770,7 +790,6 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     height: 30,
-    backgroundColor: '#000',
     opacity: 0.1,
   },
   continueBtn: {

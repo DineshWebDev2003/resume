@@ -1,5 +1,6 @@
 import { Colors, Theme } from "@/constants/theme";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Lato_400Regular, Lato_700Bold } from "@expo-google-fonts/lato";
 import {
     Montserrat_400Regular,
@@ -50,8 +51,9 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
 
-  const isDark = true;
-  const colors = Colors.dark;
+  const theme = useColorScheme();
+  const isDark = theme === "dark";
+  const colors = isDark ? Colors.dark : Colors.light;
 
   useEffect(() => {
     if (loading) return;
@@ -92,9 +94,9 @@ function RootLayoutNav() {
     <ThemeProvider value={DarkTheme}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <StatusBar
-          style="dark"
-          backgroundColor={Theme.colors.primary}
-          translucent={false}
+          style={isDark ? "light" : "dark"}
+          backgroundColor={isDark ? colors.background : Theme.colors.primary}
+          translucent={true}
         />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" />

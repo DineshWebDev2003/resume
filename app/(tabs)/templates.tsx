@@ -37,6 +37,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  InteractionManager,
 } from "react-native";
 import Animated, {
   Extrapolate,
@@ -105,7 +106,7 @@ const ALL_TEMPLATES = [
   { key: 't10', id: 'professional', name: 'Developer', isPro: false },
 ];
 
-const TemplateMiniPreview = ({ id, colors, isDark }: { id: string, colors: any, isDark: boolean }) => {
+const TemplateMiniPreview = React.memo(({ id, colors, isDark }: { id: string, colors: any, isDark: boolean }) => {
   const A4_WIDTH = 595;
   const A4_HEIGHT = 842;
   const scale = 0.26; 
@@ -133,7 +134,7 @@ const TemplateMiniPreview = ({ id, colors, isDark }: { id: string, colors: any, 
       </View>
     </View>
   );
-};
+});
 
 function CategoryCard({
   item,
@@ -271,10 +272,12 @@ export default function TemplatesScreen() {
   }, [currentIndex]);
 
   const loadData = async () => {
-    setLoading(true);
-    const data = await getResumes();
-    setResumes(data);
-    setLoading(false);
+    InteractionManager.runAfterInteractions(async () => {
+      setLoading(true);
+      const data = await getResumes();
+      setResumes(data);
+      setLoading(false);
+    });
   };
 
   useFocusEffect(

@@ -14,6 +14,43 @@
       },
       "oauth_client": [
         {
+          "client_id": "721103059213-gdv2d3787jbnqnm3i2ggnhtl9ovi8cj9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.resume",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "721103059213-s9ru15vv3kk302tahf97dl0k70sj6a4c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhtT26rqkVAOCvvyPAhUjWdQYPe-7iobY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "721103059213-s9ru15vv3kk302tahf97dl0k70sj6a4c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:721103059213:android:4f71834534f9103dc09844",
+        "android_client_info": {
+          "package_name": "com.resumeelite.app"
+        }
+      },
+      "oauth_client": [
+        {
           "client_id": "721103059213-s9ru15vv3kk302tahf97dl0k70sj6a4c.apps.googleusercontent.com",
           "client_type": 3
         }

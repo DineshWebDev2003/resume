@@ -16,7 +16,7 @@ workflows:
             sips -s format png "$file" --out "$file" || true
           done
       - name: Expo Prebuild
-        script: npx expo prebuild --clean
+        script: npx expo prebuild --clean --no-interactive
       - name: Build Android Debug APK
         script: |
           cd android
@@ -53,12 +53,12 @@ workflows:
             sips -s format png "$file" --out "$file" || true
           done
       - name: Expo Prebuild
-        script: npx expo prebuild --clean
+        script: npx expo prebuild --clean --no-interactive
       - name: Get Release SHA-1 Fingerprint & Prepare Keystore
         script: |
           if [ -n "$CM_KEYSTORE_BASE64" ]; then
             echo "Decoding Base64 Keystore from environment variables..."
-            echo "$CM_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+            echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore
             export CM_KEYSTORE_PATH="android/app/release.keystore"
             export CM_KEY_ALIAS="key"
             export CM_KEYSTORE_PASSWORD="resume123"

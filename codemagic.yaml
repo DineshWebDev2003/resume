@@ -10,6 +10,11 @@ workflows:
     scripts:
       - name: Install dependencies
         script: npm install
+      - name: Fix Image Assets (sips)
+        script: |
+          for file in assets/images/*.png; do
+            sips -s format png "$file" --out "$file" || true
+          done
       - name: Expo Prebuild
         script: npx expo prebuild --clean
       - name: Build Android Debug APK
@@ -42,13 +47,11 @@ workflows:
       - name: Install dependencies
         script: npm install
 
-      - name: Disable PNG Crunching (Fix AAPT2 Error)
+      - name: Fix Image Assets (sips)
         script: |
-          mkdir -p android
-          echo "android.enableAapt2=true" >> android/gradle.properties
-          echo "android.useNewCruncher=false" >> android/gradle.properties
-          # Force clean any old assets
-          rm -rf android/app/src/main/res/drawable-*
+          for file in assets/images/*.png; do
+            sips -s format png "$file" --out "$file" || true
+          done
       - name: Expo Prebuild
         script: npx expo prebuild --clean
       - name: Get Release SHA-1 Fingerprint

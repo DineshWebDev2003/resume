@@ -12,6 +12,7 @@ export const generateResumeHtml = (
   primaryColor: string = "#1e293b",
   fontFamily: string = "Inter",
   isPrint: boolean = false,
+  isThumbnail: boolean = false
 ): string => {
   const esc = (s: string) =>
     String(s || "")
@@ -1724,8 +1725,10 @@ export const generateResumeHtml = (
         var contentH = 842;
         
         // Much larger margins to ensure space on all devices
-        var scaleW = (winW - 120) / contentW;
-        var scaleH = (winH - 150) / contentH;
+        var marginW = ${isThumbnail ? 0 : 120};
+        var marginH = ${isThumbnail ? 0 : 150};
+        var scaleW = (winW - marginW) / contentW;
+        var scaleH = (winH - marginH) / contentH;
         var scale = Math.min(scaleW, scaleH);
         
         if (scale > 1) scale = 1;

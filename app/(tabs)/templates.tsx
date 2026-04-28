@@ -134,24 +134,19 @@ const TemplateMiniPreview = React.memo(({ id, colors, isDark, data }: { id: stri
   const isHtmlTemplate = id.startsWith('Elder') || id.startsWith('Titan');
 
   if (isHtmlTemplate) {
-    const WEBVIEW_WIDTH = 793.33;
-    const WEBVIEW_HEIGHT = 1122.66;
-    const webviewScale = targetWidth / WEBVIEW_WIDTH;
-    const htmlString = generateResumeHtml(resumeData, id, colors.primary || '#1e293b', 'Inter', true);
+    const htmlString = generateResumeHtml(resumeData, id, colors.primary || '#1e293b', 'Inter', false, true);
     return (
-      <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <View style={{ width: WEBVIEW_WIDTH, height: WEBVIEW_HEIGHT, transform: [{ scale: webviewScale }], overflow: 'hidden' }}>
-          <WebView
-            source={{ html: htmlString }}
-            style={{ width: WEBVIEW_WIDTH, height: WEBVIEW_HEIGHT, backgroundColor: 'transparent' }}
-            scrollEnabled={false}
-            pointerEvents="none"
-            showsVerticalScrollIndicator={false}
-            showsHorizontalScrollIndicator={false}
-            scalesPageToFit={false}
-            bounces={false}
-          />
-        </View>
+      <View style={{ flex: 1, backgroundColor: '#fff', overflow: 'hidden' }}>
+        <WebView
+          source={{ html: htmlString }}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+          scrollEnabled={false}
+          pointerEvents="none"
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          scalesPageToFit={false}
+          bounces={false}
+        />
       </View>
     );
   }

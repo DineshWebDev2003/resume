@@ -130,10 +130,10 @@ const TemplateMiniPreview = React.memo(({ id, colors, isDark, data }: { id: stri
   return (
     <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
       <View style={{ width: A4_WIDTH, height: A4_HEIGHT, transform: [{ scale }] }}>
-        {id === 'executive' && <ExecutiveTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {(id === 'modern' || id === 'elder') && <ModernTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {id === 'creative' && <CreativeTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {id === 'professional' && <ProfessionalTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {(id === 'executive' || id === 'Elder-3' || id === 'Titan-3') && <ExecutiveTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {(id === 'modern' || id === 'elder' || id === 'Elder-1' || id === 'Elder-5' || id === 'Elder-7' || id === 'Titan-1') && <ModernTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {(id === 'creative' || id === 'Elder-4' || id === 'Elder-8' || id === 'Titan-2') && <CreativeTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {(id === 'professional' || id === 'Elder-2' || id === 'Elder-6' || id === 'Titan-4') && <ProfessionalTemplate resumeData={resumeData} selectedFont="Roboto" />}
       </View>
     </View>
   );

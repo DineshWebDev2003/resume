@@ -25,6 +25,8 @@ import { UserStorage } from "@/services/storage";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
+  FlatList,
   ScrollView,
   StyleSheet,
   Text,
@@ -40,7 +42,25 @@ import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads'
 import { API_CONFIG } from "@/constants/config";
 import { StatusBar } from "expo-status-bar";
 
-const bannerId = __DEV__ ? TestIds.BANNER : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
+const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+
+const AVAILABLE_TEMPLATES = [
+  { id: "Elder-1", name: "Elder 1: Classic" },
+  { id: "Elder-2", name: "Elder 2: Elegant" },
+  { id: "Elder-3", name: "Elder 3: Bold" },
+  { id: "Elder-4", name: "Elder 4: Modern" },
+  { id: "Elder-5", name: "Elder 5: Compact" },
+  { id: "Elder-6", name: "Elder 6: Premium" },
+  { id: "Elder-7", name: "Elder 7: Gold" },
+  { id: "Elder-8", name: "Elder 8: Skyline" },
+  { id: "Titan-1", name: "Titan 1: PRO" },
+  { id: "Titan-2", name: "Titan 2: Dome" },
+  { id: "Titan-3", name: "Titan 3: Split" },
+  { id: "Titan-4", name: "Titan 4: Ruby" },
+  { id: "BlackWolf-1", name: "Black Wolf 1" },
+];
 
 // ─── types ───────────────────────────────────────────────────────────────────
 interface Experience {
@@ -466,7 +486,9 @@ export default function ManualBuilderScreen() {
             <Text style={[styles.headerTitle, { color: colors.text }]}>Elite Studio</Text>
             <View style={styles.headerStatusRow}>
               <View style={styles.liveIndicator} />
-              <Text style={[styles.headerSub, { color: colors.textMuted }]}>Auto-syncing to PDF</Text>
+              <Text style={[styles.headerSub, { color: colors.textMuted }]}>
+                Auto-syncing to PDF • {AVAILABLE_TEMPLATES.find(t => t.id === selectedTemplate)?.name || selectedTemplate}
+              </Text>
             </View>
           </View>
         </View>
@@ -679,16 +701,43 @@ export default function ManualBuilderScreen() {
         </ScrollView>
       ) : (
         <View style={[styles.previewContainer, { backgroundColor: isDark ? colors.background : "#0f172a" }]}>
-          <View style={[styles.webviewWrapper, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
-            <WebView
-              originWhitelist={["*"]}
-              source={{ html: previewHtml }}
-              style={styles.webview}
-              scalesPageToFit={true}
-              scrollEnabled={true}
-              javaScriptEnabled={true}
-            />
-          </View>
+          <FlatList
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            data={AVAILABLE_TEMPLATES}
+            keyExtractor={(item) => item.id}
+            initialScrollIndex={AVAILABLE_TEMPLATES.findIndex(t => t.id === selectedTemplate) !== -1 ? AVAILABLE_TEMPLATES.findIndex(t => t.id === selectedTemplate) : 0}
+            getItemLayout={(data, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+            onMomentumScrollEnd={(e) => {
+              const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              if (AVAILABLE_TEMPLATES[index] && AVAILABLE_TEMPLATES[index].id !== selectedTemplate) {
+                setSelectedTemplate(AVAILABLE_TEMPLATES[index].id);
+                Haptics.selectionAsync();
+              }
+            }}
+            renderItem={({ item }) => (
+              <View style={{ width: SCREEN_WIDTH }}>
+                <View style={[styles.webviewWrapper, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
+                  {selectedTemplate === item.id ? (
+                    <WebView
+                      originWhitelist={["*"]}
+                      source={{ html: generateResumeHtml(data, item.id, primaryColor, "Inter", false) }}
+                      style={styles.webview}
+                      scalesPageToFit={true}
+                      scrollEnabled={true}
+                      javaScriptEnabled={true}
+                    />
+                  ) : (
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                      <ActivityIndicator size="large" color={Theme.colors.primary} />
+                      <Text style={{ marginTop: 10, color: colors.textMuted, fontWeight: '600' }}>{item.name}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+          />
         </View>
       )}
 

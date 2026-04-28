@@ -1,56 +1,49 @@
+import { generateResumeHtml } from "@/components/resume-html-generator";
+import {
+    CreativeTemplate,
+    ExecutiveTemplate,
+    ModernTemplate,
+    ProfessionalTemplate,
+} from "@/components/resume-templates";
 import { Colors, Theme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { deleteResume, getResumes, UserResume } from "@/utils/storage";
+import dayjs from "dayjs";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
-  Briefcase,
-  Code,
-  FileText,
-  GraduationCap,
-  Heart,
-  Layers,
-  Plus,
-  Trash2,
-  Zap,
-  ShieldCheck,
-  MoreVertical,
-  SlidersHorizontal,
-  ChevronRight,
-  Crown,
+    Briefcase,
+    Code,
+    GraduationCap,
+    Heart,
+    Plus,
+    ShieldCheck,
+    Trash2,
+    Zap
 } from "lucide-react-native";
-import {
-  CreativeTemplate,
-  ExecutiveTemplate,
-  ModernTemplate,
-  ProfessionalTemplate,
-} from "@/components/resume-templates";
-import { generateResumeHtml } from "@/components/resume-html-generator";
-import { WebView } from "react-native-webview";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  InteractionManager,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    InteractionManager,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  Extrapolate,
-  FadeInDown,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
+    Extrapolate,
+    FadeInDown,
+    interpolate,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import dayjs from 'dayjs';
+import { WebView } from "react-native-webview";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -97,71 +90,160 @@ const CATEGORIES = [
 ];
 
 const ALL_TEMPLATES = [
-  { key: 't1', id: 'executive', name: 'Executive', isPro: false },
-  { key: 't2', id: 'modern', name: 'Modern', isPro: true },
-  { key: 't3', id: 'creative', name: 'Creative', isPro: false },
-  { key: 't4', id: 'professional', name: 'Professional', isPro: true },
-  { key: 't5', id: 'modern', name: 'Minimal', isPro: false },
-  { key: 't6', id: 'professional', name: 'Elite Pro', isPro: true },
-  { key: 't7', id: 'creative', name: 'Fancy Pink', isPro: false },
-  { key: 't8', id: 'executive', name: 'Classic Grey', isPro: false },
-  { key: 't9', id: 'modern', name: 'Bold Impact', isPro: true },
-  { key: 't10', id: 'professional', name: 'Developer', isPro: false },
+  { key: "t1", id: "executive", name: "Executive", isPro: false },
+  { key: "t2", id: "modern", name: "Modern", isPro: true },
+  { key: "t3", id: "creative", name: "Creative", isPro: false },
+  { key: "t4", id: "professional", name: "Professional", isPro: true },
+  { key: "t5", id: "modern", name: "Minimal", isPro: false },
+  { key: "t6", id: "professional", name: "Elite Pro", isPro: true },
+  { key: "t7", id: "creative", name: "Fancy Pink", isPro: false },
+  { key: "t8", id: "executive", name: "Classic Grey", isPro: false },
+  { key: "t9", id: "modern", name: "Bold Impact", isPro: true },
+  { key: "t10", id: "professional", name: "Developer", isPro: false },
 ];
 
-const TemplateMiniPreview = React.memo(({ id, colors, isDark, data }: { id: string, colors: any, isDark: boolean, data?: any }) => {
-  const A4_WIDTH = 595;
-  const A4_HEIGHT = 842;
-  const targetWidth = (SCREEN_WIDTH - 56) / 2;
-  const scale = targetWidth / A4_WIDTH;
+const TemplateMiniPreview = React.memo(
+  ({
+    id,
+    colors,
+    isDark,
+    data,
+  }: {
+    id: string;
+    colors: any;
+    isDark: boolean;
+    data?: any;
+  }) => {
+    const A4_WIDTH = 595;
+    const A4_HEIGHT = 842;
+    const targetWidth = (SCREEN_WIDTH - 56) / 2;
+    const scale = targetWidth / A4_WIDTH;
 
-  const defaultData = {
-    name: "Alex Johnson",
-    title: "Senior Product Designer",
-    email: "alex.j@example.com",
-    phone: "+1 555 000 1234",
-    summary: "Creative designer with a focus on user-centric interfaces. 8 years experience.",
-    experience: [
-      { role: "Design Lead", company: "Pixel Studio", period: "2019 - Present", description: "Spearheaded rebranding for international clients." },
-    ],
-    skills: "UI/UX, Figma, React, Adobe Suite",
-    education: { degree: "BFA Design", school: "Design Academy", year: "2015" },
-    photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=200&h=200&q=80"
-  };
+    const defaultData = {
+      name: "DINESH KUMAR",
+      title: "Senior Full-Stack Developer",
+      email: "dinesh@example.com",
+      phone: "+91 9876543210",
+      location: "Tamil Nadu, India",
+      summary:
+        "Dynamic and results-driven Senior Full-Stack Developer with over 5 years of experience in architecting and deploying high-performance mobile and web applications. Expert in React Native, Node.js, and Cloud Infrastructure. Proven track record of leading cross-functional teams to deliver scalable solutions that enhance user engagement by 40%.",
+      experience: [
+        {
+          id: "1",
+          company: "Innovate Tech Hub",
+          role: "Lead Full-Stack Developer",
+          period: "2022 – Present",
+          description:
+            "Architected and launched a flagship fintech mobile application using React Native, reaching 100k+ active users within the first quarter. Engineered a robust Node.js microservices backend that improved API response times by 60%.",
+        },
+        {
+          id: "2",
+          company: "Digital Stream Systems",
+          role: "Software Engineer",
+          period: "2019 – 2022",
+          description:
+            "Developed and maintained highly responsive web interfaces for high-traffic e-commerce platforms. Collaborated with UI/UX designers to implement pixel-perfect designs.",
+        }
+      ],
+      education: {
+        school: "Anna University",
+        degree: "B.Tech Information Technology",
+        year: "2015 – 2019",
+        honors: "First Class with Distinction",
+      },
+      projects: [
+        {
+          id: "1",
+          name: "Elite AI Resume Builder",
+          link: "https://github.com/dinesh/resume-builder",
+          description: "A state-of-the-art resume platform featuring real-time AI optimization.",
+        },
+        {
+          id: "2",
+          name: "CryptoPulse Tracker",
+          link: "https://github.com/dinesh/cryptopulse",
+          description: "A comprehensive real-time cryptocurrency monitoring dashboard.",
+        }
+      ],
+      skills: "React Native, React, Node.js, TypeScript, AWS, Docker",
+      tools: "VS Code, Git, Figma, Postman",
+      languages: "English, Tamil",
+      links: [
+        { label: "GitHub", url: "github.com/dinesh" },
+        { label: "Portfolio", url: "dinesh.dev" }
+      ],
+      certifications: [
+        { title: "AWS Certified Developer", issuer: "Amazon", year: "2023" },
+        { title: "Meta Front-End Developer", issuer: "Coursera", year: "2022" }
+      ],
+      photo:
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=200&h=200&q=80",
+    };
 
-  const resumeData = data || defaultData;
+    const resumeData = data || defaultData;
 
-  const isHtmlTemplate = id.startsWith('Elder') || id.startsWith('Titan');
+    const isHtmlTemplate = id.startsWith("Elder") || id.startsWith("Titan") || id.startsWith("BlackWolf");
 
-  if (isHtmlTemplate) {
-    const htmlString = generateResumeHtml(resumeData, id, colors.primary || '#1e293b', 'Inter', false, true);
+    if (isHtmlTemplate) {
+      const htmlString = generateResumeHtml(
+        resumeData,
+        id,
+        colors.primary || "#1e293b",
+        "Inter",
+        false,
+        true,
+      );
+      return (
+        <View style={{ flex: 1, backgroundColor: "#fff", overflow: "hidden" }}>
+          <WebView
+              originWhitelist={["*"]}
+              source={{ html: htmlString }}
+              style={{ flex: 1, backgroundColor: "transparent" }}
+              scalesPageToFit={true}
+              scrollEnabled={false}
+              javaScriptEnabled={true}
+              pointerEvents="none"
+              showsVerticalScrollIndicator={false}
+              showsHorizontalScrollIndicator={false}
+              bounces={false}
+            />
+        </View>
+      );
+    }
+
     return (
-      <View style={{ flex: 1, backgroundColor: '#fff', overflow: 'hidden' }}>
-        <WebView
-          source={{ html: htmlString }}
-          style={{ flex: 1, backgroundColor: 'transparent' }}
-          scrollEnabled={false}
-          pointerEvents="none"
-          showsVerticalScrollIndicator={false}
-          showsHorizontalScrollIndicator={false}
-          scalesPageToFit={false}
-          bounces={false}
-        />
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#fff",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{ width: A4_WIDTH, height: A4_HEIGHT, transform: [{ scale }] }}
+        >
+          {id === "executive" && (
+            <ExecutiveTemplate resumeData={resumeData} selectedFont="Roboto" />
+          )}
+          {(id === "modern" || id === "elder") && (
+            <ModernTemplate resumeData={resumeData} selectedFont="Roboto" />
+          )}
+          {id === "creative" && (
+            <CreativeTemplate resumeData={resumeData} selectedFont="Roboto" />
+          )}
+          {id === "professional" && (
+            <ProfessionalTemplate
+              resumeData={resumeData}
+              selectedFont="Roboto"
+            />
+          )}
+        </View>
       </View>
     );
-  }
-
-  return (
-    <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-      <View style={{ width: A4_WIDTH, height: A4_HEIGHT, transform: [{ scale }] }}>
-        {id === 'executive' && <ExecutiveTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {(id === 'modern' || id === 'elder') && <ModernTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {id === 'creative' && <CreativeTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {id === 'professional' && <ProfessionalTemplate resumeData={resumeData} selectedFont="Roboto" />}
-      </View>
-    </View>
-  );
-});
+  },
+);
 
 function CategoryCard({
   item,
@@ -209,7 +291,7 @@ function CategoryCard({
           setSelectedCategory(item.id);
           router.push({
             pathname: "/category-templates",
-            params: { categoryId: item.id, categoryName: item.name }
+            params: { categoryId: item.id, categoryName: item.name },
           } as any);
         }}
         style={[
@@ -245,8 +327,6 @@ function CategoryCard({
     </Animated.View>
   );
 }
-
-
 
 export default function TemplatesScreen() {
   const insets = useSafeAreaInsets();
@@ -347,37 +427,130 @@ export default function TemplatesScreen() {
         </TouchableOpacity>
       </View>
 
-
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 5 }]}>Premium Elder Series</Text>
-          <Text style={{ color: colors.textMuted, marginBottom: 25, fontSize: 13 }}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: colors.text, marginBottom: 5 },
+            ]}
+          >
+            Premium Elder Series
+          </Text>
+          <Text
+            style={{ color: colors.textMuted, marginBottom: 25, fontSize: 13 }}
+          >
             High-performance templates engineered for ATS and LinkedIn success.
           </Text>
 
           <View style={styles.miniGrid}>
             {[
-              { id: 'Elder-1', name: 'Elder 1: Elite', desc: 'Sleek Sidebar', badge: 'POPULAR', color: Theme.colors.secondary },
-              { id: 'Elder-2', name: 'Elder 2: ATS', desc: 'ATS Master', badge: 'ATS SAFE', color: '#10b981' },
-              { id: 'Elder-3', name: 'Elder 3: LI', desc: 'LinkedIn Style', badge: 'EXECUTIVE', color: '#0077b5' },
-              { id: 'Elder-4', name: 'Elder 4: Timeline', desc: 'Timeline & Sidebar', badge: 'CREATIVE', color: '#22a3d6' },
-              { id: 'Elder-5', name: 'Elder 5: Right', desc: 'Right Sidebar', badge: 'PORTFOLIO', color: '#d946ef' },
-              { id: 'Elder-6', name: 'Elder 6: Ribbon', desc: 'Ribbon Dark Sidebar', badge: 'MODERN', color: '#0ea5e9' },
-              { id: 'Elder-7', name: 'Elder 7: Gold', desc: 'Two-Tone Sidebar', badge: 'PREMIUM', color: '#facc15' },
-              { id: 'Elder-8', name: 'Elder 8: Skyline', desc: 'Blue Timelines', badge: 'PREMIUM', color: '#0ea5e9' },
-              { id: 'Titan-1', name: 'Titan 1: PRO', desc: 'Curved Dark Sidebar', badge: 'NEW', color: '#1e293b' },
-              { id: 'Titan-2', name: 'Titan 2: Dome', desc: 'Purple Pill Theme', badge: 'NEW', color: '#9b7eb5' },
-              { id: 'Titan-3', name: 'Titan 3: Split', desc: 'Orange Accent', badge: 'NEW', color: '#ea580c' },
-              { id: 'Titan-4', name: 'Titan 4: Ruby', desc: 'Dark Red Theme', badge: 'NEW', color: '#dc2626' },
+              {
+                id: "Elder-1",
+                name: "Elder 1: Elite",
+                desc: "Sleek Sidebar",
+                badge: "POPULAR",
+                color: Theme.colors.secondary,
+              },
+              {
+                id: "Elder-2",
+                name: "Elder 2: ATS",
+                desc: "ATS Master",
+                badge: "ATS SAFE",
+                color: "#10b981",
+              },
+              {
+                id: "Elder-3",
+                name: "Elder 3: LI",
+                desc: "LinkedIn Style",
+                badge: "EXECUTIVE",
+                color: "#0077b5",
+              },
+              {
+                id: "Elder-4",
+                name: "Elder 4: Timeline",
+                desc: "Timeline & Sidebar",
+                badge: "CREATIVE",
+                color: "#22a3d6",
+              },
+              {
+                id: "Elder-5",
+                name: "Elder 5: Right",
+                desc: "Right Sidebar",
+                badge: "PORTFOLIO",
+                color: "#d946ef",
+              },
+              {
+                id: "Elder-6",
+                name: "Elder 6: Ribbon",
+                desc: "Ribbon Dark Sidebar",
+                badge: "MODERN",
+                color: "#0ea5e9",
+              },
+              {
+                id: "Elder-7",
+                name: "Elder 7: Gold",
+                desc: "Two-Tone Sidebar",
+                badge: "PREMIUM",
+                color: "#facc15",
+              },
+              {
+                id: "Elder-8",
+                name: "Elder 8: Skyline",
+                desc: "Blue Timelines",
+                badge: "PREMIUM",
+                color: "#0ea5e9",
+              },
+              {
+                id: "Titan-1",
+                name: "Titan 1: PRO",
+                desc: "Curved Dark Sidebar",
+                badge: "NEW",
+                color: "#1e293b",
+              },
+              {
+                id: "Titan-2",
+                name: "Titan 2: Dome",
+                desc: "Purple Pill Theme",
+                badge: "NEW",
+                color: "#9b7eb5",
+              },
+              {
+                id: "Titan-3",
+                name: "Titan 3: Split",
+                desc: "Orange Accent",
+                badge: "NEW",
+                color: "#ea580c",
+              },
+              {
+                id: "Titan-4",
+                name: "Titan 4: Ruby",
+                desc: "Dark Red Theme",
+                badge: "NEW",
+                color: "#dc2626",
+              },
+              {
+                id: "BlackWolf-1",
+                name: "Black Wolf 1",
+                desc: "Minimal & Clean",
+                badge: "MINIMAL",
+                color: "#000000",
+              },
             ].map((t, idx) => (
-              <Animated.View 
+              <Animated.View
                 key={t.id}
                 entering={FadeInDown.delay(100 * idx)}
-                style={[styles.miniBox, { backgroundColor: colors.surface, borderColor: colors.glassBorder, height: 'auto' }]}
+                style={[
+                  styles.miniBox,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.glassBorder,
+                    height: "auto",
+                  },
+                ]}
               >
                 <TouchableOpacity
                   activeOpacity={0.9}
@@ -390,64 +563,100 @@ export default function TemplatesScreen() {
                 >
                   <View style={styles.miniHeader}>
                     <View style={styles.miniMockup}>
-                      <TemplateMiniPreview id={t.id} colors={colors} isDark={isDark} />
-                      <View style={[styles.proBadgeMini, { backgroundColor: t.color, position: 'absolute', top: 8, right: 8, width: 'auto', paddingHorizontal: 6, height: 16 }]}>
-                        <Text style={{ fontSize: 8, fontWeight: '900', color: '#fff' }}>{t.badge}</Text>
+                      <TemplateMiniPreview
+                        id={t.id}
+                        colors={colors}
+                        isDark={isDark}
+                      />
+                      <View
+                        style={[
+                          styles.proBadgeMini,
+                          {
+                            backgroundColor: t.color,
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            width: "auto",
+                            paddingHorizontal: 6,
+                            height: 16,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 8,
+                            fontWeight: "900",
+                            color: "#fff",
+                          }}
+                        >
+                          {t.badge}
+                        </Text>
                       </View>
                     </View>
                   </View>
-                  <View style={styles.miniInfo}>
-                    <Text style={[styles.miniName, { color: colors.text }]} numberOfLines={1}>
-                      {t.name}
-                    </Text>
-                    <Text style={styles.miniDate}>
-                      {t.desc}
-                    </Text>
-                  </View>
+
                 </TouchableOpacity>
               </Animated.View>
             ))}
           </View>
         </View>
 
-        <View style={{ paddingHorizontal: 20, marginTop: 40 }}>
-          <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 18 }]}>Why this template?</Text>
-          <View style={styles.benefitRow}>
-            <ShieldCheck size={20} color={Theme.colors.success} />
-            <Text style={[styles.benefitText, { color: colors.text }]}>Guaranteed single-page A4 layout</Text>
-          </View>
-          <View style={styles.benefitRow}>
-            <ShieldCheck size={20} color={Theme.colors.success} />
-            <Text style={[styles.benefitText, { color: colors.text }]}>ATS-optimized content structure</Text>
-          </View>
-        </View>
 
         {/* My Resumes - Mini Boxes */}
         {resumes.length > 0 && (
           <View style={{ paddingHorizontal: 20, marginTop: 40 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 18 }]}>My Resumes</Text>
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>{resumes.length}/3 Versions</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 15,
+              }}
+            >
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.text, fontSize: 18 },
+                ]}
+              >
+                My Resumes
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                {resumes.length}/3 Versions
+              </Text>
             </View>
             <View style={styles.miniGrid}>
               {resumes.map((resume, idx) => (
-                <Animated.View 
+                <Animated.View
                   key={resume.id}
                   entering={FadeInDown.delay(100 * idx)}
-                  style={[styles.miniBox, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+                  style={[
+                    styles.miniBox,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.glassBorder,
+                    },
+                  ]}
                 >
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={{ flex: 1 }}
-                    onPress={() => router.push({
-                      pathname: "/builder/manual",
-                      params: { resumeId: resume.id }
-                    } as any)}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/builder/manual",
+                        params: { resumeId: resume.id },
+                      } as any)
+                    }
                   >
                     <View style={styles.miniHeader}>
                       <View style={styles.miniMockup}>
-                        <TemplateMiniPreview id="modern" colors={colors} isDark={isDark} data={resume.data} />
+                        <TemplateMiniPreview
+                          id={resume.template || "modern"}
+                          colors={colors}
+                          isDark={isDark}
+                          data={resume.data}
+                        />
                         <View style={styles.miniOverlay}>
-                           <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => handleDelete(resume.id)}
                             style={styles.miniDelete}
                           >
@@ -456,14 +665,7 @@ export default function TemplatesScreen() {
                         </View>
                       </View>
                     </View>
-                    <View style={styles.miniInfo}>
-                      <Text style={[styles.miniName, { color: colors.text }]} numberOfLines={1}>
-                        {resume.name}
-                      </Text>
-                      <Text style={styles.miniDate}>
-                        {dayjs(resume.updatedAt).format('MMM D, YYYY')}
-                      </Text>
-                    </View>
+
                   </TouchableOpacity>
                 </Animated.View>
               ))}
@@ -614,16 +816,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   proBadgeMini: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     right: 8,
     backgroundColor: Theme.colors.secondary,
     width: 20,
     height: 20,
     borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -640,19 +842,19 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   templateLabelOverlay: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
   templateLabelText: {
     fontSize: 10,
-    fontWeight: '800',
-    textAlign: 'center',
-    textTransform: 'uppercase',
+    fontWeight: "800",
+    textAlign: "center",
+    textTransform: "uppercase",
   },
   elderCard: {
     borderRadius: 24,
@@ -666,46 +868,46 @@ const styles = StyleSheet.create({
   },
   elderPreviewContainer: {
     aspectRatio: 1 / 1.3,
-    width: '100%',
-    position: 'relative',
-    backgroundColor: '#fff',
+    width: "100%",
+    position: "relative",
+    backgroundColor: "#fff",
   },
   elderBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 20,
     left: 20,
     backgroundColor: Theme.colors.secondary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     zIndex: 10,
   },
   elderBadgeText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 10,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 1,
   },
   elderFooter: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 25,
     left: 20,
     right: 20,
     zIndex: 10,
   },
   elderName: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 24,
-    fontWeight: '900',
+    fontWeight: "900",
     marginBottom: 4,
   },
   elderDesc: {
-    color: 'rgba(255,255,255,0.7)',
+    color: "rgba(255,255,255,0.7)",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 20,
   },
   startBtn: {
@@ -713,30 +915,30 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 14,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 8,
   },
   startBtnText: {
-    color: '#000',
+    color: "#000",
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   benefitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     marginTop: 15,
   },
   benefitText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
     opacity: 0.8,
   },
   miniGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     marginHorizontal: -8,
   },
   miniBox: {
@@ -744,27 +946,27 @@ const styles = StyleSheet.create({
     margin: 8,
     borderRadius: 16,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   miniHeader: {
     aspectRatio: 1 / 1.414,
-    width: '100%',
-    backgroundColor: '#fff',
+    width: "100%",
+    backgroundColor: "#fff",
   },
   miniMockup: {
     flex: 1,
-    position: 'relative',
+    position: "relative",
   },
   proBadgeMini: {
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   miniOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(255,0,0,0.8)',
+    backgroundColor: "rgba(255,0,0,0.8)",
     borderRadius: 8,
     padding: 4,
   },
@@ -774,16 +976,16 @@ const styles = StyleSheet.create({
   miniInfo: {
     padding: 10,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: "rgba(0,0,0,0.05)",
   },
   miniName: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   miniDate: {
     fontSize: 10,
-    color: '#94a3b8',
-    fontWeight: '600',
+    color: "#94a3b8",
+    fontWeight: "600",
     marginTop: 2,
   },
 });

@@ -12,7 +12,7 @@ export const generateResumeHtml = (
   primaryColor: string = "#1e293b",
   fontFamily: string = "Inter",
   isPrint: boolean = false,
-  isThumbnail: boolean = false
+  isThumbnail: boolean = false,
 ): string => {
   const esc = (s: string) =>
     String(s || "")
@@ -24,7 +24,7 @@ export const generateResumeHtml = (
     .split(",")
     .map((s: string) => s.trim())
     .filter(Boolean);
-    
+
   const svgUser = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
   const svgBriefcase = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>`;
   const svgEdu = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2.12-1.15V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9z"/></svg>`;
@@ -62,19 +62,209 @@ export const generateResumeHtml = (
     )
     .join("");
 
-  const projectItems = (data.projects || []).map((proj: any) => `
+  const projectItems = (data.projects || [])
+    .map(
+      (proj: any) => `
     <div class="exp-item">
       <div class="exp-row">
         <div class="exp-role">${esc(proj.name)}</div>
       </div>
       <div class="exp-desc">${esc(proj.description)}</div>
     </div>
-  `).join("");
+  `,
+    )
+    .join("");
 
   // Template-specific Layout Logic
   let htmlContent = "";
 
-  if (templateId === "Elder-2" || templateId === "ats") {
+  if (templateId === "BlackWolf-1") {
+    const nameParts = (data.name || "").trim().split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+
+    htmlContent = `
+      <div class="page bw1-layout">
+        <div class="bw1-top">
+          <div class="bw1-top-left" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
+            <div class="bw1-top-label">RESUME</div>
+            <div class="bw1-name-first">${esc(firstName)}</div>
+            ${lastName ? `<div class="bw1-name-last">${esc(lastName)}</div>` : ''}
+            <div class="bw1-title">${esc(data.title)}</div>
+            <div class="bw1-divider" style="margin-top: 10pt;"></div>
+          </div>
+          <div class="bw1-top-right" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
+            <div class="bw1-divider" style="margin-top: 5pt; margin-bottom: 25pt;"></div>
+            <div class="bw1-contact-item">${esc(data.location)}</div>
+            <div class="bw1-contact-item" style="margin-top: 15pt;">E: ${esc(data.email)}</div>
+            ${data.links?.[0]?.url ? `<div class="bw1-contact-item">W: ${esc(data.links[0].url)}</div>` : ''}
+            <div class="bw1-contact-item">P: ${esc(data.phone)}</div>
+          </div>
+        </div>
+
+        <div class="bw1-body">
+          <div class="bw1-left">
+            <div class="bw1-section" onclick="window.ReactNativeWebView.postMessage('edit:section:education')">
+              <div class="bw1-section-title">EDUCATION</div>
+              <div class="bw1-edu-item">
+                <div class="bw1-edu-degree">ENTER JOB POSITION</div>
+                <div class="bw1-edu-school">Company Name | State Name</div>
+                <div class="bw1-edu-date">2003 - 2004</div>
+              </div>
+              <div class="bw1-edu-item">
+                <div class="bw1-edu-degree">${esc(data.education?.degree)}</div>
+                <div class="bw1-edu-school">${esc(data.education?.school)}</div>
+                <div class="bw1-edu-date">${esc(data.education?.year)}</div>
+              </div>
+            </div>
+            <div class="bw1-divider" style="margin-bottom: 25pt;"></div>
+
+            <div class="bw1-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
+              <div class="bw1-section-title">SKILLS</div>
+              <div class="bw1-skill-item" style="font-weight: 800; margin-bottom: 8pt;">// PROFESSIONAL</div>
+              <div class="bw1-skills-list">
+                ${(data.skills || '').split(',').slice(0, 5).map((s: string) => `<div class="bw1-skill-item">• ${esc(s.trim())}</div>`).join('')}
+              </div>
+            </div>
+            
+            ${data.languages ? `
+            <div class="bw1-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')" style="margin-top: 15pt;">
+              <div class="bw1-skill-item" style="font-weight: 800; margin-bottom: 8pt;">// TECHNICAL</div>
+              <div class="bw1-skills-list">
+                ${(data.languages || '').split(',').map((s: string) => `<div class="bw1-skill-item">• ${esc(s.trim())}</div>`).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="bw1-right">
+            <div class="bw1-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
+              <div class="bw1-section-title">ABOUT ME</div>
+              <div class="bw1-about-desc">${esc(data.summary)}</div>
+            </div>
+            <div class="bw1-divider" style="margin-bottom: 25pt;"></div>
+
+            <div class="bw1-section" onclick="window.ReactNativeWebView.postMessage('edit:section:experience')">
+              <div class="bw1-section-title">WORK EXPERIENCE</div>
+              ${(data.experience || []).map((exp: any) => `
+                <div class="bw1-exp-item">
+                  <div class="bw1-exp-header">${esc(exp.role)} <span style="font-weight:normal; color:#666">| ${esc(exp.period)}</span></div>
+                  <div class="bw1-exp-company">${esc(exp.company)}</div>
+                  <div class="bw1-exp-desc">${esc(exp.description)}</div>
+                </div>
+              `).join('')}
+            </div>
+            
+            ${data.projects && data.projects.length ? `
+            <div class="bw1-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')" style="margin-top: 10pt;">
+              ${data.projects.map((proj: any) => `
+                <div class="bw1-exp-item">
+                  <div class="bw1-exp-header">${esc(proj.name)}</div>
+                  <div class="bw1-exp-desc">${esc(proj.description)}</div>
+                </div>
+              `).join('')}
+            </div>
+            ` : ''}
+
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (templateId === "BlackWolf-2") {
+    htmlContent = `
+      <div class="page bw2-layout">
+        <div class="bw2-header" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
+          <div class="bw2-name">${esc(data.name)}</div>
+          <div class="bw2-contact-grid">
+            <div>Email: ${esc(data.email)}</div>
+            <div>Phone: ${esc(data.phone)}</div>
+            <div>Location: ${esc(data.location)}</div>
+            ${data.links?.[0]?.url ? `<div>Link: ${esc(data.links[0].url)}</div>` : '<div></div>'}
+          </div>
+        </div>
+
+        <div class="bw2-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
+          <div class="bw2-title">Profile</div>
+          <div class="bw2-content">
+            <div class="bw2-item-desc">${esc(data.summary)}</div>
+          </div>
+        </div>
+
+        <div class="bw2-section" onclick="window.ReactNativeWebView.postMessage('edit:section:experience')">
+          <div class="bw2-title">Experience</div>
+          <div class="bw2-content">
+            ${(data.experience || []).map((exp: any) => `
+              <div class="bw2-item">
+                <div class="bw2-item-title">${esc(exp.role)}</div>
+                <div class="bw2-item-meta">${esc(exp.company)} // ${esc(exp.period)}</div>
+                <div class="bw2-item-desc">${esc(exp.description)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="bw2-section" onclick="window.ReactNativeWebView.postMessage('edit:section:education')">
+          <div class="bw2-title">Education</div>
+          <div class="bw2-content">
+            <div class="bw2-item">
+              <div class="bw2-item-title">${esc(data.education?.degree)}</div>
+              <div class="bw2-item-meta">${esc(data.education?.school)} // ${esc(data.education?.year)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bw2-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
+          <div class="bw2-title">Skills</div>
+          <div class="bw2-content">
+            <div class="bw2-item-desc">${esc(data.skills)}<br/><br/>${esc(data.languages)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (templateId === "BlackWolf-3") {
+    htmlContent = `
+      <div class="page bw3-layout">
+        <div class="bw3-header" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
+          <div class="bw3-name">${esc(data.name)}</div>
+          <div class="bw3-title">${esc(data.title)}</div>
+          <div class="bw3-contact">
+            <span>${esc(data.email)}</span>
+            <span>${esc(data.phone)}</span>
+            <span>${esc(data.location)}</span>
+          </div>
+        </div>
+
+        <div class="bw3-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
+          <div class="bw3-section-title">Summary</div>
+          <div class="bw3-item-desc">${esc(data.summary)}</div>
+        </div>
+
+        <div class="bw3-section" onclick="window.ReactNativeWebView.postMessage('edit:section:experience')">
+          <div class="bw3-section-title">Experience</div>
+          ${(data.experience || []).map((exp: any) => `
+            <div class="bw3-item">
+              <div class="bw3-item-title">${esc(exp.role)} @ ${esc(exp.company)}</div>
+              <div class="bw3-item-date">${esc(exp.period)}</div>
+              <div class="bw3-item-desc">${esc(exp.description)}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="bw3-section" onclick="window.ReactNativeWebView.postMessage('edit:section:education')">
+          <div class="bw3-section-title">Education</div>
+          <div class="bw3-item">
+            <div class="bw3-item-title">${esc(data.education?.degree)}</div>
+            <div class="bw3-item-date">${esc(data.education?.school)} | ${esc(data.education?.year)}</div>
+          </div>
+        </div>
+        
+        <div class="bw3-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
+          <div class="bw3-section-title">Expertise</div>
+          <div class="bw3-item-desc">${esc(data.skills)}</div>
+        </div>
+      </div>
+    `;
+  } else if (templateId === "Elder-2" || templateId === "ats") {
     // ELDER-2: ATS MASTER (Full Width, High Density)
     htmlContent = `
       <div class="page ats-layout">
@@ -94,7 +284,7 @@ export const generateResumeHtml = (
 
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="m-heading">CORE COMPETENCIES</div>
-            <div class="skills-grid-ats">${skills.map(s => `<div class="skill-tag-ats">${esc(s)}</div>`).join("")}</div>
+            <div class="skills-grid-ats">${skills.map((s) => `<div class="skill-tag-ats">${esc(s)}</div>`).join("")}</div>
           </div>
 
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:experience')">
@@ -102,12 +292,16 @@ export const generateResumeHtml = (
             ${expItems}
           </div>
 
-          ${projectItems ? `
+          ${
+            projectItems
+              ? `
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
             <div class="m-heading">KEY PROJECTS</div>
             ${projectItems}
           </div>
-          ` : ""}
+          `
+              : ""
+          }
 
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:education')">
             <div class="m-heading">EDUCATION</div>
@@ -151,12 +345,16 @@ export const generateResumeHtml = (
             <div class="m-heading-li">EXPERIENCE</div>
             ${expItems}
           </div>
-          ${projectItems ? `
+          ${
+            projectItems
+              ? `
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
             <div class="m-heading-li">PROJECTS</div>
             ${projectItems}
           </div>
-          ` : ""}
+          `
+              : ""
+          }
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="m-heading-li">SKILLS</div>
             <div class="skills-li">${skills.join(" • ")}</div>
@@ -169,7 +367,7 @@ export const generateResumeHtml = (
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
-    
+
     htmlContent = `
       <div class="page e4-layout">
         <div class="e4-sidebar">
@@ -189,14 +387,14 @@ export const generateResumeHtml = (
           <div class="e4-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="e4-s-heading">SKILLS</div>
             <ul class="e4-s-list">
-              ${skills.map(s => `<li>${esc(s)}</li>`).join("")}
+              ${skills.map((s) => `<li>${esc(s)}</li>`).join("")}
             </ul>
           </div>
           
           <div class="e4-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
             <div class="e4-s-heading">LANGUAGES</div>
             <ul class="e4-s-list">
-              ${languages.map(l => `<li>${esc(l)}</li>`).join("")}
+              ${languages.map((l) => `<li>${esc(l)}</li>`).join("")}
             </ul>
           </div>
         </div>
@@ -216,14 +414,18 @@ export const generateResumeHtml = (
               </div>
             </div>
             
-            ${projectItems ? `
+            ${
+              projectItems
+                ? `
             <div class="e4-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
               <div class="e4-m-heading">PROJECTS</div>
               <div class="e4-timeline">
                 ${projectItems}
               </div>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
             <div class="e4-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:education')">
               <div class="e4-m-heading">EDUCATION</div>
@@ -275,12 +477,16 @@ export const generateResumeHtml = (
             <div class="m-heading">WORK EXPERIENCE</div>
             ${expItems}
           </div>
-          ${projectItems ? `
+          ${
+            projectItems
+              ? `
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
             <div class="m-heading">PROJECTS</div>
             ${projectItems}
           </div>
-          ` : ""}
+          `
+              : ""
+          }
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:education')">
             <div class="m-heading">EDUCATION</div>
             <div class="edu-item">
@@ -322,14 +528,14 @@ export const generateResumeHtml = (
           <div class="e6-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="e6-ribbon-heading">Skills</div>
             <ul class="e6-s-list">
-              ${skills.map(s => `<li>${esc(s)}</li>`).join("")}
+              ${skills.map((s) => `<li>${esc(s)}</li>`).join("")}
             </ul>
           </div>
           
           <div class="e6-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
             <div class="e6-ribbon-heading">Language</div>
             <ul class="e6-s-list">
-              ${languages.map(l => `<li>${esc(l)}</li>`).join("")}
+              ${languages.map((l) => `<li>${esc(l)}</li>`).join("")}
             </ul>
           </div>
         </div>
@@ -350,12 +556,16 @@ export const generateResumeHtml = (
             ${expItems}
           </div>
           
-          ${projectItems ? `
+          ${
+            projectItems
+              ? `
           <div class="e6-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
             <div class="e6-m-heading"><span>Projects</span></div>
             ${projectItems}
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -364,7 +574,7 @@ export const generateResumeHtml = (
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
-    
+
     htmlContent = `
       <div class="page e7-layout">
         <div class="e7-sidebar">
@@ -390,7 +600,7 @@ export const generateResumeHtml = (
             <div class="e7-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
               <div class="e7-s-heading e7-dark-text">EXPERTISE</div>
               <ul class="e7-skills-list">
-                ${skills.map(s => `<li>${esc(s)}</li>`).join("")}
+                ${skills.map((s) => `<li>${esc(s)}</li>`).join("")}
               </ul>
             </div>
             
@@ -430,17 +640,21 @@ export const generateResumeHtml = (
               </div>
             </div>
             
-            ${projectItems ? `
+            ${
+              projectItems
+                ? `
             <div class="e7-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
               <div class="e7-m-heading">PROJECTS</div>
               ${projectItems}
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
             <div class="e7-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
               <div class="e7-m-heading">LANGUAGES</div>
               <div class="e7-interests-list">
-                ${languages.map(l => `<div class="e7-interest-item">${esc(l)}</div>`).join("")}
+                ${languages.map((l) => `<div class="e7-interest-item">${esc(l)}</div>`).join("")}
               </div>
             </div>
           </div>
@@ -452,7 +666,7 @@ export const generateResumeHtml = (
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
-    
+
     htmlContent = `
       <div class="page e8-layout">
         <div class="e8-corner-accent"></div>
@@ -498,11 +712,13 @@ export const generateResumeHtml = (
                   <div class="e8-s-heading">LANGUAGES</div>
                </div>
                <div class="e8-s-content">
-                  ${languages.map(l => `<div class="e8-s-item" style="margin-bottom: 6pt;"><div class="e8-s-dot"></div> ${esc(l)}</div>`).join("")}
+                  ${languages.map((l) => `<div class="e8-s-item" style="margin-bottom: 6pt;"><div class="e8-s-dot"></div> ${esc(l)}</div>`).join("")}
                </div>
             </div>
             
-            ${tools && tools.length > 0 ? `
+            ${
+              tools && tools.length > 0
+                ? `
             <div class="e8-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
                <div class="e8-s-heading-row">
                   <div class="e8-s-icon-node">${svgTool}</div>
@@ -512,9 +728,13 @@ export const generateResumeHtml = (
                   ${tools.map((t: string) => `<div class="e8-s-item" style="margin-bottom: 6pt;"><div class="e8-s-dot"></div> ${esc(t)}</div>`).join("")}
                </div>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
-            ${data.certifications && data.certifications.length > 0 ? `
+            ${
+              data.certifications && data.certifications.length > 0
+                ? `
             <div class="e8-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
                <div class="e8-s-heading-row">
                   <div class="e8-s-icon-node">${svgAward}</div>
@@ -524,9 +744,13 @@ export const generateResumeHtml = (
                   ${data.certifications.map((c: any) => `<div class="e8-s-item" style="margin-bottom: 8pt; display: block;"><div class="e8-s-dot"></div> <div style="font-weight: 800; color: #fff; margin-bottom: 2pt;">${esc(c.title)}</div><div style="font-size: 8pt; color: #0ea5e9;">${esc(c.issuer)} - ${esc(c.year)}</div></div>`).join("")}
                </div>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
-            ${data.links && data.links.length > 0 ? `
+            ${
+              data.links && data.links.length > 0
+                ? `
             <div class="e8-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
                <div class="e8-s-heading-row">
                   <div class="e8-s-icon-node">${svgLink}</div>
@@ -536,7 +760,9 @@ export const generateResumeHtml = (
                   ${data.links.map((l: any) => `<div class="e8-s-item" style="margin-bottom: 6pt;"><div class="e8-s-dot"></div> <strong style="color: #fff; margin-right: 4pt;">${esc(l.label)}:</strong> ${esc(l.url)}</div>`).join("")}
                </div>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
         
@@ -569,7 +795,9 @@ export const generateResumeHtml = (
                </div>
             </div>
             
-            ${projectItems ? `
+            ${
+              projectItems
+                ? `
             <div class="e8-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
                <div class="e8-m-heading-row">
                   <div class="e8-m-icon-node">${svgBriefcase}</div>
@@ -579,7 +807,9 @@ export const generateResumeHtml = (
                   ${projectItems}
                </div>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
             <div class="e8-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
                <div class="e8-m-heading-row">
@@ -588,7 +818,7 @@ export const generateResumeHtml = (
                </div>
                <div class="e8-m-content">
                   <div class="e8-skills-grid">
-                     ${skills.map(s => `<div class="e8-skill-item">${esc(s)}</div>`).join("")}
+                     ${skills.map((s) => `<div class="e8-skill-item">${esc(s)}</div>`).join("")}
                   </div>
                </div>
             </div>
@@ -602,7 +832,7 @@ export const generateResumeHtml = (
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
-    
+
     htmlContent = `
       <div class="page t1-layout">
         <div class="t1-sidebar">
@@ -628,36 +858,60 @@ export const generateResumeHtml = (
               </div>
             </div>
             
-            ${data.certifications && data.certifications.length > 0 ? `
+            ${
+              data.certifications && data.certifications.length > 0
+                ? `
             <div class="t1-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
               <div class="t1-s-title">CERTIFICATES</div>
-              ${data.certifications.map((c: any) => `
+              ${data.certifications
+                .map(
+                  (c: any) => `
                 <div class="t1-s-item">
                   <strong class="t1-s-label">${esc(c.title)}</strong><br/>
                   ${esc(c.issuer)}<br/>
                   ${esc(c.year)}
                 </div>
-              `).join("")}
+              `,
+                )
+                .join("")}
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
-            ${tools && tools.length > 0 ? `
+            ${
+              tools && tools.length > 0
+                ? `
             <div class="t1-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
               <div class="t1-s-title">TOOLS</div>
-              ${tools.map((t: string) => `
+              ${tools
+                .map(
+                  (t: string) => `
                 <div class="t1-s-item" style="margin-bottom: 4pt;">• ${esc(t)}</div>
-              `).join("")}
+              `,
+                )
+                .join("")}
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
-            ${data.links && data.links.length > 0 ? `
+            ${
+              data.links && data.links.length > 0
+                ? `
             <div class="t1-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
               <div class="t1-s-title">LINKS</div>
-              ${data.links.map((l: any) => `
+              ${data.links
+                .map(
+                  (l: any) => `
                 <div class="t1-s-item"><strong class="t1-s-label">${esc(l.label)} :</strong><br/>${esc(l.url)}</div>
-              `).join("")}
+              `,
+                )
+                .join("")}
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
         
@@ -677,19 +931,18 @@ export const generateResumeHtml = (
               ${expItems}
             </div>
             
-            ${projectItems ? `
+            ${
+              projectItems
+                ? `
             <div class="t1-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
               <div class="t1-m-title">PROJECTS</div>
               ${projectItems}
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
-            <div class="t1-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
-              <div class="t1-m-title">SKILLS</div>
-              <div class="t1-skills-grid">
-                ${skills.map(s => `<div class="t1-skill-item">${esc(s)}</div>`).join("")}
-              </div>
-            </div>
+
           </div>
         </div>
         </div>
@@ -700,7 +953,7 @@ export const generateResumeHtml = (
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
-    
+
     htmlContent = `
       <div class="page t2-layout">
         <div class="t2-top">
@@ -738,33 +991,45 @@ export const generateResumeHtml = (
               </div>
             </div>
             
-            ${data.certifications && data.certifications.length > 0 ? `
+            ${
+              data.certifications && data.certifications.length > 0
+                ? `
             <div class="t2-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
               <div class="t2-s-title-row">
                 <div class="t2-s-icon">${svgAward}</div>
                 <div class="t2-s-heading">CERTIFICATES</div>
               </div>
-              ${data.certifications.map((c: any) => `
+              ${data.certifications
+                .map(
+                  (c: any) => `
                 <div class="t2-s-item">
                   <div class="t2-s-subtitle">${esc(c.issuer)}</div>
                   <div class="t2-s-date">${esc(c.year)}</div>
                   <div class="t2-s-item-title">${esc(c.title)}</div>
                 </div>
-              `).join("")}
+              `,
+                )
+                .join("")}
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
             <div class="t2-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
               <div class="t2-s-title-row">
                 <div class="t2-s-icon">${svgSkills}</div>
                 <div class="t2-s-heading">LANGUAGES</div>
               </div>
-              ${languages.map(l => `
+              ${languages
+                .map(
+                  (l) => `
                 <div class="t2-lang-row">
                   <div class="t2-lang-name">${esc(l)}</div>
                   <div class="t2-lang-bar"><div class="t2-lang-fill"></div></div>
                 </div>
-              `).join("")}
+              `,
+                )
+                .join("")}
             </div>
           </div>
           
@@ -777,7 +1042,9 @@ export const generateResumeHtml = (
               ${expItems}
             </div>
             
-            ${projectItems ? `
+            ${
+              projectItems
+                ? `
             <div class="t2-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
               <div class="t2-m-title-row">
                 <div class="t2-m-icon">${svgBriefcase}</div>
@@ -785,7 +1052,9 @@ export const generateResumeHtml = (
               </div>
               ${projectItems}
             </div>
-            ` : ""}
+            `
+                : ""
+            }
             
             <div class="t2-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
               <div class="t2-m-title-row">
@@ -793,12 +1062,16 @@ export const generateResumeHtml = (
                 <div class="t2-m-heading">SKILLS</div>
               </div>
               <div class="t2-skills-grid">
-                ${skills.map(s => `
+                ${skills
+                  .map(
+                    (s) => `
                   <div class="t2-skill-row">
                     <div class="t2-skill-name">${esc(s)}</div>
                     <div class="t2-skill-bar"><div class="t2-skill-fill"></div></div>
                   </div>
-                `).join("")}
+                `,
+                  )
+                  .join("")}
               </div>
             </div>
           </div>
@@ -812,7 +1085,7 @@ export const generateResumeHtml = (
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
-    
+
     htmlContent = `
       <div class="page t3-layout">
         <div class="t3-sidebar">
@@ -835,17 +1108,21 @@ export const generateResumeHtml = (
               <div class="t3-s-label">Email</div>
               <div class="t3-s-value">${esc(data.email)}</div>
             </div>
-            ${data.links && data.links.length > 0 ? `
+            ${
+              data.links && data.links.length > 0
+                ? `
             <div class="t3-s-item">
               <div class="t3-s-label">${esc(data.links[0].label)}</div>
               <div class="t3-s-value">${esc(data.links[0].url)}</div>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
           
           <div class="t3-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="t3-s-title">LANGUAGES</div>
-            ${languages.map(l => `<div class="t3-s-value" style="margin-bottom: 4pt;">• ${esc(l)}</div>`).join("")}
+            ${languages.map((l) => `<div class="t3-s-value" style="margin-bottom: 4pt;">• ${esc(l)}</div>`).join("")}
           </div>
         </div>
         
@@ -879,7 +1156,7 @@ export const generateResumeHtml = (
           <div class="t3-m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="t3-m-title">EXPERTISE</div>
             <div class="t3-skills-grid">
-              ${skills.map(s => `<div class="t3-skill-item"><div class="t3-skill-dot"></div>${esc(s)}</div>`).join("")}
+              ${skills.map((s) => `<div class="t3-skill-item"><div class="t3-skill-dot"></div>${esc(s)}</div>`).join("")}
             </div>
           </div>
         </div>
@@ -890,7 +1167,7 @@ export const generateResumeHtml = (
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ");
-    
+
     htmlContent = `
       <div class="page t4-layout">
         <div class="t4-sidebar">
@@ -908,39 +1185,55 @@ export const generateResumeHtml = (
               <div class="t4-heading-icon">${svgSkills}</div>
               <div class="t4-heading-text">SKILLS</div>
             </div>
-            ${skills.map(s => `
+            ${skills
+              .map(
+                (s) => `
               <div class="t4-s-skill-row">
                 <div class="t4-s-skill-name">${esc(s)}</div>
                 <div class="t4-s-skill-bar"><div class="t4-s-skill-fill"></div></div>
               </div>
-            `).join("")}
+            `,
+              )
+              .join("")}
           </div>
           
-          ${tools && tools.length > 0 ? `
+          ${
+            tools && tools.length > 0
+              ? `
           <div class="t4-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="t4-heading-wrapper">
               <div class="t4-heading-icon">${svgTool}</div>
               <div class="t4-heading-text">TOOLS</div>
             </div>
-            ${tools.map(t => `
+            ${tools
+              .map(
+                (t) => `
               <div class="t4-s-skill-row">
                 <div class="t4-s-skill-name">${esc(t)}</div>
                 <div class="t4-s-skill-bar"><div class="t4-s-skill-fill"></div></div>
               </div>
-            `).join("")}
+            `,
+              )
+              .join("")}
           </div>
-          ` : ""}
+          `
+              : ""
+          }
           
           <div class="t4-s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="t4-heading-wrapper">
               <div class="t4-heading-icon">${svgAward}</div>
               <div class="t4-heading-text">LANGUAGES</div>
             </div>
-            ${languages.map(l => `
+            ${languages
+              .map(
+                (l) => `
               <div class="t4-s-lang-row">
                 <div class="t4-s-lang-name">${esc(l)}</div>
               </div>
-            `).join("")}
+            `,
+              )
+              .join("")}
           </div>
         </div>
         
@@ -1012,27 +1305,39 @@ export const generateResumeHtml = (
               ${skills.map((s) => `<div class="s-list-item">• ${esc(s)}</div>`).join("")}
             </div>
           </div>
-          ${tools && tools.length > 0 ? `
+          ${
+            tools && tools.length > 0
+              ? `
           <div class="s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:skills')">
             <div class="s-heading">TOOLS</div>
             <div class="s-list">
               ${tools.map((t: string) => `<div class="s-list-item">• ${esc(t)}</div>`).join("")}
             </div>
           </div>
-          ` : ""}
-          ${data.certifications && data.certifications.length > 0 ? `
+          `
+              : ""
+          }
+          ${
+            data.certifications && data.certifications.length > 0
+              ? `
           <div class="s-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
             <div class="s-heading">CERTIFICATES</div>
             <div class="s-list">
-              ${data.certifications.map((c: any) => `
+              ${data.certifications
+                .map(
+                  (c: any) => `
                 <div class="s-list-item" style="margin-bottom: 8pt;">
                   <div style="font-weight: 700; color: #fff; margin-bottom: 2pt;">• ${esc(c.title)}</div>
                   <div style="font-size: 8.5pt; color: #94a3b8; padding-left: 10pt;">${esc(c.issuer)} - ${esc(c.year)}</div>
                 </div>
-              `).join("")}
+              `,
+                )
+                .join("")}
             </div>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
         <div class="main">
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:personal')">
@@ -1043,12 +1348,16 @@ export const generateResumeHtml = (
             <div class="m-heading">WORK EXPERIENCE</div>
             ${expItems}
           </div>
-          ${projectItems ? `
+          ${
+            projectItems
+              ? `
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:projects')">
             <div class="m-heading">PROJECTS</div>
             ${projectItems}
           </div>
-          ` : ""}
+          `
+              : ""
+          }
           <div class="m-section" onclick="window.ReactNativeWebView.postMessage('edit:section:education')">
             <div class="m-heading">EDUCATION</div>
             <div class="edu-item">
@@ -1650,6 +1959,69 @@ export const generateResumeHtml = (
     .t4-layout .exp-date { grid-area: date; font-size: 9pt; font-weight: 800; color: #dc2626; }
     .t4-layout .exp-role { grid-area: role; font-size: 11pt; font-weight: 800; color: #1f2937; text-transform: uppercase; margin-bottom: 6pt; }
     .t4-layout .exp-desc { grid-area: desc; font-size: 9.5pt; color: #4b5563; line-height: 1.6; text-align: justify; }
+
+    /* BlackWolf-1: Exact Image Replica */
+    .bw1-layout { padding: 40pt; font-family: 'Inter', sans-serif; background: #fff; color: #000; height: 100%; box-sizing: border-box; }
+    
+    .bw1-top { display: flex; justify-content: space-between; margin-bottom: 25pt; }
+    .bw1-top-left { width: 170pt; }
+    .bw1-top-right { width: 250pt; text-align: right; }
+    
+    .bw1-top-label { font-size: 8pt; font-weight: 800; letter-spacing: 2pt; margin-bottom: 15pt; text-transform: uppercase; color: #111; }
+    .bw1-name-first { font-size: 34pt; font-weight: 900; line-height: 1; text-transform: uppercase; color: #111; letter-spacing: 1pt; }
+    .bw1-name-last { font-size: 34pt; font-weight: 900; line-height: 1; text-transform: uppercase; color: #111; letter-spacing: 1pt; margin-bottom: 10pt; }
+    .bw1-title { font-size: 9pt; font-weight: 600; letter-spacing: 2pt; text-transform: uppercase; margin-bottom: 20pt; color: #333; }
+    
+    .bw1-contact-item { font-size: 8.5pt; margin-bottom: 4pt; color: #333; font-weight: 500; }
+    
+    .bw1-divider { border-bottom: 1pt solid #d4d4d4; }
+    
+    .bw1-body { display: flex; justify-content: space-between; }
+    .bw1-left { width: 170pt; }
+    .bw1-right { width: 310pt; } /* 595 - 80 padding = 515. 170 + 310 = 480. 35pt gap */
+    
+    .bw1-section { margin-bottom: 20pt; }
+    .bw1-section-title { font-size: 11pt; font-weight: 900; text-transform: uppercase; letter-spacing: 2pt; margin-bottom: 15pt; color: #111; }
+    
+    .bw1-edu-item { margin-bottom: 15pt; }
+    .bw1-edu-degree { font-size: 9pt; font-weight: 800; text-transform: uppercase; margin-bottom: 3pt; color: #111; }
+    .bw1-edu-school { font-size: 8.5pt; color: #444; margin-bottom: 2pt; }
+    .bw1-edu-date { font-size: 8pt; color: #666; }
+    
+    .bw1-skills-list { display: flex; flex-direction: column; gap: 6pt; }
+    .bw1-skill-item { font-size: 8.5pt; color: #333; font-weight: 500; }
+    
+    .bw1-about-desc { font-size: 8.5pt; line-height: 1.6; color: #333; text-align: justify; }
+    
+    .bw1-exp-item { margin-bottom: 18pt; }
+    .bw1-exp-header { font-size: 9pt; font-weight: 800; text-transform: uppercase; margin-bottom: 3pt; color: #111; }
+    .bw1-exp-company { font-size: 8.5pt; font-weight: 600; color: #444; margin-bottom: 6pt; text-transform: capitalize; }
+    .bw1-exp-desc { font-size: 8.5pt; line-height: 1.6; color: #333; text-align: justify; }
+
+    /* BlackWolf-2: Grid Structural */
+    .bw2-layout { padding: 40pt; font-family: 'Inter', sans-serif; background: #fff; color: #000; height: 100%; box-sizing: border-box; }
+    .bw2-header { margin-bottom: 30pt; }
+    .bw2-name { font-size: 32pt; font-weight: 800; line-height: 1; margin-bottom: 10pt; letter-spacing: -1pt; }
+    .bw2-contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4pt; font-size: 9pt; font-weight: 600; border-top: 1pt solid #000; border-bottom: 1pt solid #000; padding: 8pt 0; }
+    .bw2-section { display: grid; grid-template-columns: 120pt 1fr; gap: 20pt; margin-bottom: 25pt; }
+    .bw2-title { font-size: 10pt; font-weight: 900; text-transform: uppercase; letter-spacing: 1pt; text-align: right; border-right: 2pt solid #000; padding-right: 15pt; }
+    .bw2-item { margin-bottom: 15pt; }
+    .bw2-item-title { font-size: 11pt; font-weight: 700; margin-bottom: 2pt; }
+    .bw2-item-meta { font-size: 9pt; font-weight: 600; margin-bottom: 4pt; text-transform: uppercase; }
+    .bw2-item-desc { font-size: 9.5pt; line-height: 1.6; }
+
+    /* BlackWolf-3: Brutalist / Bold */
+    .bw3-layout { padding: 30pt; font-family: 'Inter', sans-serif; background: #fff; color: #000; height: 100%; box-sizing: border-box; border: 10pt solid #000; }
+    .bw3-header { background: #000; color: #fff; padding: 20pt; margin-bottom: 20pt; }
+    .bw3-name { font-size: 36pt; font-weight: 900; text-transform: uppercase; line-height: 1; margin-bottom: 10pt; }
+    .bw3-title { font-size: 14pt; font-weight: 700; letter-spacing: 2pt; text-transform: uppercase; }
+    .bw3-contact { margin-top: 10pt; font-size: 9pt; display: flex; gap: 15pt; flex-wrap: wrap; }
+    .bw3-section { margin-bottom: 20pt; padding: 0 10pt; }
+    .bw3-section-title { font-size: 16pt; font-weight: 900; text-transform: uppercase; background: #000; color: #fff; display: inline-block; padding: 4pt 10pt; margin-bottom: 15pt; }
+    .bw3-item { margin-bottom: 15pt; border-left: 4pt solid #000; padding-left: 10pt; }
+    .bw3-item-title { font-size: 12pt; font-weight: 800; text-transform: uppercase; }
+    .bw3-item-date { font-size: 10pt; font-weight: 700; margin-bottom: 4pt; }
+    .bw3-item-desc { font-size: 10pt; line-height: 1.5; font-weight: 500; }
   `;
 
   const printStyles = `
@@ -1675,7 +2047,7 @@ export const generateResumeHtml = (
   const previewStyles = `
     ${styles}
     html, body { 
-      background: #e2e8f0; 
+      background: ${isThumbnail ? 'transparent' : '#e2e8f0'}; 
       margin: 0;
       padding: 0;
       width: 100%;
@@ -1696,7 +2068,7 @@ export const generateResumeHtml = (
       transform-origin: center center; 
       width: 595pt; 
       height: 842pt;
-      box-shadow: 0 30px 60px rgba(0,0,0,0.25); 
+      box-shadow: ${isThumbnail ? 'none' : '0 30px 60px rgba(0,0,0,0.25)'}; 
       background: #fff;
       flex-shrink: 0;
     }
@@ -1721,12 +2093,12 @@ export const generateResumeHtml = (
       function doScale() {
         var winW = document.documentElement.clientWidth || window.innerWidth;
         var winH = document.documentElement.clientHeight || window.innerHeight;
-        var contentW = 595; 
-        var contentH = 842;
+        var contentW = 793.33; 
+        var contentH = 1122.66;
         
-        // Much larger margins to ensure space on all devices
-        var marginW = ${isThumbnail ? 0 : 120};
-        var marginH = ${isThumbnail ? 0 : 150};
+        // Reduced margins so the preview takes up much more screen space
+        var marginW = ${isThumbnail ? 0 : 20};
+        var marginH = ${isThumbnail ? 0 : 20};
         var scaleW = (winW - marginW) / contentW;
         var scaleH = (winH - marginH) / contentH;
         var scale = Math.min(scaleW, scaleH);

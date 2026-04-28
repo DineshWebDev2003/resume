@@ -39,9 +39,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getGlobalJobs, saveGlobalJobs, canUserFetchJobs } from "@/services/firestore";
 
 const { width } = Dimensions.get("window");
-const bannerId = __DEV__
-  ? TestIds.BANNER
-  : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
+const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 const JobAdContainer = ({ colors }: any) => (
   <Animated.View entering={FadeInUp}>

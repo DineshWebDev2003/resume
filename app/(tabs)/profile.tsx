@@ -62,8 +62,8 @@ import { UserStorage } from "@/services/storage";
 
 const { width } = Dimensions.get("window");
 
-const adUnitId = __DEV__ ? TestIds.REWARDED : API_CONFIG.ADMOB_IDS.REWARDED_AD_UNIT_ID;
-const bannerId = __DEV__ ? TestIds.BANNER : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
+const adUnitId = API_CONFIG.ADMOB_IDS.REWARDED_AD_UNIT_ID;
+const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 // Create rewarded instance safely
 let rewarded: any = null;

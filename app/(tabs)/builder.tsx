@@ -38,9 +38,7 @@ import {
     ProfessionalTemplate,
 } from "@/components/resume-templates";
 
-const bannerId = __DEV__
-  ? TestIds.BANNER
-  : API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
+const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 export default function BuilderLanding() {
   const router = useRouter();

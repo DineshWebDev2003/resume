@@ -16,9 +16,13 @@
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0F172A",
-        "foregroundImage": "./assets/images/react-logo.png"
+        "foregroundImage": "./assets/images/icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1,
+      "permissions": [
+        "com.android.vending.BILLING"
+      ]
     },
     "web": {
       "output": "static",
@@ -26,6 +30,7 @@
     },
     "plugins": [
       "expo-router",
+      "react-native-iap",
       "@react-native-google-signin/google-signin",
       [
         "react-native-google-mobile-ads",

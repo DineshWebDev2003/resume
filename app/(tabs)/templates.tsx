@@ -25,6 +25,8 @@ import {
   ModernTemplate,
   ProfessionalTemplate,
 } from "@/components/resume-templates";
+import { generateResumeHtml } from "@/components/resume-html-generator";
+import { WebView } from "react-native-webview";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -110,7 +112,8 @@ const ALL_TEMPLATES = [
 const TemplateMiniPreview = React.memo(({ id, colors, isDark, data }: { id: string, colors: any, isDark: boolean, data?: any }) => {
   const A4_WIDTH = 595;
   const A4_HEIGHT = 842;
-  const scale = 0.22; 
+  const targetWidth = (SCREEN_WIDTH - 56) / 2;
+  const scale = targetWidth / A4_WIDTH;
 
   const defaultData = {
     name: "Alex Johnson",
@@ -122,18 +125,44 @@ const TemplateMiniPreview = React.memo(({ id, colors, isDark, data }: { id: stri
       { role: "Design Lead", company: "Pixel Studio", period: "2019 - Present", description: "Spearheaded rebranding for international clients." },
     ],
     skills: "UI/UX, Figma, React, Adobe Suite",
-    education: { degree: "BFA Design", school: "Design Academy", year: "2015" }
+    education: { degree: "BFA Design", school: "Design Academy", year: "2015" },
+    photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=200&h=200&q=80"
   };
 
   const resumeData = data || defaultData;
 
+  const isHtmlTemplate = id.startsWith('Elder') || id.startsWith('Titan');
+
+  if (isHtmlTemplate) {
+    const WEBVIEW_WIDTH = 793.33;
+    const WEBVIEW_HEIGHT = 1122.66;
+    const webviewScale = targetWidth / WEBVIEW_WIDTH;
+    const htmlString = generateResumeHtml(resumeData, id, colors.primary || '#1e293b', 'Inter', true);
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <View style={{ width: WEBVIEW_WIDTH, height: WEBVIEW_HEIGHT, transform: [{ scale: webviewScale }], overflow: 'hidden' }}>
+          <WebView
+            source={{ html: htmlString }}
+            style={{ width: WEBVIEW_WIDTH, height: WEBVIEW_HEIGHT, backgroundColor: 'transparent' }}
+            scrollEnabled={false}
+            pointerEvents="none"
+            showsVerticalScrollIndicator={false}
+            showsHorizontalScrollIndicator={false}
+            scalesPageToFit={false}
+            bounces={false}
+          />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
       <View style={{ width: A4_WIDTH, height: A4_HEIGHT, transform: [{ scale }] }}>
-        {(id === 'executive' || id === 'Elder-3' || id === 'Titan-3') && <ExecutiveTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {(id === 'modern' || id === 'elder' || id === 'Elder-1' || id === 'Elder-5' || id === 'Elder-7' || id === 'Titan-1') && <ModernTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {(id === 'creative' || id === 'Elder-4' || id === 'Elder-8' || id === 'Titan-2') && <CreativeTemplate resumeData={resumeData} selectedFont="Roboto" />}
-        {(id === 'professional' || id === 'Elder-2' || id === 'Elder-6' || id === 'Titan-4') && <ProfessionalTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {id === 'executive' && <ExecutiveTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {(id === 'modern' || id === 'elder') && <ModernTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {id === 'creative' && <CreativeTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {id === 'professional' && <ProfessionalTemplate resumeData={resumeData} selectedFont="Roboto" />}
       </View>
     </View>
   );
@@ -723,7 +752,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   miniHeader: {
-    aspectRatio: 1 / 1.3,
+    aspectRatio: 1 / 1.414,
     width: '100%',
     backgroundColor: '#fff',
   },

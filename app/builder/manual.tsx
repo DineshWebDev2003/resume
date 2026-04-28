@@ -14,7 +14,7 @@ import { Theme, Colors } from "@/constants/theme";
 import * as Print from "expo-print";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from "react-native";
 import { ArrowLeft, Edit2, Eye, Plus, Sparkles, Trash2, Save, FolderOpen, History, ChevronDown, X } from "lucide-react-native";
@@ -84,38 +84,61 @@ interface ResumeData {
 // ─── default data ────────────────────────────────────────────────────────────
 const INITIAL_DATA: ResumeData = {
   name: "DINESH KUMAR",
-  title: "Full-Stack Developer",
+  title: "Senior Full-Stack Developer",
   email: "dinesh@example.com",
   phone: "+91 9876543210",
   location: "Tamil Nadu, India",
   summary:
-    "Experienced developer specialising in React Native and Node.js. Passionate about building high-quality, pixel-perfect user interfaces and scalable back-end services.",
+    "Dynamic and results-driven Senior Full-Stack Developer with over 5 years of experience in architecting and deploying high-performance mobile and web applications. Expert in React Native, Node.js, and Cloud Infrastructure. Proven track record of leading cross-functional teams to deliver scalable solutions that enhance user engagement by 40%. Committed to writing clean, maintainable code and staying ahead of emerging technology trends to drive business growth.",
   experience: [
     {
       id: "1",
-      company: "Tech Solutions",
-      role: "Lead Developer",
+      company: "Innovate Tech Hub",
+      role: "Lead Full-Stack Developer",
       period: "2022 – Present",
       description:
-        "Leading a team of 5 developers building enterprise-scale mobile applications.",
+        "Architected and launched a flagship fintech mobile application using React Native, reaching 100k+ active users within the first quarter. Engineered a robust Node.js microservices backend that improved API response times by 60% and integrated complex payment gateways with 99.9% reliability.",
     },
+    {
+      id: "2",
+      company: "Digital Stream Systems",
+      role: "Software Engineer",
+      period: "2019 – 2022",
+      description:
+        "Developed and maintained highly responsive web interfaces for high-traffic e-commerce platforms. Collaborated with UI/UX designers to implement pixel-perfect designs and optimized front-end performance, resulting in a 25% reduction in page load speeds across all major browsers.",
+    }
   ],
   education: {
     school: "Anna University",
     degree: "B.Tech Information Technology",
-    year: "2018 – 2022",
+    year: "2015 – 2019",
     honors: "First Class with Distinction",
   },
   projects: [
     {
       id: "1",
-      name: "Elite Resume Builder",
+      name: "Elite AI Resume Builder",
       link: "https://github.com/dinesh/resume-builder",
-      description: "A premium AI-powered resume builder built with React Native and Expo.",
+      description: "A state-of-the-art resume platform featuring real-time AI optimization, Canva-style previews, and professional PDF generation using Expo and Groq AI for instant content suggestions.",
     },
+    {
+      id: "2",
+      name: "CryptoPulse Tracker",
+      link: "https://github.com/dinesh/cryptopulse",
+      description: "A comprehensive real-time cryptocurrency monitoring dashboard providing live price updates, advanced trend analysis charts, and automated price alerts using WebSockets and React Native.",
+    }
   ],
-  skills: "React Native, React, Node.js, TypeScript, Firebase, AWS",
+  skills: "React Native, React, Node.js, TypeScript, Firebase, AWS, Docker, Kubernetes",
+  tools: "VS Code, Git, Figma, Postman, Jira",
   languages: "English, Tamil",
+  links: [
+    { label: "GitHub", url: "github.com/dinesh" },
+    { label: "Portfolio", url: "dinesh.dev" }
+  ],
+  certifications: [
+    { title: "AWS Certified Developer", issuer: "Amazon", year: "2023" },
+    { title: "Meta Front-End Developer", issuer: "Coursera", year: "2022" }
+  ],
 };
 
 export default function ManualBuilderScreen() {
@@ -213,7 +236,8 @@ export default function ManualBuilderScreen() {
     }
   }, []);
 
-  const { importData } = useLocalSearchParams<{ importData?: string }>();
+  const { importData, templateId: initialTemplateId } = useLocalSearchParams<{ importData?: string, templateId?: string }>();
+  const [selectedTemplate, setSelectedTemplate] = React.useState(initialTemplateId || "Elder-1");
 
   React.useEffect(() => {
     if (importData) {
@@ -342,7 +366,7 @@ export default function ManualBuilderScreen() {
     if (isGenerating) return;
     try {
       setIsGenerating(true);
-      const html = generateResumeHtml(data, "Elite", primaryColor, "Inter", true);
+      const html = generateResumeHtml(data, selectedTemplate, primaryColor, "Inter", true);
 
       const { uri } = await Print.printToFileAsync({
         html,
@@ -360,12 +384,21 @@ export default function ManualBuilderScreen() {
       });
 
       if (Platform.OS === 'android') {
-        const contentUri = await FileSystem.getContentUriAsync(newPath);
-        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-          data: contentUri,
-          flags: 1,
-          type: 'application/pdf',
-        });
+        try {
+          const contentUri = await FileSystem.getContentUriAsync(newPath);
+          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            data: contentUri,
+            flags: 1,
+            type: 'application/pdf',
+          });
+        } catch (launcherErr) {
+          console.log("IntentLauncher failed, falling back to sharing", launcherErr);
+          await Sharing.shareAsync(newPath, {
+            mimeType: 'application/pdf',
+            UTI: 'com.adobe.pdf',
+            dialogTitle: 'Download Resume',
+          });
+        }
       } else {
         await Sharing.shareAsync(newPath, {
           mimeType: 'application/pdf',
@@ -416,8 +449,8 @@ export default function ManualBuilderScreen() {
   };
 
   const previewHtml = React.useMemo(
-    () => generateResumeHtml(data, "Elite", primaryColor, "Inter", false),
-    [data, primaryColor],
+    () => generateResumeHtml(data, selectedTemplate, primaryColor, "Inter", false),
+    [data, primaryColor, selectedTemplate],
   );
 
   return (
@@ -553,6 +586,7 @@ export default function ManualBuilderScreen() {
                 colors={colors}
                 onEnhance={() => handleEnhance(data.summary, 'summary', 'professional summary', (v) => set("summary", v))}
                 isEnhancing={enhancingField === 'summary'}
+                maxLength={450}
               />
             </View>
           </View>
@@ -585,6 +619,7 @@ export default function ManualBuilderScreen() {
                   colors={colors} 
                   onEnhance={() => handleEnhance(exp.description, `exp-${exp.id}`, 'job description', (v) => setExp(exp.id, "description", v))}
                   isEnhancing={enhancingField === `exp-${exp.id}`}
+                  maxLength={450}
                 />
               </View>
             ))}
@@ -617,6 +652,7 @@ export default function ManualBuilderScreen() {
                   colors={colors} 
                   onEnhance={() => handleEnhance(proj.description, `proj-${proj.id}`, 'project description', (v) => setProj(proj.id, "description", v))}
                   isEnhancing={enhancingField === `proj-${proj.id}`}
+                  maxLength={250}
                 />
               </View>
             ))}
@@ -926,4 +962,12 @@ const styles = StyleSheet.create({
   modalInput: { borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 15, marginBottom: 20 },
   confirmSaveBtn: { backgroundColor: Theme.colors.primary, paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
   confirmSaveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  counter: { 
+    fontSize: 10, 
+    textAlign: 'right', 
+    color: '#94a3b8', 
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 8,
+  },
 });

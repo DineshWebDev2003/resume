@@ -30,13 +30,17 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
   const systemKeys = [API_CONFIG.GROQ_API_KEY];
   const userKeys = userKeyStr ? userKeyStr.split(',').map(k => k.trim()).filter(Boolean) : [];
   
-  // Try user keys first, then fallback to system keys
-  const keysToTry = [...userKeys, ...systemKeys];
+  // Combine keys and shuffle to balance load/credits
+  let keysToTry = [...userKeys, ...systemKeys]
+    .filter(k => k && k !== "YOUR_GROQ_API_KEY")
+    .sort(() => Math.random() - 0.5);
   
+  if (keysToTry.length === 0) {
+    throw new Error('No Groq API keys found. Please add one in Profile -> API Config.');
+  }
+
   let lastError = null;
   for (const apiKey of keysToTry) {
-    if (!apiKey || apiKey === "YOUR_GROQ_API_KEY") continue;
-    
     try {
       const response = await fetch(API_CONFIG.ATS_ENGINE_ENDPOINT, {
         method: 'POST',
@@ -59,14 +63,27 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
       
       const errorData = await response.text();
       console.log(`Groq Key Failed (${apiKey.substring(0, 8)}...): ${response.status} - ${errorData}`);
-      lastError = new Error(`Groq Error: ${response.status}`);
+      
+      if (response.status === 429) {
+        lastError = new Error("Groq Rate Limit exceeded. Trying next key...");
+        continue;
+      }
+      
+      lastError = new Error(`Groq Error ${response.status}: ${errorData.substring(0, 50)}`);
     } catch (e) {
       console.log(`Groq Connection Failed for key ${apiKey.substring(0, 8)}...`, e);
       lastError = e;
     }
   }
   
-  throw lastError || new Error('All Groq keys failed');
+  // If we reach here, all Groq keys failed.
+  // Final fallback to Gemini as a safety net (unless user strictly forbade it)
+  console.log("All Groq keys failed. Attempting emergency fallback to Gemini...");
+  try {
+    return await callGemini(messages, jsonMode);
+  } catch (geminiErr) {
+    throw lastError || new Error('All AI Providers (Groq & Gemini) are currently unavailable.');
+  }
 }
 
 async function callGemini(messages: ChatMessage[], jsonMode: boolean) {

@@ -459,7 +459,7 @@ export default function ATSScanner() {
       const messages = [
         { 
           role: 'system' as const, 
-          content: 'You are an elite resume optimizer. Rewrite the resume to perfectly match the job description while keeping the truth. Focus on keywords and impact.' 
+          content: 'You are an elite resume optimizer. Rewrite the resume to perfectly match the job description. STICK TO CHARACTER LIMITS: Title < 50 chars, Summary: 450-500 chars, Experience Description: 400-600 chars per item, Projects: 200-300 chars. Ensure content is dense and impactful to fill a single A4 page without empty space.' 
         },
         { 
           role: 'user' as const, 
@@ -474,14 +474,14 @@ export default function ATSScanner() {
 
             Return ONLY a valid JSON object in this format (do not add any other text):
             {
-              "title": "Optimized Job Title",
-              "summary": "Professional summary focused on job keywords",
+              "title": "Optimized Job Title (max 50 chars)",
+              "summary": "Impactful summary (strictly 450-500 chars to fill space)",
               "experience": [
-                {"company": "...", "role": "...", "period": "...", "description": "Optimized description with keywords"}
+                {"company": "...", "role": "...", "period": "...", "description": "Keyword-rich description (strictly 400-600 chars to fill space)"}
               ],
               "skills": "Skill1, Skill2, Skill3...",
               "projects": [
-                 {"name": "...", "description": "..."}
+                 {"name": "...", "description": "Impactful project desc (200-300 chars)"}
               ]
             }
           ` 

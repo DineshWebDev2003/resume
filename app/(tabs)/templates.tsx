@@ -48,6 +48,7 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import dayjs from 'dayjs';
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -106,12 +107,12 @@ const ALL_TEMPLATES = [
   { key: 't10', id: 'professional', name: 'Developer', isPro: false },
 ];
 
-const TemplateMiniPreview = React.memo(({ id, colors, isDark }: { id: string, colors: any, isDark: boolean }) => {
+const TemplateMiniPreview = React.memo(({ id, colors, isDark, data }: { id: string, colors: any, isDark: boolean, data?: any }) => {
   const A4_WIDTH = 595;
   const A4_HEIGHT = 842;
-  const scale = 0.26; 
+  const scale = 0.22; 
 
-  const mockData = {
+  const defaultData = {
     name: "Alex Johnson",
     title: "Senior Product Designer",
     email: "alex.j@example.com",
@@ -124,13 +125,15 @@ const TemplateMiniPreview = React.memo(({ id, colors, isDark }: { id: string, co
     education: { degree: "BFA Design", school: "Design Academy", year: "2015" }
   };
 
+  const resumeData = data || defaultData;
+
   return (
     <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
       <View style={{ width: A4_WIDTH, height: A4_HEIGHT, transform: [{ scale }] }}>
-        {id === 'executive' && <ExecutiveTemplate resumeData={mockData} selectedFont="Roboto" />}
-        {id === 'modern' && <ModernTemplate resumeData={mockData} selectedFont="Roboto" />}
-        {id === 'creative' && <CreativeTemplate resumeData={mockData} selectedFont="Roboto" />}
-        {id === 'professional' && <ProfessionalTemplate resumeData={mockData} selectedFont="Roboto" />}
+        {id === 'executive' && <ExecutiveTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {(id === 'modern' || id === 'elder') && <ModernTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {id === 'creative' && <CreativeTemplate resumeData={resumeData} selectedFont="Roboto" />}
+        {id === 'professional' && <ProfessionalTemplate resumeData={resumeData} selectedFont="Roboto" />}
       </View>
     </View>
   );
@@ -326,150 +329,123 @@ export default function TemplatesScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-
-
-        {/* Categories Section - Auto Carousel */}
-        <View
-          style={[
-            styles.sectionHeader,
-            {
-              marginTop: 30,
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-            },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Explore Fields
+        <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 5 }]}>Premium Elder Series</Text>
+          <Text style={{ color: colors.textMuted, marginBottom: 25, fontSize: 13 }}>
+            High-performance templates engineered for ATS and LinkedIn success.
           </Text>
-          <View style={styles.paginationDots}>
-            {CATEGORIES.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor:
-                      currentIndex === i
-                        ? Theme.colors.primary
-                        : colors.glassBorder,
-                    width: currentIndex === i ? 20 : 8,
-                  },
-                ]}
-              />
+
+          <View style={styles.miniGrid}>
+            {[
+              { id: 'Elder-1', name: 'Elder 1: Elite', desc: 'Sleek Sidebar', badge: 'POPULAR', color: Theme.colors.secondary },
+              { id: 'Elder-2', name: 'Elder 2: ATS', desc: 'ATS Master', badge: 'ATS SAFE', color: '#10b981' },
+              { id: 'Elder-3', name: 'Elder 3: LI', desc: 'LinkedIn Style', badge: 'EXECUTIVE', color: '#0077b5' },
+              { id: 'Elder-4', name: 'Elder 4: Timeline', desc: 'Timeline & Sidebar', badge: 'CREATIVE', color: '#22a3d6' },
+              { id: 'Elder-5', name: 'Elder 5: Right', desc: 'Right Sidebar', badge: 'PORTFOLIO', color: '#d946ef' },
+              { id: 'Elder-6', name: 'Elder 6: Ribbon', desc: 'Ribbon Dark Sidebar', badge: 'MODERN', color: '#0ea5e9' },
+              { id: 'Elder-7', name: 'Elder 7: Gold', desc: 'Two-Tone Sidebar', badge: 'PREMIUM', color: '#facc15' },
+              { id: 'Elder-8', name: 'Elder 8: Skyline', desc: 'Blue Timelines', badge: 'PREMIUM', color: '#0ea5e9' },
+              { id: 'Titan-1', name: 'Titan 1: PRO', desc: 'Curved Dark Sidebar', badge: 'NEW', color: '#1e293b' },
+              { id: 'Titan-2', name: 'Titan 2: Dome', desc: 'Purple Pill Theme', badge: 'NEW', color: '#9b7eb5' },
+              { id: 'Titan-3', name: 'Titan 3: Split', desc: 'Orange Accent', badge: 'NEW', color: '#ea580c' },
+              { id: 'Titan-4', name: 'Titan 4: Ruby', desc: 'Dark Red Theme', badge: 'NEW', color: '#dc2626' },
+            ].map((t, idx) => (
+              <Animated.View 
+                key={t.id}
+                entering={FadeInDown.delay(100 * idx)}
+                style={[styles.miniBox, { backgroundColor: colors.surface, borderColor: colors.glassBorder, height: 'auto' }]}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/builder/manual",
+                      params: { templateId: t.id },
+                    } as any)
+                  }
+                >
+                  <View style={styles.miniHeader}>
+                    <View style={styles.miniMockup}>
+                      <TemplateMiniPreview id={t.id} colors={colors} isDark={isDark} />
+                      <View style={[styles.proBadgeMini, { backgroundColor: t.color, position: 'absolute', top: 8, right: 8, width: 'auto', paddingHorizontal: 6, height: 16 }]}>
+                        <Text style={{ fontSize: 8, fontWeight: '900', color: '#fff' }}>{t.badge}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.miniInfo}>
+                    <Text style={[styles.miniName, { color: colors.text }]} numberOfLines={1}>
+                      {t.name}
+                    </Text>
+                    <Text style={styles.miniDate}>
+                      {t.desc}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
             ))}
           </View>
         </View>
 
-        <Animated.FlatList
-          ref={flatListRef}
-          data={loopedData}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToAlignment="center"
-          snapToInterval={CARD_WIDTH + SPACING}
-          decelerationRate="fast"
-          contentContainerStyle={{ paddingHorizontal: SIDE_PEEK }}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          onMomentumScrollEnd={(e) => {
-            const index = Math.round(
-              e.nativeEvent.contentOffset.x / (CARD_WIDTH + SPACING),
-            );
-
-            // Loop adjustment: if user scrolls too far left or right, jump to middle set
-            if (index < totalItems) {
-              flatListRef.current?.scrollToIndex({
-                index: index + totalItems,
-                animated: false,
-              });
-              setCurrentIndex((index + totalItems) % totalItems);
-            } else if (index >= totalItems * 2) {
-              flatListRef.current?.scrollToIndex({
-                index: index - totalItems,
-                animated: false,
-              });
-              setCurrentIndex((index - totalItems) % totalItems);
-            } else {
-              setCurrentIndex(index % totalItems);
-            }
-          }}
-          keyExtractor={(_, index) => `cat-loop-${index}`}
-          getItemLayout={(_, index) => ({
-            length: CARD_WIDTH + SPACING,
-            offset: (CARD_WIDTH + SPACING) * index,
-            index,
-          })}
-          renderItem={({ item, index }) => {
-            return (
-              <CategoryCard
-                item={item}
-                index={index}
-                scrollX={scrollX}
-                selectedCategory={selectedCategory}
-                setSelectedCategory={setSelectedCategory}
-                colors={colors}
-                router={router}
-              />
-            );
-          }}
-        />
-
-        {/* Explore Templates Section - 2 Column Grid */}
-        <View
-          style={[
-            styles.sectionHeader,
-            {
-              marginTop: 40,
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-            },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Explore Templates
-          </Text>
+        <View style={{ paddingHorizontal: 20, marginTop: 40 }}>
+          <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 18 }]}>Why this template?</Text>
+          <View style={styles.benefitRow}>
+            <ShieldCheck size={20} color={Theme.colors.success} />
+            <Text style={[styles.benefitText, { color: colors.text }]}>Guaranteed single-page A4 layout</Text>
+          </View>
+          <View style={styles.benefitRow}>
+            <ShieldCheck size={20} color={Theme.colors.success} />
+            <Text style={[styles.benefitText, { color: colors.text }]}>ATS-optimized content structure</Text>
+          </View>
         </View>
 
-        <View style={styles.recentsGrid}>
-          {ALL_TEMPLATES.map((template, i) => (
-            <Animated.View
-              key={template.key}
-              entering={FadeInDown.delay(100 + i * 50)}
-              style={styles.recentCardWrapper}
-            >
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() =>
-                  router.push({
-                    pathname: "/builder/manual",
-                    params: { templateId: template.id },
-                  } as any)
-                }
-                style={[
-                  styles.templateRawCard,
-                  { borderColor: colors.glassBorder },
-                ]}
-              >
-                <View style={[styles.recentImageContainer, { marginBottom: 0 }]}>
-                  <TemplateMiniPreview id={template.id} colors={colors} isDark={isDark} />
-                  {template.isPro && (
-                    <View style={styles.proBadgeMini}>
-                      <Crown size={10} color="#fff" />
+        {/* My Resumes - Mini Boxes */}
+        {resumes.length > 0 && (
+          <View style={{ paddingHorizontal: 20, marginTop: 40 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 18 }]}>My Resumes</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>{resumes.length}/3 Versions</Text>
+            </View>
+            <View style={styles.miniGrid}>
+              {resumes.map((resume, idx) => (
+                <Animated.View 
+                  key={resume.id}
+                  entering={FadeInDown.delay(100 * idx)}
+                  style={[styles.miniBox, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+                >
+                  <TouchableOpacity 
+                    style={{ flex: 1 }}
+                    onPress={() => router.push({
+                      pathname: "/builder/manual",
+                      params: { resumeId: resume.id }
+                    } as any)}
+                  >
+                    <View style={styles.miniHeader}>
+                      <View style={styles.miniMockup}>
+                        <TemplateMiniPreview id="modern" colors={colors} isDark={isDark} data={resume.data} />
+                        <View style={styles.miniOverlay}>
+                           <TouchableOpacity 
+                            onPress={() => handleDelete(resume.id)}
+                            style={styles.miniDelete}
+                          >
+                            <Trash2 size={14} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     </View>
-                  )}
-                </View>
-                <View style={styles.templateLabelOverlay}>
-                  <Text style={[styles.templateLabelText, { color: '#fff' }]} numberOfLines={1}>
-                    {template.name}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-          ))}
-        </View>
+                    <View style={styles.miniInfo}>
+                      <Text style={[styles.miniName, { color: colors.text }]} numberOfLines={1}>
+                        {resume.name}
+                      </Text>
+                      <Text style={styles.miniDate}>
+                        {dayjs(resume.updatedAt).format('MMM D, YYYY')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              ))}
+            </View>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -654,19 +630,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textTransform: 'uppercase',
   },
-  paginationDots: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  bigCatCard: {
-    width: "100%",
-    height: 180,
+  elderCard: {
     borderRadius: 24,
-    borderWidth: 1.5,
+    borderWidth: 1,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
@@ -674,54 +640,126 @@ const styles = StyleSheet.create({
     shadowRadius: 15,
     elevation: 8,
   },
-  bigCatImageContainer: {
-    width: "100%",
-    height: "100%",
-    position: "relative",
+  elderPreviewContainer: {
+    aspectRatio: 1 / 1.3,
+    width: '100%',
+    position: 'relative',
+    backgroundColor: '#fff',
   },
-  bigCatImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+  elderBadge: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: Theme.colors.secondary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 10,
   },
-  bigCatOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: "100%",
+  elderBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
-  bigCatInfo: {
-    position: "absolute",
-    bottom: 20,
+  elderFooter: {
+    position: 'absolute',
+    bottom: 25,
     left: 20,
     right: 20,
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: 10,
+    zIndex: 10,
   },
-  catIconCircleBig: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  elderName: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 4,
   },
-  bigCatName: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-  bigCatSub: {
-    color: "rgba(255,255,255,0.8)",
+  elderDesc: {
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
+    marginBottom: 20,
+  },
+  startBtn: {
+    backgroundColor: Theme.colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  startBtnText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 15,
+  },
+  benefitText: {
+    fontSize: 15,
+    fontWeight: '600',
+    opacity: 0.8,
+  },
+  miniGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -8,
+  },
+  miniBox: {
+    width: (SCREEN_WIDTH - 56) / 2,
+    margin: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  miniHeader: {
+    aspectRatio: 1 / 1.3,
+    width: '100%',
+    backgroundColor: '#fff',
+  },
+  miniMockup: {
+    flex: 1,
+    position: 'relative',
+  },
+  proBadgeMini: {
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,0,0,0.8)',
+    borderRadius: 8,
+    padding: 4,
+  },
+  miniDelete: {
+    padding: 2,
+  },
+  miniInfo: {
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  miniName: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  miniDate: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '600',
     marginTop: 2,
   },
 });

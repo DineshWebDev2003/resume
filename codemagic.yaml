@@ -6,7 +6,7 @@ workflows:
     environment:
       node: latest
       vars:
-        PACKAGE_NAME: "com.resume"
+        PACKAGE_NAME: "com.resumeelite.app"
     scripts:
       - name: Install dependencies
         script: npm install
@@ -42,7 +42,7 @@ workflows:
       groups:
         - google_play # Defined in Codemagic UI for signing
       vars:
-        PACKAGE_NAME: "com.resume"
+        PACKAGE_NAME: "com.resumeelite.app"
     scripts:
       - name: Install dependencies
         script: npm install

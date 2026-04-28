@@ -9,10 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.resume"
+      "bundleIdentifier": "com.resumeelite.app"
     },
     "android": {
-      "package": "com.resume",
+      "package": "com.resumeelite.app",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0F172A",

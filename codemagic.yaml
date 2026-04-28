@@ -52,6 +52,9 @@ workflows:
           for file in assets/images/*.png; do
             sips -s format png "$file" --out "$file" || true
           done
+      - name: Inject API Keys
+        script: |
+          sed -i '' "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts
       - name: Expo Prebuild
         script: CI=1 npx expo prebuild --clean
       - name: Get Release SHA-1 Fingerprint & Prepare Keystore

@@ -19,7 +19,7 @@
         "foregroundImage": "./assets/images/icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "com.android.vending.BILLING",
         "com.google.android.gms.permission.AD_ID"

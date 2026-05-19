@@ -79,9 +79,7 @@ try {
   console.log('AdMob Rewarded not available');
 }
 
-// Safe IAP / Billing Configuration
-// Change this to false to unmute and connect to the real Google Play Store / App Store payments!
-export const IS_REAL_IAP_MUTED = false;
+
 
 // Retrieve device timezone country and localized pricing
 export const getCountryBasedPricing = () => {
@@ -196,12 +194,8 @@ export default function ProfileScreen() {
   const [iapConnected, setIapConnected] = useState(false);
   const [iapProducts, setIapProducts] = useState<any[]>([]);
   const [loadingIap, setLoadingIap] = useState(false);
-  const [subBillingPeriod, setSubBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [subBillingPeriod, setSubBillingPeriod] = useState<"monthly" | "weekly">("monthly");
   const [simulatedPaying, setSimulatedPaying] = useState(false);
-  const [showTestCheckout, setShowTestCheckout] = useState(false);
-  const [testCardNumber, setTestCardNumber] = useState("4242 4242 4242 4242");
-  const [testExpiry, setTestExpiry] = useState("12/29");
-  const [testCvc, setTestCvc] = useState("123");
 
   useEffect(() => {
     if (activeModal === "My Referrals") {
@@ -899,7 +893,7 @@ export default function ProfileScreen() {
                           disabled={simulatedPaying}
                           onPress={async () => {
                             const IAP = require('react-native-iap');
-                            if (!IS_REAL_IAP_MUTED && iapConnected && IAP && typeof IAP.requestSubscription === 'function') {
+                            if (iapConnected && IAP && typeof IAP.requestSubscription === 'function') {
                               try {
                                 setSimulatedPaying(true);
                                 const subProduct = iapProducts.find((p: any) => p.productId === 'pro_plan');
@@ -930,14 +924,13 @@ export default function ProfileScreen() {
                                   });
                                 }
                               } catch (e: any) {
-                                console.log("[IAP] Purchase error, opening simulated sheet", e);
-                                setShowTestCheckout(true);
+                                console.log("[IAP] Purchase error:", e);
+                                Alert.alert("Purchase Failed", e.message || "Failed to complete purchase. Please try again.");
                               } finally {
                                 setSimulatedPaying(false);
                               }
                             } else {
-                              // Simulated checkout with Test Card
-                              setShowTestCheckout(true);
+                              Alert.alert("Connection Error", "Billing services are currently unavailable. Please verify you have a stable network connection.");
                             }
                           }}
                         >
@@ -1131,128 +1124,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Dynamic Test Payment Card / Sandbox Modal */}
-      <Modal visible={showTestCheckout} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 20) }]}>
-            
-            <View style={[styles.modalHeader, { paddingHorizontal: 25, marginTop: 15 }]}>
-              <View>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Secure Sandbox Payment</Text>
-                <Text style={[styles.modalDesc, { color: colors.textMuted }]}>Google Play Developer Testing Card</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowTestCheckout(false)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
-                <X size={20} color={colors.text} />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView contentContainerStyle={{ paddingHorizontal: 25, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-              
-              {/* Sleek Credit Card UI Component */}
-              <LinearGradient 
-                colors={['#1e1b4b', '#3b0764']} 
-                start={{ x: 0, y: 0 }} 
-                end={{ x: 1, y: 1 }} 
-                style={styles.cardWidget}
-              >
-                <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardBrand}>ELITE PAY</Text>
-                  <Crown size={22} color="#f59e0b" />
-                </View>
-                
-                <Text style={styles.cardDisplayNum}>{testCardNumber || "•••• •••• •••• ••••"}</Text>
-                
-                <View style={styles.cardFooterRow}>
-                  <View>
-                    <Text style={styles.cardFooterLabel}>CARDHOLDER</Text>
-                    <Text style={styles.cardFooterVal}>{name.toUpperCase()}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.cardFooterLabel}>EXPIRES</Text>
-                    <Text style={styles.cardFooterVal}>{testExpiry || "MM/YY"}</Text>
-                  </View>
-                </View>
-              </LinearGradient>
-
-              {/* Sandbox info Alert */}
-              <View style={[styles.sandboxAlert, { backgroundColor: Theme.colors.primary + '10', borderColor: Theme.colors.primary + '30' }]}>
-                <Sparkles size={16} color={Theme.colors.primary} />
-                <Text style={[styles.sandboxAlertText, { color: colors.text }]}>
-                  You are in Google Play Sandbox / Developer build testing mode. Use any test payment card credentials.
-                </Text>
-              </View>
-
-              {/* Payment Card Input Fields */}
-              <View style={styles.fieldsGridNew}>
-                <Field 
-                  label="Test Card Number" 
-                  value={testCardNumber} 
-                  onChange={setTestCardNumber} 
-                  colors={colors} 
-                  placeholder="4242 4242 4242 4242" 
-                  icon={CreditCard} 
-                />
-                <View style={{ flexDirection: 'row', gap: 15 }}>
-                  <View style={{ flex: 1 }}>
-                    <Field 
-                      label="Expiry Date" 
-                      value={testExpiry} 
-                      onChange={setTestExpiry} 
-                      colors={colors} 
-                      placeholder="12/29" 
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Field 
-                      label="CVC / CVV" 
-                      value={testCvc} 
-                      onChange={setTestCvc} 
-                      colors={colors} 
-                      placeholder="123" 
-                    />
-                  </View>
-                </View>
-              </View>
-
-              <TouchableOpacity 
-                style={[styles.saveBtn, { backgroundColor: Theme.colors.primary, marginTop: 30 }]} 
-                disabled={simulatedPaying}
-                onPress={async () => {
-                  if (!testCardNumber.trim()) {
-                    Alert.alert("Error", "Please enter card details.");
-                    return;
-                  }
-                  setSimulatedPaying(true);
-                  setTimeout(async () => {
-                    try {
-                      await updateUserProfile({ resumeLimit: 9999 });
-                      setResumeLimit(9999);
-                      await AsyncStorage.setItem('cached_resume_limit', "9999");
-                      setSimulatedPaying(false);
-                      setShowTestCheckout(false);
-                      setActiveModal(null);
-                      Alert.alert("Subscription Successful! 🎉", "Your developer test payment was processed successfully. Welcome to Premium Elite!");
-                    } catch (e) {
-                      setSimulatedPaying(false);
-                      Alert.alert("Error", "Failed to activate subscription.");
-                    }
-                  }, 1800);
-                }}
-              >
-                {simulatedPaying ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Pay Simulated {subBillingPeriod === "monthly" ? pricing.monthlyPrice : pricing.weeklyPrice}</Text>
-                )}
-              </TouchableOpacity>
-
-              <Text style={[styles.secureNote, { color: colors.textMuted }]}>
-                🔒 Payments simulated securely via sandbox environment variables.
-              </Text>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }

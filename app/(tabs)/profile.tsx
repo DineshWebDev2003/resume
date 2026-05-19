@@ -215,11 +215,6 @@ export default function ProfileScreen() {
   }, [activeModal]);
 
   useEffect(() => {
-    if (IS_REAL_IAP_MUTED) {
-      console.log("[IAP] Safe simulated billing enabled.");
-      return;
-    }
-
     const initIap = async () => {
       try {
         setLoadingIap(true);

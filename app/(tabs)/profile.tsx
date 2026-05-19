@@ -222,11 +222,16 @@ export default function ProfileScreen() {
       try {
         setLoadingIap(true);
         // Dynamically require react-native-iap to prevent any runtime compile-time errors in Expo Go
-        const { initConnection, getProducts } = require('react-native-iap');
-        const connected = await initConnection();
+        const IAP = require('react-native-iap');
+        if (!IAP || typeof IAP.initConnection !== 'function' || typeof IAP.getProducts !== 'function') {
+          console.log("[IAP] Native billing module not available in this host (e.g. Expo Go). Falling back to sandbox.");
+          return;
+        }
+        
+        const connected = await IAP.initConnection();
         setIapConnected(connected);
         if (connected) {
-          const products = await getProducts({ skus: ['pro_monthly', 'pro_yearly'] });
+          const products = await IAP.getProducts({ skus: ['pro_monthly', 'pro_yearly'] });
           setIapProducts(products);
         }
       } catch (e) {
@@ -870,13 +875,13 @@ export default function ProfileScreen() {
                           style={[styles.premiumBtnNew, { backgroundColor: Theme.colors.primary }]}
                           disabled={simulatedPaying}
                           onPress={async () => {
-                            if (!IS_REAL_IAP_MUTED && iapConnected) {
+                            const IAP = require('react-native-iap');
+                            if (!IS_REAL_IAP_MUTED && iapConnected && IAP && typeof IAP.requestPurchase === 'function') {
                               // Real Google Play Purchase logic via react-native-iap
                               try {
                                 setSimulatedPaying(true);
-                                const { requestPurchase } = require('react-native-iap');
                                 const sku = subBillingPeriod === "monthly" ? "pro_monthly" : "pro_yearly";
-                                await requestPurchase({ sku });
+                                await IAP.requestPurchase({ sku });
                                 Alert.alert("Success", "Subscription purchased successfully!");
                               } catch (e: any) {
                                 console.log("[IAP] Purchase error, opening simulated sheet", e);

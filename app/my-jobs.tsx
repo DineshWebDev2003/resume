@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Theme, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -11,11 +11,15 @@ import {
   CheckCircle2, 
   AlertCircle,
   MapPin,
-  Calendar
+  Calendar,
+  Heart,
+  ExternalLink,
+  Trash2
 } from 'lucide-react-native';
 import { GlassCard } from '@/components/glass-card';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { getMyApplications } from '@/services/firestore';
+import { useJobStore } from '@/hooks/use-job-store';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
@@ -29,6 +33,9 @@ export default function MyJobsScreen() {
 
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'applied' | 'saved'>('applied');
+  
+  const { savedJobs, unsaveJob } = useJobStore();
 
   useFocusEffect(
     useCallback(() => {
@@ -54,81 +61,190 @@ export default function MyJobsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>My Applications</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>My Jobs</Text>
         <View style={{ width: 44 }} />
+      </View>
+
+      <View style={styles.tabWrapper}>
+        <View style={[styles.tabContainer, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+          <TouchableOpacity 
+            onPress={() => setActiveTab('applied')}
+            style={[styles.tab, activeTab === 'applied' && { backgroundColor: Theme.colors.primary }]}
+          >
+            <Text style={[styles.tabText, { color: activeTab === 'applied' ? '#000' : colors.textMuted }]}>Applied</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setActiveTab('saved')}
+            style={[styles.tab, activeTab === 'saved' && { backgroundColor: Theme.colors.primary }]}
+          >
+            <Text style={[styles.tabText, { color: activeTab === 'saved' ? '#000' : colors.textMuted }]}>Saved</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
         <View style={styles.statsRow}>
           <GlassCard style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-            <Text style={styles.statNum}>{applications.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Applied</Text>
+            <Text style={styles.statNum}>{activeTab === 'applied' ? applications.length : savedJobs.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{activeTab === 'applied' ? 'Applied' : 'Saved'}</Text>
           </GlassCard>
           <GlassCard style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
             <Text style={[styles.statNum, { color: '#10B981' }]}>
-              {applications.filter(a => a.status === 'Shortlisted' || a.status === 'Interview').length}
+              {activeTab === 'applied' 
+                ? applications.filter(a => a.status === 'Shortlisted' || a.status === 'Interview').length
+                : savedJobs.filter(j => j.source === 'verified').length}
             </Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Success Rate</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{activeTab === 'applied' ? 'Success Rate' : 'Verified'}</Text>
           </GlassCard>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Applications</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {activeTab === 'applied' ? 'Recent Applications' : 'Saved Opportunities'}
+        </Text>
 
-        {loading ? (
+        {loading && activeTab === 'applied' ? (
            <ActivityIndicator color={Theme.colors.primary} size="large" style={{ marginTop: 100 }} />
-        ) : applications.length > 0 ? (
-          applications.map((job, index) => (
-            <Animated.View key={job.id} entering={FadeInUp.delay(index * 100)}>
-              <TouchableOpacity 
-                style={[styles.jobCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
-                onPress={() => router.push({
-                  pathname: '/job-details',
-                  params: {
-                    title: job.title,
-                    company: job.company,
-                    location: job.location,
-                    logo: job.logo,
-                    isInternal: 'false'
-                  }
-                })}
-              >
-                <View style={styles.jobTop}>
-                  <View style={[styles.logoPlaceholder, { backgroundColor: job.statusColor + '20' }]}>
-                    {job.logo ? <Image source={{ uri: job.logo }} style={{ width: '100%', height: '100%', borderRadius: 12 }} /> : <Briefcase size={22} color={job.statusColor} />}
+        ) : activeTab === 'applied' ? (
+          applications.length > 0 ? (
+            applications.map((job, index) => (
+              <Animated.View key={job.id} entering={FadeInUp.delay(index * 100)}>
+                <TouchableOpacity 
+                  style={[styles.jobCard, { backgroundColor: colors.surface }]}
+                  onPress={() => router.push({
+                    pathname: '/job-details',
+                    params: {
+                      title: job.title,
+                      company: job.company,
+                      location: job.location,
+                      logo: job.logo,
+                      isInternal: 'false'
+                    }
+                  })}
+                >
+                  <View style={styles.jobTop}>
+                    <View style={[styles.logoPlaceholder, { backgroundColor: job.statusColor + '20' }]}>
+                      {job.logo ? <Image source={{ uri: job.logo }} style={{ width: '100%', height: '100%', borderRadius: 12 }} /> : <Briefcase size={22} color={job.statusColor} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.jobTitle, { color: colors.text }]}>{job.title}</Text>
+                      <Text style={[styles.companyName, { color: colors.textMuted }]}>{job.company}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: job.statusColor + '10' }]}>
+                      <Text style={[styles.statusText, { color: job.statusColor }]}>{job.status}</Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.jobTitle, { color: colors.text }]}>{job.title}</Text>
-                    <Text style={[styles.companyName, { color: colors.textMuted }]}>{job.company}</Text>
+    
+                  <View style={styles.jobMeta}>
+                    <View style={styles.metaItem}>
+                      <MapPin size={14} color={colors.textMuted} />
+                      <Text style={[styles.metaText, { color: colors.textMuted }]}>{job.location}</Text>
+                    </View>
+                    <View style={styles.metaItem}>
+                      <Clock size={14} color={colors.textMuted} />
+                      <Text style={[styles.metaText, { color: colors.textMuted }]}>
+                        {job.appliedAt instanceof Date ? job.appliedAt.toLocaleDateString() : 'Just now'}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: job.statusColor + '10' }]}>
-                    <Text style={[styles.statusText, { color: job.statusColor }]}>{job.status}</Text>
-                  </View>
-                </View>
-  
-                <View style={styles.jobMeta}>
-                  <View style={styles.metaItem}>
-                    <MapPin size={14} color={colors.textMuted} />
-                    <Text style={[styles.metaText, { color: colors.textMuted }]}>{job.location}</Text>
-                  </View>
-                  <View style={styles.metaItem}>
-                    <Clock size={14} color={colors.textMuted} />
-                    <Text style={[styles.metaText, { color: colors.textMuted }]}>
-                      {job.appliedAt instanceof Date ? job.appliedAt.toLocaleDateString() : 'Just now'}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-          ))
+                </TouchableOpacity>
+              </Animated.View>
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+               <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/7486/7486744.png' }} style={styles.emptyIcon} />
+               <Text style={[styles.emptyTitle, { color: colors.text }]}>No Applications Yet</Text>
+               <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>Explore jobs and apply to see them here.</Text>
+               <TouchableOpacity style={[styles.startBtn, { backgroundColor: Theme.colors.primary }]} onPress={() => router.push('/(tabs)/jobs')}>
+                  <Text style={styles.startBtnText}>Browse Jobs</Text>
+               </TouchableOpacity>
+            </View>
+          )
         ) : (
-          <View style={styles.emptyContainer}>
-             <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/7486/7486744.png' }} style={styles.emptyIcon} />
-             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Applications Yet</Text>
-             <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>Explore jobs and apply to see them here.</Text>
-             <TouchableOpacity style={[styles.startBtn, { backgroundColor: Theme.colors.primary }]} onPress={() => router.push('/(tabs)/jobs')}>
-                <Text style={styles.startBtnText}>Browse Jobs</Text>
-             </TouchableOpacity>
-          </View>
+          savedJobs.length > 0 ? (
+            savedJobs.map((job, index) => (
+              <Animated.View key={job.id} entering={FadeInUp.delay(index * 100)}>
+                <GlassCard style={[styles.jobCard, { backgroundColor: colors.surface, padding: 0 }]}>
+                  <TouchableOpacity 
+                    activeOpacity={0.7}
+                    style={{ padding: 20, paddingBottom: 12 }}
+                    onPress={() => router.push({
+                      pathname: '/job-details',
+                      params: {
+                        title: job.title,
+                        company: job.company,
+                        location: job.location,
+                        logo: job.logo,
+                        description: job.description || '',
+                        salary: job.salary || '',
+                        type: job.type || '',
+                        url: job.url || '',
+                        isInternal: 'false'
+                      }
+                    })}
+                  >
+                    <View style={styles.jobTop}>
+                      <View style={[styles.logoPlaceholder, { backgroundColor: Theme.colors.primary + '20' }]}>
+                        {job.logo ? <Image source={{ uri: job.logo }} style={{ width: '100%', height: '100%', borderRadius: 12 }} /> : <Briefcase size={22} color={Theme.colors.primary} />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.jobTitle, { color: colors.text }]}>{job.title}</Text>
+                        <Text style={[styles.companyName, { color: colors.textMuted }]}>{job.company}</Text>
+                      </View>
+                      <TouchableOpacity 
+                        onPress={() => unsaveJob(job.id)}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      >
+                        <Trash2 size={20} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+      
+                    <View style={styles.jobMeta}>
+                      <View style={styles.metaItem}>
+                        <MapPin size={14} color={colors.textMuted} />
+                        <Text style={[styles.metaText, { color: colors.textMuted }]}>{job.location}</Text>
+                      </View>
+                      <View style={styles.metaItem}>
+                        <Heart size={14} color={Theme.colors.primary} fill={Theme.colors.primary} />
+                        <Text style={[styles.metaText, { color: colors.textMuted }]}>Saved</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={[styles.savedActions, { marginHorizontal: 20, marginBottom: 20, marginTop: 8 }]}>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, { backgroundColor: Theme.colors.primary }]}
+                      onPress={() => router.push({
+                        pathname: '/builder/ats',
+                        params: { 
+                          jobUrl: job.url, 
+                          autoScan: 'true',
+                          jobTitle: job.title,
+                          company: job.company
+                        }
+                      })}
+                    >
+                      <Text style={styles.actionBtnText}>Optimize & Apply</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionBtnOutline, { borderColor: colors.glassBorder }]}
+                      onPress={() => Linking.openURL(job.url)}
+                    >
+                      <ExternalLink size={14} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
+                </GlassCard>
+              </Animated.View>
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+               <Heart size={80} color={colors.textMuted} style={{ marginBottom: 20, opacity: 0.3 }} />
+               <Text style={[styles.emptyTitle, { color: colors.text }]}>No Saved Jobs</Text>
+               <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>Save jobs you're interested in to view them later.</Text>
+               <TouchableOpacity style={[styles.startBtn, { backgroundColor: Theme.colors.primary }]} onPress={() => router.push('/(tabs)/jobs')}>
+                  <Text style={styles.startBtnText}>Browse Jobs</Text>
+               </TouchableOpacity>
+            </View>
+          )
         )}
       </ScrollView>
     </View>
@@ -157,6 +273,27 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '900',
+  },
+  tabWrapper: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   scrollBody: {
     paddingHorizontal: 20,
@@ -192,7 +329,6 @@ const styles = StyleSheet.create({
   jobCard: {
     padding: 20,
     borderRadius: 28,
-    borderWidth: 1,
     marginBottom: 16,
   },
   jobTop: {
@@ -275,5 +411,33 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '900',
     fontSize: 16,
+  },
+  savedActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  actionBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnText: {
+    color: '#000',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  actionBtnOutline: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

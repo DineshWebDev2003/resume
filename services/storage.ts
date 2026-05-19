@@ -4,6 +4,7 @@ const KEYS = {
   GROQ_API_KEY: 'user_groq_api_key',
   GEMINI_API_KEY: 'user_gemini_api_key',
   RESUME_VERSIONS: 'resume_versions',
+  IMPORT_HISTORY: 'resume_import_history',
 };
 
 export const UserStorage = {
@@ -55,5 +56,42 @@ export const UserStorage = {
       versions = versions.filter((v: any) => v.name !== name);
       await AsyncStorage.setItem(KEYS.RESUME_VERSIONS, JSON.stringify(versions));
     }
+  },
+
+  saveImportHistory: async (name: string, data: any) => {
+    const existing = await AsyncStorage.getItem(KEYS.IMPORT_HISTORY);
+    let history = existing ? JSON.parse(existing) : [];
+    
+    // Format friendly date string
+    const dateStr = new Date().toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    
+    const newEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      name,
+      data,
+      date: dateStr,
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Prepend and limit to 4
+    history.unshift(newEntry);
+    history = history.slice(0, 4);
+    
+    await AsyncStorage.setItem(KEYS.IMPORT_HISTORY, JSON.stringify(history));
+  },
+  
+  getImportHistory: async () => {
+    const existing = await AsyncStorage.getItem(KEYS.IMPORT_HISTORY);
+    return existing ? JSON.parse(existing) : [];
+  },
+  
+  clearImportHistory: async () => {
+    await AsyncStorage.removeItem(KEYS.IMPORT_HISTORY);
   }
 };

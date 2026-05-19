@@ -45,13 +45,18 @@ const GET_BASE_FONT_SIZE = (resumeData: ResumeData) => {
   length += (resumeData.title || "").length;
   length += (resumeData.summary || "").length;
   length += (resumeData.skills || "").length;
-  (resumeData.experience || []).forEach(exp => {
-    length += (exp.role || "").length + (exp.company || "").length + (exp.description || "").length;
+  (resumeData.experience || []).forEach((exp) => {
+    length +=
+      (exp.role || "").length +
+      (exp.company || "").length +
+      (exp.description || "").length;
   });
-  (resumeData.projects || []).forEach(proj => {
+  (resumeData.projects || []).forEach((proj) => {
     length += (proj.title || "").length + (proj.description || "").length;
   });
-  length += (resumeData.education?.degree || "").length + (resumeData.education?.school || "").length;
+  length +=
+    (resumeData.education?.degree || "").length +
+    (resumeData.education?.school || "").length;
 
   if (length < 500) return 14;
   if (length < 1000) return 12;
@@ -140,9 +145,15 @@ export const ExecutiveTemplate = ({
           {(resumeData.title || "").toUpperCase()}
         </Text>
         <View style={{ flexDirection: "row", marginTop: 15, opacity: 0.8 }}>
-          <Text style={[pFont, { fontSize: baseSize }]}>{resumeData.email}</Text>
-          <Text style={[pFont, { fontSize: baseSize, marginHorizontal: 12 }]}>|</Text>
-          <Text style={[pFont, { fontSize: baseSize }]}>{resumeData.phone}</Text>
+          <Text style={[pFont, { fontSize: baseSize }]}>
+            {resumeData.email}
+          </Text>
+          <Text style={[pFont, { fontSize: baseSize, marginHorizontal: 12 }]}>
+            |
+          </Text>
+          <Text style={[pFont, { fontSize: baseSize }]}>
+            {resumeData.phone}
+          </Text>
         </View>
       </View>
 
@@ -206,7 +217,9 @@ export const ExecutiveTemplate = ({
                   justifyContent: "space-between",
                 }}
               >
-                <Text style={[pFont, { fontSize: baseSize + 1, fontWeight: "900" }]}>
+                <Text
+                  style={[pFont, { fontSize: baseSize + 1, fontWeight: "900" }]}
+                >
                   {e.role}
                 </Text>
                 <Text
@@ -234,7 +247,11 @@ export const ExecutiveTemplate = ({
               <Text
                 style={[
                   pFont,
-                  { fontSize: baseSize - 1, color: "#444", lineHeight: baseSize * 1.3 },
+                  {
+                    fontSize: baseSize - 1,
+                    color: "#444",
+                    lineHeight: baseSize * 1.3,
+                  },
                 ]}
               >
                 • {e.description}
@@ -392,7 +409,7 @@ export const ModernTemplate = ({
           <Text
             style={[
               pFont,
-              { fontSize: baseSize - 1, color: "#cbd5e1", marginBottom: 8 }
+              { fontSize: baseSize - 1, color: "#cbd5e1", marginBottom: 8 },
             ]}
           >
             {resumeData.email}
@@ -467,12 +484,18 @@ export const ModernTemplate = ({
             EDUCATION
           </Text>
           <Text
-            style={[pFont, { fontSize: baseSize, fontWeight: "900", color: "#fff" }]}
+            style={[
+              pFont,
+              { fontSize: baseSize, fontWeight: "900", color: "#fff" },
+            ]}
           >
             {edu.degree}
           </Text>
           <Text
-            style={[pFont, { fontSize: baseSize - 1, color: "#cbd5e1", marginTop: 4 }]}
+            style={[
+              pFont,
+              { fontSize: baseSize - 1, color: "#cbd5e1", marginTop: 4 },
+            ]}
           >
             {edu.school}
           </Text>
@@ -496,7 +519,15 @@ export const ModernTemplate = ({
             PROFILE
           </Text>
           <Text
-            style={[pFont, { fontSize: baseSize, color: "#334155", lineHeight: baseSize * 1.5, textAlign: "justify" }]}
+            style={[
+              pFont,
+              {
+                fontSize: baseSize,
+                color: "#334155",
+                lineHeight: baseSize * 1.5,
+                textAlign: "justify",
+              },
+            ]}
           >
             {resumeData.summary}
           </Text>
@@ -529,7 +560,11 @@ export const ModernTemplate = ({
                 <Text
                   style={[
                     pFont,
-                    { fontSize: baseSize + 1, fontWeight: "900", color: "#1e293b" },
+                    {
+                      fontSize: baseSize + 1,
+                      fontWeight: "900",
+                      color: "#1e293b",
+                    },
                   ]}
                 >
                   {e.role}
@@ -557,7 +592,14 @@ export const ModernTemplate = ({
                 {e.company} {e.workType ? `| ${e.workType}` : ""}
               </Text>
               <Text
-                style={[pFont, { fontSize: baseSize - 1, color: "#444", lineHeight: baseSize * 1.4 }]}
+                style={[
+                  pFont,
+                  {
+                    fontSize: baseSize - 1,
+                    color: "#444",
+                    lineHeight: baseSize * 1.4,
+                  },
+                ]}
               >
                 • {e.description}
               </Text>
@@ -582,8 +624,27 @@ export const ModernTemplate = ({
               </Text>
               {resumeData.projects.slice(0, 2).map((p: any, idx: number) => (
                 <View key={idx} style={{ marginBottom: 15 }}>
-                  <Text style={[pFont, { fontSize: 12, fontWeight: "900", color: "#1e293b" }]}>{p.title}</Text>
-                  <Text style={[pFont, { fontSize: 11, color: "#444", marginTop: 4, lineHeight: 15 }]}>{p.description}</Text>
+                  <Text
+                    style={[
+                      pFont,
+                      { fontSize: 12, fontWeight: "900", color: "#1e293b" },
+                    ]}
+                  >
+                    {p.title}
+                  </Text>
+                  <Text
+                    style={[
+                      pFont,
+                      {
+                        fontSize: 11,
+                        color: "#444",
+                        marginTop: 4,
+                        lineHeight: 15,
+                      },
+                    ]}
+                  >
+                    {p.description}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -634,7 +695,15 @@ export const CreativeTemplate = ({
         ) : null}
         <View style={{ flex: 1 }}>
           <Text
-            style={[pFont, { fontSize: baseSize + 26, fontWeight: "900", color: "#fff", textTransform: "uppercase" }]}
+            style={[
+              pFont,
+              {
+                fontSize: baseSize + 26,
+                fontWeight: "900",
+                color: "#fff",
+                textTransform: "uppercase",
+              },
+            ]}
           >
             {resumeData.name}
           </Text>
@@ -707,7 +776,11 @@ export const CreativeTemplate = ({
                 <Text
                   style={[
                     pFont,
-                    { fontSize: baseSize + 1, fontWeight: "900", color: "#09090b" },
+                    {
+                      fontSize: baseSize + 1,
+                      fontWeight: "900",
+                      color: "#09090b",
+                    },
                   ]}
                 >
                   {e.role}
@@ -728,7 +801,11 @@ export const CreativeTemplate = ({
                 <Text
                   style={[
                     pFont,
-                    { fontSize: baseSize - 1, lineHeight: baseSize * 1.4, color: "#444" },
+                    {
+                      fontSize: baseSize - 1,
+                      lineHeight: baseSize * 1.4,
+                      color: "#444",
+                    },
                   ]}
                 >
                   • {e.description}
@@ -772,7 +849,11 @@ export const CreativeTemplate = ({
                     <Text
                       style={[
                         pFont,
-                        { fontSize: baseSize - 1, fontWeight: "800", color: brand },
+                        {
+                          fontSize: baseSize - 1,
+                          fontWeight: "800",
+                          color: brand,
+                        },
                       ]}
                     >
                       {s.trim()}
@@ -796,12 +877,32 @@ export const CreativeTemplate = ({
             >
               PROJECTS
             </Text>
-            {SAFE_PROJ(resumeData).slice(0, 3).map((p: any, i: number) => (
-              <View key={p.id || i} style={{ marginBottom: 12 }}>
-                <Text style={[pFont, { fontSize: baseSize + 0.5, fontWeight: "900", color: "#09090b" }]}>{p.title}</Text>
-                <Text style={[pFont, { fontSize: baseSize - 1.5, color: "#444", marginTop: 4 }]}>{p.description}</Text>
-              </View>
-            ))}
+            {SAFE_PROJ(resumeData)
+              .slice(0, 3)
+              .map((p: any, i: number) => (
+                <View key={p.id || i} style={{ marginBottom: 12 }}>
+                  <Text
+                    style={[
+                      pFont,
+                      {
+                        fontSize: baseSize + 0.5,
+                        fontWeight: "900",
+                        color: "#09090b",
+                      },
+                    ]}
+                  >
+                    {p.title}
+                  </Text>
+                  <Text
+                    style={[
+                      pFont,
+                      { fontSize: baseSize - 1.5, color: "#444", marginTop: 4 },
+                    ]}
+                  >
+                    {p.description}
+                  </Text>
+                </View>
+              ))}
           </View>
 
           <View style={{ marginBottom: 35 }}>
@@ -827,7 +928,10 @@ export const CreativeTemplate = ({
               {edu.degree}
             </Text>
             <Text
-              style={[pFont, { fontSize: baseSize - 1, color: "#71717a", marginTop: 6 }]}
+              style={[
+                pFont,
+                { fontSize: baseSize - 1, color: "#71717a", marginTop: 6 },
+              ]}
             >
               {edu.school}
             </Text>
@@ -880,7 +984,10 @@ export const ProfessionalTemplate = ({
           ) : null}
           <View>
             <Text
-              style={[pFont, { fontSize: baseSize + 22, fontWeight: "900", color: brand }]}
+              style={[
+                pFont,
+                { fontSize: baseSize + 22, fontWeight: "900", color: brand },
+              ]}
             >
               {resumeData.name}
             </Text>
@@ -933,7 +1040,11 @@ export const ProfessionalTemplate = ({
                   <Text
                     style={[
                       pFont,
-                      { fontSize: baseSize + 1, fontWeight: "900", color: "#111827" },
+                      {
+                        fontSize: baseSize + 1,
+                        fontWeight: "900",
+                        color: "#111827",
+                      },
                     ]}
                   >
                     {e.role}
@@ -941,7 +1052,11 @@ export const ProfessionalTemplate = ({
                   <Text
                     style={[
                       pFont,
-                      { fontSize: baseSize - 1, fontWeight: "800", color: brand },
+                      {
+                        fontSize: baseSize - 1,
+                        fontWeight: "800",
+                        color: brand,
+                      },
                     ]}
                   >
                     {e.period}
@@ -961,7 +1076,14 @@ export const ProfessionalTemplate = ({
                   {e.company} {e.workType ? `| ${e.workType}` : ""}
                 </Text>
                 <Text
-                  style={[pFont, { fontSize: baseSize - 1, color: "#444", lineHeight: baseSize * 1.4 }]}
+                  style={[
+                    pFont,
+                    {
+                      fontSize: baseSize - 1,
+                      color: "#444",
+                      lineHeight: baseSize * 1.4,
+                    },
+                  ]}
                 >
                   • {e.description}
                 </Text>
@@ -991,8 +1113,31 @@ export const ProfessionalTemplate = ({
               </Text>
               {resumeData.projects.slice(0, 2).map((p: any, idx: number) => (
                 <View key={idx} style={{ marginBottom: 15 }}>
-                  <Text style={[pFont, { fontSize: baseSize, fontWeight: "900", color: "#111827" }]}>{p.title}</Text>
-                  <Text style={[pFont, { fontSize: baseSize - 1, color: "#444", marginTop: 4, lineHeight: baseSize * 1.3 }]}>{p.description}</Text>
+                  <Text
+                    style={[
+                      pFont,
+                      {
+                        fontSize: baseSize,
+                        fontWeight: "900",
+                        color: "#111827",
+                      },
+                    ]}
+                  >
+                    {p.title}
+                  </Text>
+                  <Text
+                    style={[
+                      pFont,
+                      {
+                        fontSize: baseSize - 1,
+                        color: "#444",
+                        marginTop: 4,
+                        lineHeight: baseSize * 1.3,
+                      },
+                    ]}
+                  >
+                    {p.description}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -1027,7 +1172,12 @@ export const ProfessionalTemplate = ({
           <Text
             style={[
               pFont,
-              { fontSize: baseSize - 1, color: "#1e3a8a", marginBottom: 8, wordBreak: "break-all" },
+              {
+                fontSize: baseSize - 1,
+                color: "#1e3a8a",
+                marginBottom: 8,
+                wordBreak: "break-all",
+              },
             ]}
           >
             {resumeData.email}
@@ -1061,14 +1211,22 @@ export const ProfessionalTemplate = ({
             {edu.degree}
           </Text>
           <Text
-            style={[pFont, { fontSize: baseSize - 1, color: "#64748b", marginTop: 4 }]}
+            style={[
+              pFont,
+              { fontSize: baseSize - 1, color: "#64748b", marginTop: 4 },
+            ]}
           >
             {edu.school}
           </Text>
           <Text
             style={[
               pFont,
-              { fontSize: baseSize - 1, color: brand, marginTop: 4, fontWeight: "800" },
+              {
+                fontSize: baseSize - 1,
+                color: brand,
+                marginTop: 4,
+                fontWeight: "800",
+              },
             ]}
           >
             {edu.year}
@@ -1103,7 +1261,11 @@ export const ProfessionalTemplate = ({
               <Text
                 style={[
                   pFont,
-                  { fontSize: baseSize - 1, color: "#1e3a8a", fontWeight: "900" },
+                  {
+                    fontSize: baseSize - 1,
+                    color: "#1e3a8a",
+                    fontWeight: "900",
+                  },
                 ]}
               >
                 {s.trim()}

@@ -1,44 +1,45 @@
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    tint: '#FF69B4', // Light Pink
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: '#FF69B4',
-    surface: '#f8f9fa',
-    glass: 'rgba(255, 255, 255, 0.7)',
-    glassBorder: 'rgba(0, 0, 0, 0.1)',
-    textMuted: '#64748b',
+    text: '#1A202C', // Deep Charcoal
+    background: '#F0F4F8', // Soft blue-white
+    tint: '#1A9E9F', // Magic Teal
+    icon: '#718096', // Cool Gray
+    tabIconDefault: '#718096',
+    tabIconSelected: '#1A9E9F',
+    surface: '#FFFFFF', // Pure white
+    glass: 'rgba(255, 255, 255, 0.75)',
+    glassBorder: '#B9CAD6', // Muted gray-blue
+    textMuted: '#718096',
   },
   dark: {
-    text: '#ffffff',
-    background: '#121212', // Material Dark
-    tint: '#FF69B4', // Light Pink
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: '#FF69B4',
-    surface: '#1e1e1e',
-    glass: 'rgba(0, 0, 0, 0.7)',
-    glassBorder: 'rgba(255, 255, 255, 0.1)',
-    textMuted: '#94a3b8',
+    text: '#F7FAFC', // Off-White
+    background: '#121824', // Deep navy charcoal
+    tint: '#22BFC0', // Brighter Teal
+    icon: '#A0AEC0', // Light Slate Gray
+    tabIconDefault: '#A0AEC0',
+    tabIconSelected: '#22BFC0',
+    surface: '#1E2638', // Elevated dark slate
+    glass: 'rgba(30, 38, 56, 0.75)',
+    glassBorder: '#2D3954', // Muted midnight blue
+    textMuted: '#A0AEC0',
   },
 };
 
 export const Theme = {
   colors: {
-    primary: '#D81B60', // Deep Elite Pink
-    secondary: '#FF4081', // Hot Pink
-    accent: '#F06292', // Light Pink
-    // Default to light, but components should use useColorScheme hook
-    background: '#ffffff',
-    surface: '#f8f9fa',
-    text: '#000000',
-    textMuted: '#64748b',
-    glass: 'rgba(255, 255, 255, 0.7)',
-    glassBorder: 'rgba(0, 0, 0, 0.1)',
-    success: '#10b981',
-    error: '#ef4444',
+    primary: '#1A9E9F', // Magic Teal
+    secondary: '#89C4F4', // Clay Blue
+    accent: '#F3C63F', // Wand Gold
+    background: '#F0F4F8',
+    surface: '#FFFFFF',
+    text: '#1A202C',
+    textMuted: '#718096',
+    glass: 'rgba(255, 255, 255, 0.75)',
+    glassBorder: '#B9CAD6',
+    success: '#2CE3FA', // Cyan Sparkle
+    error: '#EC829A', // Coral Pink
+    coral: '#EC829A',
+    cyan: '#2CE3FA',
   },
   spacing: {
     xs: 4,

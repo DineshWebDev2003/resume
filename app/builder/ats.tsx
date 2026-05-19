@@ -38,6 +38,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { saveAtsHistory, getAtsHistory } from '@/services/firestore';
 import dayjs from 'dayjs';
 import { GlassCard } from '@/components/glass-card';
+import { getLimits } from '@/constants/limits';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { 
   FadeInDown, 
@@ -59,7 +60,9 @@ import * as Haptics from 'expo-haptics';
 import { X, Eye } from 'lucide-react-native';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { uploadToCloudinary } from '@/services/cloudinary';
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
+import { BlurView } from 'expo-blur';
+
 
 const { width } = Dimensions.get('window');
 const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
@@ -70,7 +73,17 @@ export default function ATSScanner() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = isDark ? Colors.dark : Colors.light;
-  const { jobUrl: incomingUrl, autoScan } = useLocalSearchParams<{ jobUrl?: string, autoScan?: string }>();
+  const { 
+    jobUrl: incomingUrl, 
+    autoScan, 
+    jobTitle, 
+    company 
+  } = useLocalSearchParams<{ 
+    jobUrl?: string, 
+    autoScan?: string,
+    jobTitle?: string,
+    company?: string
+  }>();
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [autoScanTriggered, setAutoScanTriggered] = useState(false);
@@ -139,20 +152,31 @@ export default function ATSScanner() {
     loadHistory();
     if (incomingUrl) {
       setJobUrl(incomingUrl);
+      
+      // If we have title/company, set an initial description so the AI has context 
+      // even if scraping is slow or fails
+      if (jobTitle || company) {
+        setJobDescription(`Role: ${jobTitle || 'N/A'}\nCompany: ${company || 'N/A'}\n\n[Scraping detailed description...]`);
+      }
+
       // Brief delay to ensure WebView and component state are initialized
       setTimeout(() => {
         handleUrlRef(incomingUrl);
       }, 800);
     }
-  }, [incomingUrl]);
+  }, [incomingUrl, jobTitle, company]);
 
   // Auto-scan listener
   React.useEffect(() => {
-    if (autoScan === 'true' && !autoScanTriggered && extractedText && jobDescription && jobDescription !== "Extracted successfully. Please verify the content below.") {
+    // If we have title/company, we can scan even if the full description scraping hasn't finished yet
+    const hasJobContext = jobDescription && jobDescription !== "Extracted successfully. Please verify the content below.";
+    const hasBasicContext = jobTitle && company;
+
+    if (autoScan === 'true' && !autoScanTriggered && extractedText && (hasJobContext || hasBasicContext)) {
       setAutoScanTriggered(true);
       handleStartAnalysis();
     }
-  }, [extractedText, jobDescription, autoScan, autoScanTriggered]);
+  }, [extractedText, jobDescription, autoScan, autoScanTriggered, jobTitle, company]);
 
   const headerStyle = useAnimatedStyle(() => {
      return {
@@ -195,6 +219,8 @@ export default function ATSScanner() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setSelectedFile(result.assets[0]);
+        // CRITICAL: Clear old extracted text so we don't scan new file with old content
+        setExtractedText('');
         // Trigger background extraction immediately
         handleBackgroundExtract(result.assets[0]);
       }
@@ -389,7 +415,11 @@ export default function ATSScanner() {
             RESUME:
             ${extractedText.substring(0, 4000)}
             
-            JOB DESCRIPTION:
+            JOB DESCRIPTION / ROLE:
+            ${jobTitle ? `Target Role: ${jobTitle}` : ''}
+            ${company ? `Target Company: ${company}` : ''}
+            
+            FULL DESCRIPTION:
             ${jobDescription.substring(0, 2000)}
             
             Return ONLY a JSON object in this exact format:
@@ -456,35 +486,117 @@ export default function ATSScanner() {
         }
       }
 
+      const limits = getLimits("Elder-2"); // Default to ATS-friendly template for optimization reference
+
+      const systemPrompt = `You are a smart ATS Resume Content Generator.
+
+Your goal is to generate visually balanced resume content that completely fills the selected template professionally without empty spaces or overflow.
+
+IMPORTANT RULES:
+- Every template section should feel visually filled.
+- Never leave large empty areas.
+- Never overflow content.
+- Adapt content based on user experience level.
+- Use concise ATS-friendly writing.
+- Keep sentences short and impactful.
+
+========================
+TEMPLATE RULES
+========================
+Template Name: Elder-2: Elegant
+Visual Density: rich
+
+Limits:
+- About: ${limits.summary} chars
+- Experience: ${limits.description} chars each
+- Projects: ${limits.projectDesc} chars each
+- Skills: max 20
+- Certifications: max 5
+- Interests: max 5
+
+========================
+SMART FILL RULES
+========================
+1. NEVER leave templates visually empty.
+2. If user is a fresher:
+- Prioritize: Skills, Academic projects, Internship, Certifications, Strengths, Objective.
+- Generate strong fresher-friendly content.
+3. If experience section is weak:
+- Add project-focused achievements.
+- Add teamwork/problem-solving statements.
+4. If projects are missing:
+- Generate role-relevant sample projects based on skills.
+5. If certifications are missing:
+- Add "Core Competencies" section instead.
+6. If achievements are missing:
+- Add "Strengths" section.
+7. If template has extra space:
+- Slightly expand descriptions professionally.
+- Add ATS-friendly keywords naturally.
+- Fill the Sidebar with relevant Languages and Interests.
+8. If template is compact:
+- Use ultra-short content.
+9. Never generate fake company names.
+10. Never generate unrealistic achievements.
+
+========================
+SECTION PRIORITY
+========================
+FRESHER: Objective > Skills > Projects > Education > Certifications > Interests
+EXPERIENCED: Experience > Achievements > Skills > Projects > Interests
+
+========================
+WRITING STYLE
+========================
+GOOD: ✔ Built responsive React applications using Firebase.
+BAD: ✘ I am a hardworking and dedicated individual...
+
+========================
+OUTPUT FORMAT
+========================
+Return ONLY valid JSON in this exact format:
+{
+  "title": "Optimized Job Title",
+  "summary": "Impactful summary",
+  "experience": [
+    {"company": "...", "role": "...", "period": "...", "description": "Keyword-rich description"}
+  ],
+  "education": [
+    {"school": "...", "degree": "...", "year": "...", "honors": "..."}
+  ],
+  "projects": [
+    {"name": "...", "description": "Impactful project description"}
+  ],
+  "skills": "Skill1, Skill2, Skill3, ...",
+  "certifications": [{"title": "...", "issuer": "...", "year": "..."}],
+  "tools": "Tool1, Tool2, ...",
+  "languages": "Language1, Language2, ..."
+}
+`;
+
       const messages = [
         { 
           role: 'system' as const, 
-          content: 'You are an elite resume optimizer. Rewrite the resume to perfectly match the job description. STICK TO CHARACTER LIMITS: Title < 50 chars, Summary: 450-500 chars, Experience Description: 400-600 chars per item, Projects: 200-300 chars. Ensure content is dense and impactful to fill a single A4 page without empty space.' 
+          content: systemPrompt 
         },
         { 
           role: 'user' as const, 
           content: `
-            JOB DESCRIPTION:
-            ${jobDescription.substring(0, 2000)}
-            
-            CURRENT RESUME TEXT:
-            ${extractedText.substring(0, 3000)}
-            
-            ${userProfile}
+========================
+USER DATA
+========================
+Name: ${user?.displayName || 'Candidate'}
+Role: ${jobTitle || 'Professional'}
+Experience Level: ${userProfile ? 'experienced' : 'fresher'}
+Years: ${userProfile ? 'Verified' : 'N/A'}
+Resume Content (contains Education, Experience, Skills, etc.):
+${extractedText.substring(0, 3500)}
 
-            Return ONLY a valid JSON object in this format (do not add any other text):
-            {
-              "title": "Optimized Job Title (max 50 chars)",
-              "summary": "Impactful summary (strictly 450-500 chars to fill space)",
-              "experience": [
-                {"company": "...", "role": "...", "period": "...", "description": "Keyword-rich description (strictly 400-600 chars to fill space)"}
-              ],
-              "skills": "Skill1, Skill2, Skill3...",
-              "projects": [
-                 {"name": "...", "description": "Impactful project desc (200-300 chars)"}
-              ]
-            }
-          ` 
+JOB DESCRIPTION:
+${jobDescription.substring(0, 2000)}
+
+Generate the optimized resume content now. Make sure you extract the candidate's actual education details from the Resume Content and output them in the specified "education" format above. Do not use mockup/placeholder education details if the candidate's actual details are present in the Resume Content.
+` 
         }
       ];
 
@@ -570,17 +682,51 @@ export default function ATSScanner() {
             contentContainerStyle={{ padding: 20, paddingTop: 10, paddingBottom: insets.bottom + 40 }}
           >
             <Animated.View entering={FadeInUp} style={styles.scoreCardContainer}>
-              <GlassCard style={[styles.scoreCard, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : '#f1f5f9' }]}>
-                <View style={[styles.scoreCircle, { backgroundColor: isDark ? '#000' : '#fff', borderColor: score ? getMatchStyles(score).color : Theme.colors.primary }]}>
-                  <Text style={[styles.scoreNumber, { color: score ? getMatchStyles(score).color : Theme.colors.primary }]}>{score}%</Text>
-                  <Text style={[styles.scoreLabel, { color: colors.textMuted }]}>ATS MATCH</Text>
-                </View>
-                <View style={styles.scoreInfo}>
-                  <Text style={[styles.matchStatus, { color: score ? getMatchStyles(score).color : colors.text }]}>
-                    {score ? getMatchStyles(score).label : ''}
-                  </Text>
-                </View>
-              </GlassCard>
+              <LinearGradient
+                colors={isDark ? ['#6366F1', '#4F46E5', '#1E1B4B'] : ['#EEF2FF', '#C7D2FE', '#E0E7FF']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.scoreCardGradient}
+              >
+                <GlassCard style={[styles.scoreCard, { backgroundColor: isDark ? 'rgba(30, 27, 75, 0.5)' : 'rgba(255, 255, 255, 0.6)' }]}>
+                  <View style={[styles.glowRing, { borderColor: score ? getMatchStyles(score).color + '20' : 'rgba(99, 102, 241, 0.2)' }]} />
+                  <View style={[styles.glowRingOuter, { borderColor: score ? getMatchStyles(score).color + '08' : 'rgba(99, 102, 241, 0.08)' }]} />
+                  
+                  <View style={[styles.scoreCircle, { borderColor: score ? getMatchStyles(score).color : Theme.colors.primary }]}>
+                    <View style={[styles.scoreCircleInner, { borderColor: score ? getMatchStyles(score).color + '40' : 'rgba(99, 102, 241, 0.3)' }]} />
+                    <Text style={[styles.scoreNumber, { color: score ? getMatchStyles(score).color : Theme.colors.primary }]}>{score}%</Text>
+                    <Text style={[styles.scoreLabel, { color: colors.textMuted }]}>ATS MATCH</Text>
+                  </View>
+                  <View style={styles.scoreInfo}>
+                    <View style={styles.badgeRow}>
+                      <View style={[styles.matchBadge, { backgroundColor: score ? getMatchStyles(score).color + '15' : 'rgba(99, 102, 241, 0.1)' }]}>
+                        <Zap size={10} color={score ? getMatchStyles(score).color : Theme.colors.primary} fill={score ? getMatchStyles(score).color : Theme.colors.primary} />
+                        <Text style={[styles.matchBadgeText, { color: score ? getMatchStyles(score).color : colors.text }]}>
+                          {score ? getMatchStyles(score).label.split(' - ')[0] : ''}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.matchStatus, { color: colors.text }]}>
+                      {score ? getMatchStyles(score).label.split(' - ')[1] || getMatchStyles(score).label : ''}
+                    </Text>
+                    <Text style={[styles.matchDesc, { color: colors.textMuted }]}>
+                      Your resume was analyzed against the job requirements using neural matching.
+                    </Text>
+                    
+                    <View style={styles.progressBarBg}>
+                      <View 
+                        style={[
+                          styles.progressBarFill, 
+                          { 
+                            width: `${score}%`, 
+                            backgroundColor: score ? getMatchStyles(score).color : Theme.colors.primary 
+                          }
+                        ]} 
+                      />
+                    </View>
+                  </View>
+                </GlassCard>
+              </LinearGradient>
             </Animated.View>
 
             <Text style={[styles.listTitle, { color: colors.text }]}>Top Improvements</Text>
@@ -727,27 +873,42 @@ export default function ATSScanner() {
         </View>
 
         <Animated.View entering={FadeInDown.delay(200)}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>1. Upload Your Resume</Text>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.stepBadge, { backgroundColor: Theme.colors.primary }]}>
+              <Text style={styles.stepBadgeText}>1</Text>
+            </View>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Upload Your Resume</Text>
+          </View>
+          
           <TouchableOpacity 
             onPress={handleDocumentPick}
-            activeOpacity={0.8}
+            activeOpacity={0.9}
+            style={styles.uploadContainer}
           >
             <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.7 }}>
               <GlassCard style={[styles.uploadZone, selectedFile && styles.uploadedZone, { borderColor: colors.glassBorder }]}>
               {selectedFile ? (
                 <View style={styles.previewContent}>
-                  <View style={[styles.miniDoc, { borderColor: colors.glassBorder }]}>
-                     <View style={[styles.miniDocLine, { width: '60%', backgroundColor: Theme.colors.primary }]} />
-                     <View style={[styles.miniDocLine, { width: '90%', backgroundColor: colors.textMuted + '40' }]} />
-                     <View style={[styles.miniDocLine, { width: '80%', backgroundColor: colors.textMuted + '40' }]} />
-                     <View style={[styles.miniDocLine, { width: '40%', marginTop: 10, backgroundColor: Theme.colors.primary }]} />
-                     <View style={[styles.miniDocLine, { width: '90%', backgroundColor: colors.textMuted + '40' }]} />
-                  </View>
+                  <LinearGradient
+                    colors={[Theme.colors.primary + '20', Theme.colors.primary + '05']}
+                    style={styles.miniDocGradient}
+                  >
+                    <View style={[styles.miniDoc, { borderColor: Theme.colors.primary + '30' }]}>
+                       <View style={[styles.miniDocLine, { width: '60%', backgroundColor: Theme.colors.primary }]} />
+                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: colors.textMuted + '40' }]} />
+                       <View style={[styles.miniDocLine, { width: '80%', backgroundColor: colors.textMuted + '40' }]} />
+                       <View style={[styles.miniDocLine, { width: '40%', marginTop: 10, backgroundColor: Theme.colors.primary }]} />
+                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: colors.textMuted + '40' }]} />
+                    </View>
+                  </LinearGradient>
                   <View style={styles.previewInfo}>
                     <Text style={[styles.uploadText, { color: colors.text }]} numberOfLines={1}>{selectedFile.name}</Text>
-                    <Text style={styles.uploadSubtext}>
-                      {extractedText ? 'Analyzed & Ready' : 'Processing Content...'}
-                    </Text>
+                    <View style={styles.statusRow}>
+                      <View style={[styles.statusDot, { backgroundColor: extractedText ? Theme.colors.success : '#fbbf24' }]} />
+                      <Text style={[styles.uploadSubtext, { color: extractedText ? Theme.colors.success : '#fbbf24' }]}>
+                        {extractedText ? 'Ready for Scanning' : 'Processing...'}
+                      </Text>
+                    </View>
                   </View>
                   <TouchableOpacity 
                     onPress={(e) => {
@@ -760,12 +921,16 @@ export default function ATSScanner() {
                   </TouchableOpacity>
                 </View>
               ) : (
-                <>
-                  <View style={[styles.uploadIcon, { backgroundColor: Theme.colors.primary + '15' }]}>
+                <View style={styles.uploadPlaceholder}>
+                  <LinearGradient
+                    colors={[Theme.colors.primary + '15', 'transparent']}
+                    style={styles.uploadIconCircle}
+                  >
                     <Upload size={32} color={Theme.colors.primary} />
-                  </View>
-                  <Text style={[styles.uploadText, { color: colors.text }]}>Click to upload PDF resume</Text>
-                </>
+                  </LinearGradient>
+                  <Text style={[styles.uploadTitle, { color: colors.text }]}>Select PDF Resume</Text>
+                  <Text style={[styles.uploadHint, { color: colors.textMuted }]}>Tap to browse your files</Text>
+                </View>
               )}
               </GlassCard>
             </ViewShot>
@@ -806,36 +971,55 @@ export default function ATSScanner() {
       </Modal>
 
         <Animated.View entering={FadeInDown.delay(400)} style={styles.spacing}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>2. Target Job Description</Text>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.stepBadge, { backgroundColor: '#8B5CF6' }]}>
+              <Text style={styles.stepBadgeText}>2</Text>
+            </View>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Target Job Details</Text>
+          </View>
+
           <GlassCard style={[styles.inputCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-            <View style={styles.inputHeader}>
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Target size={18} color={Theme.colors.primary} />
-                <Text style={[styles.inputHeaderText, { color: colors.text }]}>Job Details or Link</Text>
-              </View>
+            <View style={styles.inputTabs}>
+               <View style={styles.activeTabIndicator} />
+               <View style={styles.tabItem}>
+                  <Search size={14} color={Theme.colors.primary} />
+                  <Text style={[styles.tabText, { color: colors.text }]}>Paste Link</Text>
+               </View>
+            </View>
+
+            <View style={styles.urlInputRow}>
+              <TextInput
+                style={[styles.urlInput, { color: colors.text }]}
+                placeholder="LinkedIn, Indeed, or company URL"
+                placeholderTextColor={colors.textMuted}
+                value={jobUrl}
+                onChangeText={setJobUrl}
+              />
               <TouchableOpacity 
-                style={[styles.fetchBtn, isFetchingUrl && { opacity: 0.7 }]}
+                style={[styles.miniFetchBtn, (isFetchingUrl || !jobUrl) && { opacity: 0.5 }]}
                 onPress={handleFetchJobDescription}
                 disabled={isFetchingUrl || !jobUrl}
               >
-                {isFetchingUrl ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.fetchBtnText}>Fetch Link</Text>}
+                {isFetchingUrl ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Sparkles size={16} color="#fff" />
+                )}
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputDivider}>
+              <View style={[styles.dividerLine, { backgroundColor: colors.glassBorder }]} />
+              <Text style={[styles.dividerText, { color: colors.textMuted }]}>OR PASTE TEXT</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.glassBorder }]} />
             </View>
             
             <TextInput
-              style={[styles.urlInput, { color: colors.text, borderBottomWidth: 1, borderBottomColor: colors.glassBorder }]}
-              placeholder="Paste LinkedIn/Indeed job link here..."
-              placeholderTextColor={colors.textMuted}
-              value={jobUrl}
-              onChangeText={setJobUrl}
-            />
-
-            <TextInput
-              style={[styles.textInput, { color: colors.text, marginTop: 12 }]}
-              placeholder="Or paste the job description text here..."
+              style={[styles.textInput, { color: colors.text }]}
+              placeholder="Paste the full job description here for maximum accuracy..."
               placeholderTextColor={colors.textMuted}
               multiline
-              numberOfLines={4}
+              numberOfLines={6}
               value={jobDescription}
               onChangeText={setJobDescription}
             />
@@ -850,12 +1034,12 @@ export default function ATSScanner() {
               disabled={!selectedFile || !jobDescription}
             >
               <LinearGradient
-                colors={['#D81B60', '#C2185B']}
+                colors={['#6366F1', '#4F46E5']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.buttonGradient}
               >
-                <Zap size={20} color="#fff" />
+                <Zap size={22} color="#fff" />
                 <Text style={styles.buttonText}>Scan ATS Compatibility</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -864,24 +1048,29 @@ export default function ATSScanner() {
 
         {history.length > 0 && (
           <View style={styles.historySection}>
-            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 16 }]}>Recent Analysis History</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent History</Text>
+            </View>
             {history.map((item, idx) => (
-              <TouchableOpacity 
-                key={item.id} 
-                onPress={() => openHistoryItem(item)}
-                style={[styles.historyItem, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
-              >
-                <View style={[styles.historyScore, { borderColor: getMatchStyles(item.score).color }]}>
-                   <Text style={[styles.historyScoreText, { color: getMatchStyles(item.score).color }]}>{item.score}%</Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: 16 }}>
-                  <Text style={[styles.historyJob, { color: colors.text }]} numberOfLines={1}>{item.jobTitle}</Text>
-                  <Text style={[styles.historyDate, { color: colors.textMuted }]}>
-                    {dayjs(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt).format('MMM D, h:mm A')}
-                  </Text>
-                </View>
-                <ChevronLeft size={18} color={colors.textMuted} style={{ transform: [{ rotate: '180deg' }] }} />
-              </TouchableOpacity>
+              <Animated.View key={item.id} entering={FadeInDown.delay(100 * idx)}>
+                <TouchableOpacity 
+                  onPress={() => openHistoryItem(item)}
+                  style={[styles.historyItem, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+                >
+                  <View style={[styles.historyScore, { borderColor: getMatchStyles(item.score).color }]}>
+                     <Text style={[styles.historyScoreText, { color: getMatchStyles(item.score).color }]}>{item.score}%</Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 16 }}>
+                    <Text style={[styles.historyJob, { color: colors.text }]} numberOfLines={1}>{item.jobTitle}</Text>
+                    <Text style={[styles.historyDate, { color: colors.textMuted }]}>
+                      {dayjs(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt).format('MMM D, h:mm A')}
+                    </Text>
+                  </View>
+                  <View style={[styles.historyArrow, { backgroundColor: colors.glassBorder }]}>
+                    <ChevronLeft size={16} color={colors.text} style={{ transform: [{ rotate: '180deg' }] }} />
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
             ))}
           </View>
         )}
@@ -896,7 +1085,6 @@ export default function ATSScanner() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -922,11 +1110,32 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     marginBottom: 16,
     marginTop: 24,
+  },
+  stepBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepBadgeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  uploadContainer: {
+    borderRadius: 24,
+    overflow: 'hidden',
   },
   uploadZone: {
     height: 180,
@@ -935,32 +1144,84 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderWidth: 2,
     borderRadius: 24,
+    backgroundColor: 'rgba(99, 102, 241, 0.03)',
   },
   uploadedZone: {
     borderStyle: 'solid',
+    backgroundColor: 'transparent',
   },
-  uploadIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+  uploadPlaceholder: {
+    alignItems: 'center',
+  },
+  uploadIconCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
+  uploadTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  uploadHint: {
+    fontSize: 13,
+  },
+  previewContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    width: '100%',
+  },
+  miniDocGradient: {
+    padding: 10,
+    borderRadius: 16,
+    marginRight: 16,
+  },
+  miniDoc: {
+    width: 50,
+    height: 65,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 6,
+    padding: 6,
+    borderWidth: 1,
+  },
+  miniDocLine: {
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  previewInfo: {
+    flex: 1,
+  },
   uploadText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   uploadSubtext: {
-    color: Theme.colors.success,
     fontSize: 12,
-    marginTop: 4,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   eyeBtn: {
-    padding: 10,
-    backgroundColor: Theme.colors.primary + '15',
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
     borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -968,62 +1229,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(128,128,128,0.1)',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
   },
   closeBtn: {
-    padding: 5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(128,128,128,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContainer: {
     flex: 1,
   },
   adContainer: {
     padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(128,128,128,0.1)',
-  },
-  adCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    gap: 12,
-  },
-  adBadge: {
-    backgroundColor: Theme.colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  adBadgeText: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '900',
-  },
-  adContent: {
-    flex: 1,
-  },
-  adTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  adSub: {
-    fontSize: 10,
-  },
-  adBtn: {
-    backgroundColor: '#000',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  adBtnText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
   },
   spacing: {
     marginTop: 24,
@@ -1032,29 +1255,86 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   inputCard: {
-    padding: 16,
-    borderRadius: 20,
+    padding: 20,
+    borderRadius: 28,
     borderWidth: 1,
   },
-  inputHeader: {
+  inputTabs: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  tabItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
   },
-  inputHeaderText: {
-    fontSize: 14,
-    fontWeight: '600',
+  tabText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  activeTabIndicator: {
+    position: 'absolute',
+    bottom: -4,
+    left: 12,
+    width: 20,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Theme.colors.primary,
+  },
+  urlInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  urlInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(128,128,128,0.05)',
+    borderRadius: 14,
+  },
+  miniFetchBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: Theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inputDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   textInput: {
     fontSize: 15,
-    minHeight: 100,
+    minHeight: 120,
     textAlignVertical: 'top',
+    padding: 16,
+    backgroundColor: 'rgba(128,128,128,0.05)',
+    borderRadius: 18,
   },
   analyzeButton: {
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
-    height: 56,
+    height: 64,
+    marginTop: 10,
   },
   disabledButton: {
     opacity: 0.5,
@@ -1068,8 +1348,9 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   loadingContainer: {
     marginTop: 40,
@@ -1085,114 +1366,167 @@ const styles = StyleSheet.create({
   },
   scoreCardContainer: {
     marginBottom: 32,
+    borderRadius: 30,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  scoreCardGradient: {
+    padding: 1.5,
   },
   scoreCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 24,
-    borderRadius: 24,
+    borderRadius: 28.5,
+    position: 'relative',
+    overflow: 'hidden',
   },
   scoreCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 6,
-    borderColor: Theme.colors.primary,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 5,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    position: 'relative',
+    zIndex: 2,
   },
   scoreNumber: {
-    color: Theme.colors.primary,
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: '900',
   },
   scoreLabel: {
     fontSize: 8,
     fontWeight: '900',
-    marginTop: -2,
+    letterSpacing: 0.5,
+    marginTop: -1,
   },
   scoreInfo: {
     flex: 1,
     marginLeft: 20,
+    zIndex: 2,
   },
   matchStatus: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '900',
     marginBottom: 4,
   },
   matchDesc: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  glowRing: {
+    position: 'absolute',
+    left: 14,
+    top: 14,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 1.5,
+    opacity: 0.6,
+  },
+  glowRingOuter: {
+    position: 'absolute',
+    left: 4,
+    top: 4,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 1,
+    opacity: 0.4,
+  },
+  scoreCircleInner: {
+    position: 'absolute',
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 1,
+    opacity: 0.7,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  matchBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  matchBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  progressBarBg: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(128,128,128,0.1)',
+    marginTop: 14,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
   },
   listTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
     marginBottom: 16,
   },
   improvementCard: {
-    padding: 16,
+    padding: 20,
     marginBottom: 16,
-    borderRadius: 18,
+    borderRadius: 24,
     borderWidth: 1,
   },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 4,
-    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 6,
+    marginBottom: 12,
   },
   typeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
   },
   itemTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 6,
   },
   itemDesc: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   highlightItem: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    gap: 14,
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+    borderRadius: 18,
   },
   highlightTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 2,
   },
   highlightDesc: {
     fontSize: 13,
-  },
-  previewContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    width: '100%',
-  },
-  miniDoc: {
-    width: 60,
-    height: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    padding: 8,
-    marginRight: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(128,128,128,0.2)',
-  },
-  miniDocLine: {
-    height: 3,
-    borderRadius: 2,
-    marginBottom: 5,
-  },
-  previewInfo: {
-    flex: 1,
+    lineHeight: 18,
   },
   fetchBtn: {
     backgroundColor: Theme.colors.primary,
@@ -1205,39 +1539,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  urlInput: {
-    fontSize: 14,
-    paddingVertical: 8,
-    marginBottom: 4,
-  },
   loadingOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingPopup: {
-    width: width * 0.85,
+    width: width * 0.9,
     padding: 30,
-    borderRadius: 32,
+    borderRadius: 40,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
   },
   loadingLottie: {
-    width: 240,
-    height: 180,
+    width: 260,
+    height: 200,
   },
   loadingTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
     marginBottom: 8,
   },
   loadingSub: {
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
   },
   historySection: {
@@ -1246,88 +1570,96 @@ const styles = StyleSheet.create({
   historyItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 20,
+    padding: 18,
+    borderRadius: 24,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   historyScore: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    borderWidth: 2,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
   },
   historyScoreText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '900',
   },
   historyJob: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 2,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
   },
   historyDate: {
-    fontSize: 11,
+    fontSize: 12,
   },
   optimizeSection: {
-    marginTop: 20,
-    paddingBottom: 40,
+    marginTop: 30,
+    paddingBottom: 60,
   },
   divider: {
     height: 1,
     width: '100%',
   },
   optimizeTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 8,
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 10,
   },
   optimizeSub: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 20,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 24,
   },
   optimizeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 16,
+    gap: 12,
+    paddingVertical: 18,
+    borderRadius: 20,
     borderWidth: 2,
     borderColor: Theme.colors.primary,
     borderStyle: 'dashed',
+    backgroundColor: 'rgba(99, 102, 241, 0.05)',
   },
   optimizeBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
   },
   optimizedCard: {
-    padding: 20,
-    borderRadius: 24,
+    padding: 24,
+    borderRadius: 30,
     borderWidth: 1,
-    gap: 15,
+    gap: 18,
   },
   optimizedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   optimizedHeaderText: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '900',
   },
   optimizedPreview: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
     fontStyle: 'italic',
   },
   createResumeBtn: {
-    height: 54,
-    borderRadius: 16,
+    height: 60,
+    borderRadius: 18,
     overflow: 'hidden',
-    marginTop: 5,
+    marginTop: 10,
+  },
+  historyArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

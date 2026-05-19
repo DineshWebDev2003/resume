@@ -23,10 +23,13 @@ export const saveResume = async (
   try {
     const existingResumes = await getResumes();
     
-    if (!id && existingResumes.length >= MAX_RESUMES) {
+    const cachedLimitStr = await AsyncStorage.getItem('cached_resume_limit');
+    const dynamicLimit = cachedLimitStr ? parseInt(cachedLimitStr, 10) : 3;
+    
+    if (!id && existingResumes.length >= dynamicLimit) {
       return { 
         success: false, 
-        message: `You can only store up to ${MAX_RESUMES} resumes. Delete one to create a new one.` 
+        message: `You can only store up to ${dynamicLimit} resumes. Watch ads or refer friends to increase this limit!` 
       };
     }
 

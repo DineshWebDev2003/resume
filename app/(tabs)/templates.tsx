@@ -11,15 +11,20 @@ import { deleteResume, getResumes, UserResume } from "@/utils/storage";
 import dayjs from "dayjs";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+    ArrowLeft,
     Briefcase,
+    ChevronRight,
     Code,
     GraduationCap,
     Heart,
     Plus,
     ShieldCheck,
     Trash2,
-    Zap
+    Zap,
+    Sparkles,
+    Star
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -51,42 +56,68 @@ const CARD_WIDTH = SCREEN_WIDTH - 40;
 const SPACING = 15;
 const SIDE_PEEK = 20;
 
-const CATEGORIES = [
+const TEMPLATE_SERIES = [
   {
-    id: "it",
-    name: "IT & Software",
-    icon: Code,
-    image:
-      "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=400&q=80",
+    id: "elder",
+    name: "Elder Series",
+    desc: "ATS-Optimized & Professional",
+    icon: ShieldCheck,
+    color: "#0077b5",
+    badge: "POPULAR",
+    templates: [
+      { id: "Elder-1", name: "Elder 1: Elite", desc: "Sleek Sidebar", badge: "POPULAR", color: Theme.colors.secondary },
+      { id: "Elder-2", name: "Elder 2: ATS", desc: "ATS Master", badge: "ATS SAFE", color: "#10b981" },
+      { id: "Elder-3", name: "Elder 3: LI", desc: "LinkedIn Style", badge: "EXECUTIVE", color: "#0077b5" },
+      { id: "Elder-4", name: "Elder 4: Timeline", desc: "Timeline & Sidebar", badge: "CREATIVE", color: "#22a3d6" },
+      { id: "Elder-5", name: "Elder 5: Right", desc: "Right Sidebar", badge: "PORTFOLIO", color: "#d946ef" },
+      { id: "Elder-6", name: "Elder 6: Ribbon", desc: "Ribbon Dark Sidebar", badge: "MODERN", color: "#0ea5e9" },
+      { id: "Elder-7", name: "Elder 7: Gold", desc: "Two-Tone Sidebar", badge: "PREMIUM", color: "#facc15" },
+      { id: "Elder-8", name: "Elder 8: Skyline", desc: "Blue Timelines", badge: "PREMIUM", color: "#0ea5e9" },
+    ]
   },
   {
-    id: "accounts",
-    name: "Accounts",
-    icon: Briefcase,
-    image:
-      "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "marketing",
-    name: "Marketing",
+    id: "titan",
+    name: "Titan Series",
+    desc: "Modern Grids & Bold Accents",
     icon: Zap,
-    image:
-      "https://images.unsplash.com/photo-1512486130939-2c4f79935e4f?auto=format&fit=crop&w=400&q=80",
+    color: "#ea580c",
+    badge: "MODERN",
+    templates: [
+      { id: "Titan-1", name: "Titan 1: PRO", desc: "Curved Dark Sidebar", badge: "NEW", color: "#1e293b" },
+      { id: "Titan-2", name: "Titan 2: Dome", desc: "Purple Pill Theme", badge: "NEW", color: "#9b7eb5" },
+      { id: "Titan-3", name: "Titan 3: Split", desc: "Orange Accent", badge: "NEW", color: "#ea580c" },
+      { id: "Titan-4", name: "Titan 4: Ruby", desc: "Dark Red Theme", badge: "NEW", color: "#dc2626" },
+    ]
   },
   {
-    id: "healthcare",
-    name: "Medical",
+    id: "blackwolf",
+    name: "Black Wolf Series",
+    desc: "Elite Minimalist Designs",
+    icon: Code,
+    color: "#000000",
+    badge: "PREMIUM",
+    templates: [
+      { id: "BlackWolf-1", name: "Black Wolf 1", desc: "Elite Minimalist", badge: "PREMIUM", color: "#000000" },
+      { id: "BlackWolf-2", name: "Black Wolf 2", desc: "Structured Timeline", badge: "NEW", color: "#1a1a1a" },
+      { id: "BlackWolf-3", name: "Black Wolf 3", desc: "Modern Split", badge: "NEW", color: "#333333" },
+      { id: "BlackWolf-4", name: "Black Wolf 4", desc: "Minimalist Two-Column", badge: "NEW", color: "#1a202c" },
+    ]
+  },
+  {
+    id: "jocker",
+    name: "Jocker Series",
+    desc: "Bold ATS-Friendly Layouts",
     icon: Heart,
-    image:
-      "https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "education",
-    name: "Education",
-    icon: GraduationCap,
-    image:
-      "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80",
-  },
+    color: "#ec4899",
+    badge: "NEW",
+    templates: [
+      { id: "Jocker-1", name: "Jocker 1: Pun", desc: "Bold Accent Top", badge: "ATS Safe", color: "#ec4899" },
+      { id: "Jocker-2", name: "Jocker 2: Card", desc: "Clean Card Sections", badge: "ATS Safe", color: "#ec4899" },
+      { id: "Jocker-3", name: "Jocker 3: Bold", desc: "High Contrast Headers", badge: "ATS Safe", color: "#ec4899" },
+      { id: "Jocker-4", name: "Jocker 4: Trick", desc: "Typographic Focus", badge: "ATS Safe", color: "#ec4899" },
+      { id: "Jocker-5", name: "Jocker 5: Royal", desc: "Structured Timeline", badge: "ATS Safe", color: "#ec4899" },
+    ]
+  }
 ];
 
 const ALL_TEMPLATES = [
@@ -245,88 +276,6 @@ const TemplateMiniPreview = React.memo(
   },
 );
 
-function CategoryCard({
-  item,
-  index,
-  scrollX,
-  selectedCategory,
-  setSelectedCategory,
-  colors,
-  router,
-}: any) {
-  const animatedStyle = useAnimatedStyle(() => {
-    const inputRange = [
-      (index - 1) * (CARD_WIDTH + SPACING),
-      index * (CARD_WIDTH + SPACING),
-      (index + 1) * (CARD_WIDTH + SPACING),
-    ];
-
-    const scale = interpolate(
-      scrollX.value,
-      inputRange,
-      [0.92, 1, 0.92],
-      Extrapolate.CLAMP,
-    );
-
-    const opacity = interpolate(
-      scrollX.value,
-      inputRange,
-      [0.7, 1, 0.7],
-      Extrapolate.CLAMP,
-    );
-
-    return {
-      transform: [{ scale }],
-      opacity,
-    };
-  });
-
-  return (
-    <Animated.View
-      style={[animatedStyle, { width: CARD_WIDTH, marginRight: SPACING }]}
-    >
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={() => {
-          setSelectedCategory(item.id);
-          router.push({
-            pathname: "/category-templates",
-            params: { categoryId: item.id, categoryName: item.name },
-          } as any);
-        }}
-        style={[
-          styles.bigCatCard,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.glassBorder,
-          },
-        ]}
-      >
-        <View style={styles.bigCatImageContainer}>
-          <Image source={{ uri: item.image }} style={styles.bigCatImage} />
-          <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.4)", "rgba(0,0,0,0.9)"]}
-            style={styles.bigCatOverlay}
-          />
-          <View style={styles.bigCatInfo}>
-            <View
-              style={[
-                styles.catIconCircleBig,
-                { backgroundColor: "rgba(255, 255, 255, 0.25)" },
-              ]}
-            >
-              <item.icon size={22} color="#fff" />
-            </View>
-            <View>
-              <Text style={styles.bigCatName}>{item.name}</Text>
-              <Text style={styles.bigCatSub}>Professional Templates</Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
 
 export default function TemplatesScreen() {
   const insets = useSafeAreaInsets();
@@ -337,52 +286,21 @@ export default function TemplatesScreen() {
 
   const [resumes, setResumes] = useState<UserResume[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState("it");
-
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
-  const scrollX = useSharedValue(0);
-
-  // Create looped data for infinite carousel
-  const [loopedData] = useState([...CATEGORIES, ...CATEGORIES, ...CATEGORIES]);
-  const totalItems = CATEGORIES.length;
-  const loopIndexOffset = totalItems; // Middle set start
-
-  const onScroll = useAnimatedScrollHandler((event) => {
-    scrollX.value = event.contentOffset.x;
-  });
-
-  useEffect(() => {
-    // Initial scroll to middle set
-    setTimeout(() => {
-      flatListRef.current?.scrollToIndex({
-        index: loopIndexOffset,
-        animated: false,
-      });
-    }, 100);
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      // Auto-slide logic for looped data
-      const nextIndex = Math.round(scrollX.value / (CARD_WIDTH + SPACING)) + 1;
-
-      flatListRef.current?.scrollToIndex({
-        index: nextIndex,
-        animated: true,
-      });
-
-      // Handle loop reset silently in onMomentumScrollEnd
-    }, 3000);
-
-    return () => clearInterval(timer);
-  }, [currentIndex]);
-
+  const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
+  const [resumeLimit, setResumeLimit] = useState(3);
   const loadData = async () => {
     InteractionManager.runAfterInteractions(async () => {
       setLoading(true);
       const data = await getResumes();
       setResumes(data);
+      try {
+        const cached = await AsyncStorage.getItem('cached_resume_limit');
+        if (cached) {
+          setResumeLimit(parseInt(cached, 10));
+        }
+      } catch (e) {
+        console.log("Error reading cached_resume_limit in templates:", e);
+      }
       setLoading(false);
     });
   };
@@ -413,17 +331,21 @@ export default function TemplatesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          Templates
-        </Text>
+      {/* Sleek solid matching header layout */}
+      <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: isDark ? '#121824' : '#F0F4F8' }]}>
+        <View style={styles.headerTitleRow}>
+          <Sparkles size={20} color={Theme.colors.primary} style={{ marginRight: 6 }} />
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            Templates
+          </Text>
+        </View>
         <TouchableOpacity
           style={[styles.newButton, { backgroundColor: Theme.colors.primary }]}
           onPress={() => router.push("/builder/manual")}
+          activeOpacity={0.8}
         >
-          <Plus size={18} color="#000" />
-          <Text style={styles.newButtonText}>Quick Create</Text>
+          <Plus size={16} color="#000" />
+          <Text style={[styles.newButtonText, { color: "#000" }]}>Quick Create</Text>
         </TouchableOpacity>
       </View>
 
@@ -431,186 +353,197 @@ export default function TemplatesScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-          <Text
-            style={[
-              styles.sectionTitle,
-              { color: colors.text, marginBottom: 5 },
-            ]}
+        {/* Decorative Top Banner */}
+        <Animated.View entering={FadeInDown.delay(100)} style={styles.heroBanner}>
+          <LinearGradient
+            colors={isDark ? ['#1E2638', '#121824'] : ['#FFFFFF', '#E2E8F0']}
+            style={[styles.heroBannerInner, { borderColor: colors.glassBorder, borderWidth: 1 }]}
           >
-            Premium Elder Series
-          </Text>
-          <Text
-            style={{ color: colors.textMuted, marginBottom: 25, fontSize: 13 }}
-          >
-            High-performance templates engineered for ATS and LinkedIn success.
-          </Text>
+            <Text style={[styles.heroBannerTitle, { color: colors.text }]}>
+              Build with the Best
+            </Text>
+            <Text style={[styles.heroBannerSub, { color: colors.textMuted }]}>
+              Recruiter-approved layout series optimized for deep ATS parsing and maximum visual impact.
+            </Text>
+          </LinearGradient>
+        </Animated.View>
 
-          <View style={styles.miniGrid}>
-            {[
-              {
-                id: "Elder-1",
-                name: "Elder 1: Elite",
-                desc: "Sleek Sidebar",
-                badge: "POPULAR",
-                color: Theme.colors.secondary,
-              },
-              {
-                id: "Elder-2",
-                name: "Elder 2: ATS",
-                desc: "ATS Master",
-                badge: "ATS SAFE",
-                color: "#10b981",
-              },
-              {
-                id: "Elder-3",
-                name: "Elder 3: LI",
-                desc: "LinkedIn Style",
-                badge: "EXECUTIVE",
-                color: "#0077b5",
-              },
-              {
-                id: "Elder-4",
-                name: "Elder 4: Timeline",
-                desc: "Timeline & Sidebar",
-                badge: "CREATIVE",
-                color: "#22a3d6",
-              },
-              {
-                id: "Elder-5",
-                name: "Elder 5: Right",
-                desc: "Right Sidebar",
-                badge: "PORTFOLIO",
-                color: "#d946ef",
-              },
-              {
-                id: "Elder-6",
-                name: "Elder 6: Ribbon",
-                desc: "Ribbon Dark Sidebar",
-                badge: "MODERN",
-                color: "#0ea5e9",
-              },
-              {
-                id: "Elder-7",
-                name: "Elder 7: Gold",
-                desc: "Two-Tone Sidebar",
-                badge: "PREMIUM",
-                color: "#facc15",
-              },
-              {
-                id: "Elder-8",
-                name: "Elder 8: Skyline",
-                desc: "Blue Timelines",
-                badge: "PREMIUM",
-                color: "#0ea5e9",
-              },
-              {
-                id: "Titan-1",
-                name: "Titan 1: PRO",
-                desc: "Curved Dark Sidebar",
-                badge: "NEW",
-                color: "#1e293b",
-              },
-              {
-                id: "Titan-2",
-                name: "Titan 2: Dome",
-                desc: "Purple Pill Theme",
-                badge: "NEW",
-                color: "#9b7eb5",
-              },
-              {
-                id: "Titan-3",
-                name: "Titan 3: Split",
-                desc: "Orange Accent",
-                badge: "NEW",
-                color: "#ea580c",
-              },
-              {
-                id: "Titan-4",
-                name: "Titan 4: Ruby",
-                desc: "Dark Red Theme",
-                badge: "NEW",
-                color: "#dc2626",
-              },
-              {
-                id: "BlackWolf-1",
-                name: "Black Wolf 1",
-                desc: "Minimal & Clean",
-                badge: "MINIMAL",
-                color: "#000000",
-              },
-            ].map((t, idx) => (
-              <Animated.View
-                key={t.id}
-                entering={FadeInDown.delay(100 * idx)}
-                style={[
-                  styles.miniBox,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.glassBorder,
-                    height: "auto",
-                  },
-                ]}
-              >
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/builder/manual",
-                      params: { templateId: t.id },
-                    } as any)
-                  }
-                >
-                  <View style={styles.miniHeader}>
-                    <View style={styles.miniMockup}>
-                      <TemplateMiniPreview
-                        id={t.id}
-                        colors={colors}
-                        isDark={isDark}
-                      />
-                      <View
-                        style={[
-                          styles.proBadgeMini,
-                          {
-                            backgroundColor: t.color,
-                            position: "absolute",
-                            top: 8,
-                            right: 8,
-                            width: "auto",
-                            paddingHorizontal: 6,
-                            height: 16,
-                          },
-                        ]}
+        <View style={{ paddingHorizontal: 20 }}>
+          {!selectedSeries ? (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 4 }]}>
+                Template Series
+              </Text>
+              <Text style={{ color: colors.textMuted, marginBottom: 20, fontSize: 13 }}>
+                Select a premium layout framework below to begin editing.
+              </Text>
+
+              {TEMPLATE_SERIES.map((series, idx) => {
+                // Determine decorative details based on series
+                let atsScoreText = "98% ATS Match";
+                let ratingText = "9.9 Recruiter Score";
+                
+                if (series.id === 'elder') {
+                  atsScoreText = "99% ATS Safe";
+                  ratingText = "9.8/10 Score";
+                } else if (series.id === 'titan') {
+                  atsScoreText = "94% ATS Score";
+                  ratingText = "9.9/10 Score";
+                } else if (series.id === 'blackwolf') {
+                  atsScoreText = "97% ATS Score";
+                  ratingText = "9.8/10 Score";
+                } else if (series.id === 'jocker') {
+                  atsScoreText = "98% ATS Score";
+                  ratingText = "9.7/10 Score";
+                }
+
+                return (
+                  <Animated.View
+                    key={series.id}
+                    entering={FadeInDown.delay(100 * idx)}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <LinearGradient
+                      colors={isDark ? ['rgba(99, 102, 241, 0.05)', 'rgba(30, 38, 56, 0.4)'] : ['#FFFFFF', '#EEF2FF']}
+                      style={[styles.seriesCardGradient, { borderColor: colors.glassBorder, borderWidth: 1 }]}
+                    >
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => setSelectedSeries(series.id)}
+                        style={styles.seriesCardInner}
                       >
-                        <Text
-                          style={{
-                            fontSize: 8,
-                            fontWeight: "900",
-                            color: "#fff",
-                          }}
-                        >
-                          {t.badge}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
+                        {/* Halos */}
+                        <View style={[styles.glowRing, { borderColor: series.color + '08', right: -30, top: -10, width: 140, height: 140, borderRadius: 70, position: 'absolute' }]} />
 
+                        <View style={[styles.seriesIconBox, { backgroundColor: series.color + "15" }]}>
+                          <series.icon size={22} color={series.color} />
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Text style={[styles.seriesName, { color: colors.text }]}>
+                              {series.name}
+                            </Text>
+                            <View style={[styles.seriesBadge, { backgroundColor: series.color }]}>
+                              <Text style={styles.seriesBadgeText}>{series.badge}</Text>
+                            </View>
+                          </View>
+                          
+                          <Text style={[styles.seriesDesc, { color: colors.textMuted }]} numberOfLines={1}>
+                            {series.desc}
+                          </Text>
+
+                          {/* Stats capsule row */}
+                          <View style={styles.statsCapsuleRow}>
+                            <View style={[styles.statsCapsule, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : '#F1F5F9' }]}>
+                              <ShieldCheck size={10} color={series.color} />
+                              <Text style={[styles.statsCapsuleText, { color: colors.text }]}>{atsScoreText}</Text>
+                            </View>
+                            <View style={[styles.statsCapsule, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : '#F1F5F9' }]}>
+                              <Star size={10} color="#EAB308" fill="#EAB308" />
+                              <Text style={[styles.statsCapsuleText, { color: colors.text }]}>{ratingText}</Text>
+                            </View>
+                          </View>
+                        </View>
+                        <ChevronRight size={18} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    </LinearGradient>
+                  </Animated.View>
+                );
+              })}
+            </>
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 }}>
+                <TouchableOpacity 
+                  onPress={() => setSelectedSeries(null)}
+                  style={[styles.backBtn, { borderColor: colors.glassBorder, backgroundColor: colors.surface }]}
+                >
+                  <ArrowLeft size={18} color={colors.text} />
                 </TouchableOpacity>
-              </Animated.View>
-            ))}
-          </View>
+                <View>
+                  <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 20 }]}>
+                    {TEMPLATE_SERIES.find(s => s.id === selectedSeries)?.name}
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                    Choose a layout to build your resume
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.miniGrid}>
+                {TEMPLATE_SERIES.find(s => s.id === selectedSeries)?.templates.map((t, idx) => (
+                  <Animated.View
+                    key={t.id}
+                    entering={FadeInDown.delay(80 * idx)}
+                    style={[
+                      styles.miniBox,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.glassBorder,
+                        borderWidth: 1,
+                      },
+                    ]}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/builder/manual",
+                          params: { templateId: t.id },
+                        } as any)
+                      }
+                      style={{ flex: 1 }}
+                    >
+                      <View style={styles.miniHeader}>
+                        <View style={styles.miniMockup}>
+                          <TemplateMiniPreview
+                            id={t.id}
+                            colors={colors}
+                            isDark={isDark}
+                          />
+                          <View
+                            style={[
+                              styles.proBadgeMini,
+                              {
+                                backgroundColor: t.color,
+                                position: "absolute",
+                                top: 8,
+                                right: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 3,
+                                borderRadius: 8,
+                              },
+                            ]}
+                          >
+                            <Text style={{ fontSize: 8, fontWeight: "900", color: "#fff" }}>
+                              {t.badge}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={[styles.miniInfo, { backgroundColor: isDark ? 'rgba(0,0,0,0.1)' : '#FAFAFA' }]}>
+                        <Text style={[styles.miniName, { color: colors.text }]} numberOfLines={1}>{t.name}</Text>
+                        <Text style={[styles.miniDate, { color: colors.textMuted }]} numberOfLines={1}>{t.desc}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </View>
+            </>
+          )}
         </View>
 
-
-        {/* My Resumes - Mini Boxes */}
+        {/* My Resumes - Portfolio Horizontal Carousel */}
         {resumes.length > 0 && (
-          <View style={{ paddingHorizontal: 20, marginTop: 40 }}>
+          <View style={{ paddingHorizontal: 0, marginTop: 35, marginBottom: 10 }}>
             <View
               style={{
                 flexDirection: "row",
                 justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: 15,
+                paddingHorizontal: 20,
+                marginBottom: 12,
               }}
             >
               <Text
@@ -621,55 +554,66 @@ export default function TemplatesScreen() {
               >
                 My Resumes
               </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                {resumes.length}/3 Versions
+              <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>
+                {resumes.length}/{resumeLimit >= 1000 ? "∞" : resumeLimit} Saved
               </Text>
             </View>
-            <View style={styles.miniGrid}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}
+            >
               {resumes.map((resume, idx) => (
                 <Animated.View
                   key={resume.id}
                   entering={FadeInDown.delay(100 * idx)}
                   style={[
-                    styles.miniBox,
+                    styles.resumeCarouselCard,
                     {
                       backgroundColor: colors.surface,
                       borderColor: colors.glassBorder,
+                      width: SCREEN_WIDTH * 0.58,
+                      borderWidth: 1,
                     },
                   ]}
                 >
                   <TouchableOpacity
-                    style={{ flex: 1 }}
+                    activeOpacity={0.9}
                     onPress={() =>
                       router.push({
                         pathname: "/builder/manual",
                         params: { resumeId: resume.id },
                       } as any)
                     }
+                    style={{ flex: 1 }}
                   >
-                    <View style={styles.miniHeader}>
-                      <View style={styles.miniMockup}>
-                        <TemplateMiniPreview
-                          id={resume.template || "modern"}
-                          colors={colors}
-                          isDark={isDark}
-                          data={resume.data}
-                        />
-                        <View style={styles.miniOverlay}>
-                          <TouchableOpacity
-                            onPress={() => handleDelete(resume.id)}
-                            style={styles.miniDelete}
-                          >
-                            <Trash2 size={14} color="#fff" />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
+                    <View style={styles.carouselMockupContainer}>
+                      <TemplateMiniPreview
+                        id={resume.template || "modern"}
+                        colors={colors}
+                        isDark={isDark}
+                        data={resume.data}
+                      />
+                      <TouchableOpacity
+                        onPress={() => handleDelete(resume.id)}
+                        style={styles.carouselDeleteBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Trash2 size={12} color="#fff" />
+                      </TouchableOpacity>
                     </View>
-
+                    <View style={[styles.carouselInfoContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.1)' : '#FAFAFA' }]}>
+                      <Text style={[styles.carouselResumeName, { color: colors.text }]} numberOfLines={1}>
+                        {resume.data.name || "Untitled Resume"}
+                      </Text>
+                      <Text style={[styles.carouselResumeMeta, { color: colors.textMuted }]} numberOfLines={1}>
+                        {resume.template ? `${resume.template.split('-')[0]} Layout` : "Modern Layout"}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 </Animated.View>
               ))}
-            </View>
+            </ScrollView>
           </View>
         )}
       </ScrollView>
@@ -686,255 +630,125 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "900",
   },
   newButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
   },
   newButtonText: {
-    fontWeight: "800",
-    color: "#fff",
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: "900",
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 40,
   },
-  sectionHeader: {
-    paddingHorizontal: 20,
-    marginBottom: 15,
+  heroBanner: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  heroBannerInner: {
+    borderRadius: 24,
+    padding: 20,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroBannerTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  heroBannerSub: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "900",
   },
-
-  filterBtn: {
+  seriesCardGradient: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  seriesCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 16,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  seriesIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  seriesName: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  seriesBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  seriesBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  seriesDesc: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  statsCapsuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  statsCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  statsCapsuleText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  glowRing: {
+    position: 'absolute',
+    borderWidth: 1.5,
+  },
+  backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  recentsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    paddingHorizontal: 15,
-  },
-  recentCardWrapper: {
-    width: "50%",
-    padding: 6,
-  },
-  recentCard: {
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: "hidden",
-    padding: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  recentImageContainer: {
-    aspectRatio: 1 / 1.4142,
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    overflow: "hidden",
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.03)",
-  },
-  recentSnapshot: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  recentPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  recentInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 4,
-  },
-  recentTextContainer: {
-    flex: 1,
-    marginRight: 6,
-  },
-  recentName: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  recentTime: {
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 2,
-    opacity: 0.7,
-  },
-  recentMenu: {
-    padding: 4,
-  },
-  addCardGrid: {
-    aspectRatio: 1 / 1.35,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  addCardText: {
-    fontSize: 13,
-    fontWeight: "800",
-    marginTop: 10,
-  },
-  emptyPrompt: {
-    alignItems: "center",
-    marginHorizontal: 20,
-    paddingVertical: 32,
-    backgroundColor: "rgba(0,0,0,0.02)",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "rgba(0,0,0,0.1)",
-  },
-  emptyPromptText: {
-    fontSize: 14,
-    marginTop: 12,
-    fontWeight: "600",
-  },
-  proBadgeMini: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: Theme.colors.secondary,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  templateRawCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  templateLabelOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-  },
-  templateLabelText: {
-    fontSize: 10,
-    fontWeight: "800",
-    textAlign: "center",
-    textTransform: "uppercase",
-  },
-  elderCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  elderPreviewContainer: {
-    aspectRatio: 1 / 1.3,
-    width: "100%",
-    position: "relative",
-    backgroundColor: "#fff",
-  },
-  elderBadge: {
-    position: "absolute",
-    top: 20,
-    left: 20,
-    backgroundColor: Theme.colors.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    zIndex: 10,
-  },
-  elderBadgeText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  elderFooter: {
-    position: "absolute",
-    bottom: 25,
-    left: 20,
-    right: 20,
-    zIndex: 10,
-  },
-  elderName: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "900",
-    marginBottom: 4,
-  },
-  elderDesc: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 20,
-  },
-  startBtn: {
-    backgroundColor: Theme.colors.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-  },
-  startBtnText: {
-    color: "#000",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  benefitRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 15,
-  },
-  benefitText: {
-    fontSize: 15,
-    fontWeight: "600",
-    opacity: 0.8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   miniGrid: {
     flexDirection: "row",
@@ -945,7 +759,6 @@ const styles = StyleSheet.create({
     width: (SCREEN_WIDTH - 56) / 2,
     margin: 8,
     borderRadius: 16,
-    borderWidth: 1,
     overflow: "hidden",
   },
   miniHeader: {
@@ -962,17 +775,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  miniOverlay: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "rgba(255,0,0,0.8)",
-    borderRadius: 8,
-    padding: 4,
-  },
-  miniDelete: {
-    padding: 2,
-  },
   miniInfo: {
     padding: 10,
     borderTopWidth: 1,
@@ -984,8 +786,112 @@ const styles = StyleSheet.create({
   },
   miniDate: {
     fontSize: 10,
-    color: "#94a3b8",
     fontWeight: "600",
     marginTop: 2,
+  },
+  resumeCarouselCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  carouselMockupContainer: {
+    aspectRatio: 1 / 1.35,
+    width: '100%',
+    position: 'relative',
+    backgroundColor: '#fff',
+  },
+  carouselDeleteBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 10,
+  },
+  carouselInfoContainer: {
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  carouselResumeName: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  carouselResumeMeta: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  // Legacy styles to guarantee backward compatibility
+  elderCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  elderPreviewContainer: {
+    width: '100%',
+    aspectRatio: 1 / 1.414,
+    backgroundColor: '#fff',
+  },
+  elderBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  elderBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  elderFooter: {
+    padding: 20,
+  },
+  elderName: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  elderDesc: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 20,
+  },
+  startBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  startBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  benefitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 15,
+  },
+  benefitText: {
+    fontSize: 15,
+    fontWeight: "600",
+    opacity: 0.8,
   },
 });

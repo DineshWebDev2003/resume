@@ -37,6 +37,8 @@ import {
     ModernTemplate,
     ProfessionalTemplate,
 } from "@/components/resume-templates";
+import { generateResumeHtml } from "@/components/resume-html-generator";
+import { WebView } from "react-native-webview";
 
 const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
@@ -122,7 +124,7 @@ export default function BuilderLanding() {
             <TouchableOpacity
               activeOpacity={0.9}
               style={{ flex: 1 }}
-              onPress={() => router.push("/builder/ai-interview")}
+              onPress={() => router.push("/builder/voice")}
             >
               <GlassCard
                 style={[
@@ -316,57 +318,7 @@ export default function BuilderLanding() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.recentSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Resume Preview Styles
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.templateList}
-          >
-            {[
-              { id: 1, name: "Executive" },
-              { id: 2, name: "Modern" },
-              { id: 3, name: "Creative" },
-              { id: 4, name: "Professional" },
-            ].map((template) => (
-              <TouchableOpacity
-                key={template.id}
-                onPress={() => setSelectedTemplateId(template.name)}
-              >
-                <GlassCard
-                  style={[
-                    styles.templateCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.glassBorder,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.templatePreview,
-                      {
-                        backgroundColor: isDark ? '#1e293b' : "#fff",
-                        borderColor: colors.glassBorder,
-                      },
-                    ]}
-                  >
-                    <BuilderMiniResume
-                      index={template.id}
-                      isDark={isDark}
-                      colors={colors}
-                    />
-                  </View>
-                  <Text style={[styles.templateName, { color: colors.text }]}>
-                    {template.name}
-                  </Text>
-                </GlassCard>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+
       </ScrollView>
 
       <TemplatePreviewModal
@@ -392,80 +344,7 @@ export default function BuilderLanding() {
   );
 }
 
-const BuilderMiniResume = ({
-  index,
-  isDark,
-}: {
-  index: number;
-  isDark: boolean;
-  colors: any;
-}) => {
-  const isExecutive = index === 1;
-  const isModern = index === 2;
-  const isCreative = index === 3;
-  const isProfessional = index === 4;
 
-  const mockData = {
-    name: "Alex Johnson",
-    title: "Senior Software Systems Engineer",
-    email: "alex.johnson@example.com",
-    phone: "+1 (555) 234-5678",
-    summary:
-      "Innovative and results-driven Software Engineer with over 7 years of experience in designing and implementing scalable cloud-native applications.",
-    experience: [
-      {
-        role: "Senior Systems Architect",
-        company: "TechFlow Solutions",
-        period: "2021-Present",
-        description: "Leading the development of a microservices architecture.",
-      },
-    ],
-    skills: "React Native, TypeScript, Node.js, AWS, CI/CD",
-    education: {
-      degree: "M.S. in Computer Science",
-      school: "Western Tech",
-      year: "2018",
-    },
-  };
-
-  const A4_WIDTH = 595;
-  const A4_HEIGHT = 842;
-  const scale = 0.19;
-
-  return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: isDark ? '#1e293b' : "#fff",
-        overflow: "hidden",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <View
-        style={{
-          width: A4_WIDTH,
-          height: A4_HEIGHT,
-          backgroundColor: isDark ? '#1e293b' : "#fff",
-          transform: [{ scale }],
-        }}
-      >
-        {isExecutive && (
-          <ExecutiveTemplate resumeData={mockData} selectedFont="System" />
-        )}
-        {isModern && (
-          <ModernTemplate resumeData={mockData} selectedFont="System" />
-        )}
-        {isCreative && (
-          <CreativeTemplate resumeData={mockData} selectedFont="System" />
-        )}
-        {isProfessional && (
-          <ProfessionalTemplate resumeData={mockData} selectedFont="System" />
-        )}
-      </View>
-    </View>
-  );
-};
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

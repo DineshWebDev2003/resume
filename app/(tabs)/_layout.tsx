@@ -1,91 +1,101 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { LayoutDashboard, PenTool, Briefcase, UserCircle, FileText, Sparkles } from 'lucide-react-native';
 import { Theme, Colors } from '@/constants/theme';
-import { Platform, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import { LayoutDashboard, FileText, PenTool, Briefcase, UserCircle } from 'lucide-react-native';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const colors = isDark ? Colors.dark : Colors.light;
-  
+
+  const activeColor = isDark ? '#22BFC0' : '#1A9E9F';
+
+  const TabVectorIcon = ({ Icon, focused }: { Icon: any; focused: boolean }) => {
+    const inactiveIconColor = isDark ? '#A0AEC0' : '#718096';
+
+    return (
+      <View style={[
+        styles.iconPill,
+        focused && { backgroundColor: activeColor }
+      ]}>
+        <Icon 
+          size={focused ? 28 : 26} 
+          color={focused ? '#FFFFFF' : inactiveIconColor} 
+        />
+      </View>
+    );
+  };
+
+  const barHeight = 64;
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Theme.colors.primary, // Yellow
-        tabBarInactiveTintColor: isDark ? '#94a3b8' : '#64748b',
+        tabBarActiveTintColor: activeColor,
+        tabBarInactiveTintColor: isDark ? '#A0AEC0' : '#718096',
         headerShown: false,
-        tabBarShowLabel: true,
+        tabBarShowLabel: false,
         tabBarStyle: {
-          height: 65 + insets.bottom,
-          backgroundColor: colors.background,
-          borderTopWidth: 1,
-          borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
-          paddingTop: 10,
-          elevation: 0,
+          height: barHeight + insets.bottom,
+          backgroundColor: isDark ? '#1E2638' : '#FFFFFF',
+          borderTopWidth: 1.5,
+          borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(185, 202, 214, 0.3)',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: isDark ? 0.2 : 0.06,
+          shadowRadius: 10,
+          elevation: 12,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 0,
+          overflow: 'visible',
         },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '700',
-          marginTop: 2,
+        tabBarItemStyle: {
+          height: barHeight,
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+        tabBarIconStyle: {
+          width: '100%',
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'center',
         }
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <LayoutDashboard size={22} color={color} />,
+          tabBarIcon: ({ focused }) => <TabVectorIcon Icon={LayoutDashboard} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="templates"
         options={{
           title: 'Templates',
-          tabBarIcon: ({ color }) => <FileText size={22} color={color} />,
+          tabBarIcon: ({ focused }) => <TabVectorIcon Icon={FileText} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="builder"
         options={{
           title: 'Create',
-          tabBarIcon: ({ focused }) => (
-            <View style={styles.centerButtonContainer}>
-              <LinearGradient
-                colors={focused ? [Theme.colors.secondary, Theme.colors.accent] : [Theme.colors.primary, Theme.colors.secondary]}
-                style={styles.centerButton}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Sparkles size={24} color={focused ? '#fff' : '#fff'} />
-              </LinearGradient>
-            </View>
-          ),
-          tabBarLabelStyle: {
-            fontSize: 10,
-            fontWeight: '800',
-            color: Theme.colors.primary,
-            marginTop: 18,
-          },
+          tabBarIcon: ({ focused }) => <TabVectorIcon Icon={PenTool} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="jobs"
         options={{
           title: 'Jobs',
-          tabBarIcon: ({ color }) => <Briefcase size={22} color={color} />,
+          tabBarIcon: ({ focused }) => <TabVectorIcon Icon={Briefcase} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <UserCircle size={22} color={color} />,
+          tabBarIcon: ({ focused }) => <TabVectorIcon Icon={UserCircle} focused={focused} />,
         }}
       />
     </Tabs>
@@ -93,22 +103,11 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  centerButtonContainer: {
-    top: -10,
+  iconPill: {
+    width: 48,
+    height: 38,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  centerButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
-    transform: [{ rotate: '45deg' }],
   },
 });

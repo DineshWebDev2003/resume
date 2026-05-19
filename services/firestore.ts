@@ -23,6 +23,8 @@ export interface UserProfile {
   jobRoles: string[];
   location: string;
   education: string;
+  phone?: string;
+  portfolio?: string;
   profilePic?: string;
   resumeLimit: number;
   referralCode: string;
@@ -65,8 +67,38 @@ export const updateUserProfile = async (data: Partial<UserProfile>) => {
   if (!user) throw new Error('User not authenticated');
 
   const userDocRef = doc(db, 'users', user.uid);
+  const docSnap = await getDoc(userDocRef);
+  if (!docSnap.exists()) {
+    const referralCode = `RESUME-${user.uid.substring(0, 5).toUpperCase()}`;
+    await setDoc(userDocRef, {
+      userId: user.uid,
+      name: user.displayName || 'User',
+      email: user.email || '',
+      jobRoles: [],
+      location: '',
+      education: '',
+      resumeLimit: 3,
+      referralCode,
+      referralCount: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...data,
+    });
+  } else {
+    await setDoc(userDocRef, {
+      ...data,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  }
+};
+
+export const incrementResumeLimit = async (amount: number) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const userDocRef = doc(db, 'users', user.uid);
   await updateDoc(userDocRef, {
-    ...data,
+    resumeLimit: increment(amount),
     updatedAt: serverTimestamp(),
   });
 };
@@ -240,9 +272,9 @@ export const applyReferralCode = async (code: string) => {
     updatedAt: serverTimestamp(),
   });
 
-  // 4. Update current user: +1 resume slot, set referredBy
+  // 4. Update current user: +2 resume slots, set referredBy
   await updateDoc(userDocRef, {
-    resumeLimit: increment(1),
+    resumeLimit: increment(2),
     referredBy: referrerId,
     updatedAt: serverTimestamp(),
   });
@@ -270,7 +302,7 @@ export const getGlobalJobs = async (query: string, location: string) => {
       }
     }
   } catch (e) {
-    console.error("Global cache read error:", e);
+    console.warn("Firestore: Global cache read restricted", e);
   }
   return null;
 };
@@ -320,4 +352,24 @@ export const canUserFetchJobs = async () => {
     }
   }
   return true;
+};
+
+// Get referred users list
+export const getReferredUsers = async () => {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return [];
+
+  const q = query(
+    collection(db, 'users'),
+    where('referredBy', '==', currentUser.uid)
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    name: doc.data().name || 'Anonymous User',
+    email: doc.data().email || '',
+    profilePic: doc.data().profilePic || null,
+    createdAt: doc.data().createdAt?.toDate() || new Date(),
+  })).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };

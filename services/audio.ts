@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { Audio } from "expo-av";
 
 let currentRecording: Audio.Recording | null = null;
 let isBusy = false;
@@ -12,10 +12,16 @@ export const AudioService = {
 
     try {
       isBusy = true;
-      
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== "granted") {
+        throw new Error("Missing audio recording permissions.");
+      }
+
       // Aggressive reset
       if (currentRecording) {
-        try { await currentRecording.stopAndUnloadAsync(); } catch (e) {}
+        try {
+          await currentRecording.stopAndUnloadAsync();
+        } catch (e) {}
         currentRecording = null;
       }
 
@@ -29,14 +35,18 @@ export const AudioService = {
       });
 
       const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.prepareToRecordAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      );
       await recording.startAsync();
-      
+
       currentRecording = recording;
       return recording;
     } catch (error) {
       console.error("[AudioService] Start Error:", error);
-      try { await Audio.setAudioModeAsync({ allowsRecordingIOS: false }); } catch(e) {}
+      try {
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      } catch (e) {}
       currentRecording = null;
       throw error;
     } finally {
@@ -75,7 +85,9 @@ export const AudioService = {
     isBusy = true;
     try {
       if (currentRecording) {
-        try { await currentRecording.stopAndUnloadAsync(); } catch (e) {}
+        try {
+          await currentRecording.stopAndUnloadAsync();
+        } catch (e) {}
         currentRecording = null;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
@@ -92,5 +104,5 @@ export const AudioService = {
 
   isBusy() {
     return isBusy;
-  }
+  },
 };

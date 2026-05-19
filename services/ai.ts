@@ -1,7 +1,13 @@
 import { API_CONFIG } from '@/constants/config';
 import { UserStorage } from './storage';
+import { RemoteConfigService } from './remote-config';
 
 export type AIProvider = 'groq' | 'gemini';
+
+export async function callSecureAI(messages: ChatMessage[], options: { provider?: AIProvider, jsonMode?: boolean } = {}) {
+  // Cloud Functions are disabled on Spark plan, using direct AI call instead.
+  return await callAI(messages, options);
+}
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -27,12 +33,14 @@ export async function callAI(
 
 async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
   const userKeyStr = await UserStorage.getGroqKey();
-  const systemKeys = [API_CONFIG.GROQ_API_KEY];
+  const remoteKeys = await RemoteConfigService.getKeys();
+  
+  const systemKeys = [remoteKeys.groq_key || API_CONFIG.GROQ_API_KEY];
   const userKeys = userKeyStr ? userKeyStr.split(',').map(k => k.trim()).filter(Boolean) : [];
   
   // Combine keys and shuffle to balance load/credits
   let keysToTry = [...userKeys, ...systemKeys]
-    .filter(k => k && k !== "YOUR_GROQ_API_KEY")
+    .filter(k => k && !k.startsWith("YOUR_"))
     .sort(() => Math.random() - 0.5);
   
   if (keysToTry.length === 0) {
@@ -64,8 +72,13 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
       const errorData = await response.text();
       console.log(`Groq Key Failed (${apiKey.substring(0, 8)}...): ${response.status} - ${errorData}`);
       
+      if (response.status === 401 || response.status === 403) {
+        lastError = new Error("API Key credits exhausted or invalid. Please check your Groq console.");
+        continue;
+      }
+      
       if (response.status === 429) {
-        lastError = new Error("Groq Rate Limit exceeded. Trying next key...");
+        lastError = new Error("Groq Rate Limit (Credits) reached. Please try adding another key in Profile.");
         continue;
       }
       
@@ -88,11 +101,13 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
 
 async function callGemini(messages: ChatMessage[], jsonMode: boolean) {
   const userKeyStr = await UserStorage.getGeminiKey();
-  const systemKeys = [API_CONFIG.GEMINI_API_KEY];
+  const remoteKeys = await RemoteConfigService.getKeys();
+  
+  const systemKeys = [remoteKeys.gemini_key || API_CONFIG.GEMINI_API_KEY];
   const userKeys = userKeyStr ? userKeyStr.split(',').map(k => k.trim()).filter(Boolean) : [];
   
   // Try user keys first, then fallback to system keys
-  const keysToTry = [...userKeys, ...systemKeys];
+  const keysToTry = [...userKeys, ...systemKeys].filter(k => k && !k.startsWith("YOUR_"));
 
   // Convert messages to Gemini format
   const contents = messages.map(m => ({
@@ -131,4 +146,52 @@ async function callGemini(messages: ChatMessage[], jsonMode: boolean) {
 
   throw lastError || new Error('All Gemini keys failed');
 }
+
+export async function transcribeAudio(uri: string) {
+  const userKeyStr = await UserStorage.getGroqKey();
+  const remoteKeys = await RemoteConfigService.getKeys();
+  
+  const systemKeys = [remoteKeys.groq_key || API_CONFIG.GROQ_API_KEY];
+  const userKeys = userKeyStr ? userKeyStr.split(',').map(k => k.trim()).filter(Boolean) : [];
+  const keysToTry = [...userKeys, ...systemKeys].filter(k => k && !k.startsWith("YOUR_"));
+
+  if (keysToTry.length === 0) {
+    throw new Error('No API keys found for transcription.');
+  }
+
+  // Create form data for Groq Whisper
+  const formData = new FormData();
+  // @ts-ignore
+  formData.append('file', {
+    uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+    type: 'audio/m4a',
+    name: 'recording.m4a',
+  });
+  formData.append('model', 'whisper-large-v3');
+
+  for (const apiKey of keysToTry) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.text;
+      }
+      
+      console.log(`Transcription key failed: ${apiKey.substring(0, 8)}...`);
+    } catch (e) {
+      console.error("Transcription error with key", apiKey.substring(0, 8), e);
+    }
+  }
+
+  throw new Error('Transcription service failed after trying all keys.');
+}
+
+import { Platform } from 'react-native';
 

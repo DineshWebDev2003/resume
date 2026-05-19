@@ -242,16 +242,28 @@ export default function AIInterviewScreen() {
       const messages = [
         { 
           role: 'system' as const, 
-          content: 'Create professionally structured resume JSON. Return ONLY JSON.' 
+          content: 'You are an elite resume architect. Analyze interview answers and generate a high-end JSON resume. Return ONLY JSON.' 
         },
         { 
           role: 'user' as const, 
           content: `
-            Analyze these interview answers and generate a high-end JSON resume:
+            Analyze these interview answers and generate a high-end, professional JSON resume:
             ${JSON.stringify(allAnswers)}
             
             JSON Format:
-            { "name": "string", "role": "string", "summary": "string", "experience": [{"title": "string", "company": "string", "description": "string"}], "skills": ["string"] }
+            {
+              "name": "string",
+              "role": "string",
+              "phone": "string",
+              "email": "string",
+              "location": "string",
+              "website": "string",
+              "summary": "string (professional & high-impact)",
+              "experience": [{"title": "string", "company": "string", "period": "string", "description": "string"}],
+              "skills": ["string"],
+              "education": [{"school": "string", "degree": "string", "year": "string"}],
+              "projects": [{"name": "string", "description": "string", "link": "string"}]
+            }
           ` 
         }
       ];

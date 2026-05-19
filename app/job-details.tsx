@@ -163,7 +163,12 @@ export default function JobDetailsScreen() {
             style={[styles.applyBtn, { flex: 2, flexDirection: 'row', gap: 8 }]}
             onPress={() => router.push({
               pathname: '/builder/ats',
-              params: { jobUrl: job.applyLink, autoScan: 'true' }
+              params: { 
+                jobUrl: job.applyLink, 
+                autoScan: 'true',
+                jobTitle: job.title,
+                company: job.company
+              }
             })}
           >
             <Zap size={18} color="#FFF" fill="#FFF" />

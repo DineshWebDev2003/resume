@@ -7,7 +7,9 @@ import {
     Briefcase,
     ChevronRight,
     Globe,
+    Heart,
     MapPin,
+    Plus,
     Search,
     ShieldCheck,
     SlidersHorizontal,
@@ -28,15 +30,17 @@ import {
     TouchableOpacity,
     View,
     InteractionManager,
+    Modal,
+    Platform,
 } from "react-native";
 import {
     BannerAd,
     BannerAdSize,
-    TestIds,
 } from "react-native-google-mobile-ads";
 import Animated, { FadeInRight, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getGlobalJobs, saveGlobalJobs, canUserFetchJobs } from "@/services/firestore";
+import { useJobStore } from "@/hooks/use-job-store";
 
 const { width } = Dimensions.get("window");
 const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
@@ -47,14 +51,14 @@ const JobAdContainer = ({ colors }: any) => (
       style={[
         styles.adCard,
         {
-          backgroundColor: colors.surface + "80",
+          backgroundColor: colors.surface + "C0",
           borderColor: colors.glassBorder,
         },
       ]}
     >
       <View style={styles.adHeader}>
-        <View style={styles.adBadge}>
-          <Text style={styles.adBadgeText}>SPONSORED</Text>
+        <View style={[styles.adBadge, { backgroundColor: Theme.colors.secondary }]}>
+          <Text style={styles.adBadgeText}>PRO BENEFITS</Text>
         </View>
         <Text style={[styles.adTitle, { color: colors.text }]}>
           Boost Your Career with AI
@@ -80,11 +84,14 @@ export default function JobsScreen() {
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
 
+  const { saveJob, unsaveJob, isJobSaved } = useJobStore();
+
   const [activeTab, setActiveTab] = useState<"Google" | "Throne">("Google");
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLocation, setSelectedLocation] = useState("Tamil Nadu");
   const [query, setQuery] = useState("software jobs");
+  const [showSearch, setShowSearch] = useState(false);
 
   const LOCATIONS = [
     "Tamil Nadu",
@@ -130,13 +137,8 @@ export default function JobsScreen() {
     ]
   };
 
-  const translateTerm = (text: string) => {
-    if (!text) return text;
-    const lower = text.toLowerCase();
-    if (lower.includes("toàn thời gian")) return "Full Time";
-    return text.replace(/[^\x00-\x7F]/g, "").trim() || text;
-  };
-
+  const [customLocations, setCustomLocations] = useState<string[]>([]);
+  
   const fetchJobs = async (searchStr: string, loc: string = selectedLocation) => {
     if (activeTab === "Throne") return;
     setLoading(true);
@@ -155,7 +157,7 @@ export default function JobsScreen() {
       setLoading(false);
       Alert.alert(
         "Daily Limit Reached",
-        "You have reached your daily job search limit. Please use Throne Choice or try again tomorrow to save our community resources!",
+        "You have reached your daily job search limit. Please use Verified Career Choice or try again tomorrow to save our community resources!",
         [{ text: "OK" }]
       );
       return;
@@ -195,32 +197,36 @@ export default function JobsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      
+      {/* Header Widget */}
       <View style={[styles.topFixed, { paddingTop: insets.top + 20 }]}>
         <View style={styles.header}>
           <View>
             <Text style={[styles.title, { color: colors.text }]}>
-              Job Search
+              Explore Jobs
             </Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
               {activeTab === "Google"
-                ? "Sourced via Google Jobs"
-                : "Verified Company Career Pages"}
+                ? "Aggregated Live Opportunities"
+                : "Official Verified Portals"}
             </Text>
           </View>
           <TouchableOpacity
             style={[
               styles.filterBtn,
               {
-                backgroundColor: colors.surface,
-                borderColor: colors.glassBorder,
+                backgroundColor: showSearch ? Theme.colors.primary : colors.surface,
+                borderColor: showSearch ? Theme.colors.primary : colors.glassBorder,
               },
             ]}
+            onPress={() => setShowSearch(prev => !prev)}
+            activeOpacity={0.8}
           >
-            <SlidersHorizontal size={20} color={colors.text} />
+            <Search size={20} color={showSearch ? "#000" : colors.text} />
           </TouchableOpacity>
         </View>
 
-        {/* Tab Switcher */}
+        {/* Tab Selector */}
         <View
           style={[
             styles.tabContainer,
@@ -234,13 +240,13 @@ export default function JobsScreen() {
             onPress={() => setActiveTab("Google")}
             style={[
               styles.tab,
-              activeTab === "Google" && {
+              activeTab === "Google" && [styles.tabActive, {
                 backgroundColor: Theme.colors.primary,
-              },
+              }],
             ]}
           >
             <Globe
-              size={16}
+              size={15}
               color={activeTab === "Google" ? "#000" : colors.textMuted}
             />
             <Text
@@ -249,20 +255,20 @@ export default function JobsScreen() {
                 { color: activeTab === "Google" ? "#000" : colors.textMuted },
               ]}
             >
-              Google Jobs
+              Google Feed
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setActiveTab("Throne")}
             style={[
               styles.tab,
-              activeTab === "Throne" && {
+              activeTab === "Throne" && [styles.tabActive, {
                 backgroundColor: Theme.colors.primary,
-              },
+              }],
             ]}
           >
-            <Star
-              size={16}
+            <ShieldCheck
+              size={15}
               color={activeTab === "Throne" ? "#000" : colors.textMuted}
             />
             <Text
@@ -271,7 +277,7 @@ export default function JobsScreen() {
                 { color: activeTab === "Throne" ? "#000" : colors.textMuted },
               ]}
             >
-              Verified Career
+              Verified Portals
             </Text>
           </TouchableOpacity>
         </View>
@@ -282,70 +288,83 @@ export default function JobsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {activeTab === "Google" ? (
-          <Animated.View entering={FadeInUp}>
-            <GlassCard
-              style={[
-                styles.searchBar,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.glassBorder,
-                },
-              ]}
-            >
-              <Search size={20} color={colors.textMuted} />
-              <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search software, design..."
-                placeholderTextColor={colors.textMuted}
-                onSubmitEditing={() => fetchJobs(query)}
-                returnKeyType="search"
-              />
-            </GlassCard>
+          <Animated.View entering={FadeInUp} style={styles.searchSectionWrapper}>
+            
+            {/* Elegant Unified Search Card */}
+            {showSearch && (
+              <GlassCard style={[styles.unifiedSearchCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                <View style={styles.searchRowField}>
+                  <Search size={18} color={Theme.colors.primary} />
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.text }]}
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Job title, keywords..."
+                    placeholderTextColor={colors.textMuted}
+                    onSubmitEditing={() => fetchJobs(query, selectedLocation)}
+                    returnKeyType="search"
+                  />
+                </View>
 
-            <View style={{ marginBottom: 24 }}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 10 }}
-              >
-                {LOCATIONS.map((loc) => (
-                  <TouchableOpacity
-                    key={loc}
-                    onPress={() => {
-                      setSelectedLocation(loc);
-                      fetchJobs(query, loc);
-                    }}
-                    style={[
-                      styles.locChip,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.glassBorder,
-                      },
-                      selectedLocation === loc && {
-                        backgroundColor: Theme.colors.secondary,
-                        borderColor: Theme.colors.secondary,
-                      },
-                    ]}
-                  >
-                    <Text
+                <View style={[styles.searchDivider, { backgroundColor: colors.glassBorder }]} />
+
+                <View style={styles.searchRowField}>
+                  <MapPin size={18} color={Theme.colors.secondary} />
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.text }]}
+                    value={selectedLocation}
+                    onChangeText={setSelectedLocation}
+                    placeholder="City, State or Remote..."
+                    placeholderTextColor={colors.textMuted}
+                    onSubmitEditing={() => fetchJobs(query, selectedLocation)}
+                    returnKeyType="search"
+                  />
+                </View>
+
+                <TouchableOpacity 
+                  style={[styles.mainSearchBtn, { backgroundColor: Theme.colors.primary }]}
+                  onPress={() => fetchJobs(query, selectedLocation)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.mainSearchBtnText}>Find Opportunities</Text>
+                  <Zap size={16} color="#000" fill="#000" />
+                </TouchableOpacity>
+              </GlassCard>
+            )}
+
+            {/* Quick Filter Location Pills */}
+            <View style={styles.pillsWrapper}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsContainer}>
+                {LOCATIONS.map((loc) => {
+                  const isActive = selectedLocation.toLowerCase() === loc.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={loc}
+                      onPress={() => {
+                        setSelectedLocation(loc);
+                        fetchJobs(query, loc);
+                      }}
                       style={[
-                        styles.locChipText,
-                        { color: colors.text },
-                        selectedLocation === loc && { color: "#fff" },
+                        styles.locPill,
+                        {
+                          backgroundColor: isActive ? Theme.colors.primary : colors.surface,
+                          borderColor: isActive ? Theme.colors.primary : colors.glassBorder,
+                        }
                       ]}
                     >
-                      {loc}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text style={[styles.locPillText, { color: isActive ? "#000" : colors.text }]}>
+                        {loc}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             </View>
 
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={Theme.colors.primary} />
+                <Text style={[styles.loadingText, { color: colors.textMuted }]}>Sourcing best matching jobs...</Text>
               </View>
             ) : (
               jobs.map((job, idx) => (
@@ -359,6 +378,8 @@ export default function JobsScreen() {
                       />
                     </View>
                   )}
+                  
+                  {/* Premium Job Card */}
                   <GlassCard
                     style={[
                       styles.jobCard,
@@ -369,6 +390,7 @@ export default function JobsScreen() {
                     ]}
                   >
                     <TouchableOpacity
+                      activeOpacity={0.7}
                       onPress={() =>
                         router.push({
                           pathname: "/job-details",
@@ -377,23 +399,14 @@ export default function JobsScreen() {
                             company: job.company_name,
                             location: job.location,
                             logo: job.thumbnail,
-                            applyLink:
-                              job.apply_options?.[0]?.link || job.share_link,
-                            salary:
-                              job.detected_extensions?.salary ||
-                              job.salary ||
-                              "Competitive",
+                            applyLink: job.apply_options?.[0]?.link || job.share_link,
+                            salary: job.detected_extensions?.salary || job.salary || "Competitive",
                           },
                         })
                       }
                     >
                       <View style={styles.jobHeader}>
-                        <View
-                          style={[
-                            styles.logoContainer,
-                            { backgroundColor: "#fff" },
-                          ]}
-                        >
+                        <View style={[styles.logoContainer, { backgroundColor: '#fff', borderColor: colors.glassBorder }]}>
                           {job.thumbnail ? (
                             <Image
                               source={{ uri: job.thumbnail }}
@@ -405,79 +418,87 @@ export default function JobsScreen() {
                           )}
                         </View>
                         <View style={styles.jobInfo}>
-                          <Text
-                            style={[styles.jobTitle, { color: colors.text }]}
-                          >
+                          <Text style={[styles.jobTitle, { color: colors.text }]} numberOfLines={2}>
                             {job.title}
                           </Text>
-                          <Text
-                            style={[
-                              styles.companyName,
-                              { color: colors.textMuted },
-                            ]}
-                          >
+                          <Text style={[styles.companyName, { color: colors.textMuted }]}>
                             {job.company_name}
                           </Text>
                         </View>
-                      </View>
-                      <View style={styles.tagRow}>
-                        <View
-                          style={[
-                            styles.tag,
-                            { backgroundColor: Theme.colors.secondary + "10" },
-                          ]}
+                        <TouchableOpacity 
+                          onPress={() => {
+                            const jobId = job.job_id || `${job.title}-${job.company_name}`;
+                            if (isJobSaved(jobId)) {
+                              unsaveJob(jobId);
+                            } else {
+                              saveJob({
+                                id: jobId,
+                                title: job.title,
+                                company: job.company_name,
+                                location: job.location || "Anywhere",
+                                logo: job.thumbnail,
+                                url: job.apply_options?.[0]?.link || job.share_link,
+                                source: 'google',
+                                savedAt: Date.now()
+                              });
+                            }
+                          }}
+                          style={[styles.saveBtn, { backgroundColor: colors.background, borderColor: colors.glassBorder }]}
+                          activeOpacity={0.8}
                         >
-                          <MapPin size={10} color={Theme.colors.secondary} />
-                          <Text
-                            style={[
-                              styles.tagText,
-                              { color: Theme.colors.secondary },
-                            ]}
-                          >
+                          <Heart 
+                            size={18} 
+                            color={isJobSaved(job.job_id || `${job.title}-${job.company_name}`) ? Theme.colors.primary : colors.textMuted} 
+                            fill={isJobSaved(job.job_id || `${job.title}-${job.company_name}`) ? Theme.colors.primary : "transparent"} 
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Metadata tags */}
+                      <View style={styles.tagRow}>
+                        <View style={[styles.tag, { backgroundColor: Theme.colors.primary + "12" }]}>
+                          <MapPin size={11} color={Theme.colors.primary} />
+                          <Text style={[styles.tagText, { color: Theme.colors.primary }]}>
                             {job.location || "Anywhere"}
+                          </Text>
+                        </View>
+                        <View style={[styles.tag, { backgroundColor: Theme.colors.secondary + "12" }]}>
+                          <Zap size={11} color={Theme.colors.secondary} />
+                          <Text style={[styles.tagText, { color: Theme.colors.secondary }]}>
+                            {job.detected_extensions?.schedule_type || "Full-time"}
                           </Text>
                         </View>
                       </View>
                     </TouchableOpacity>
+
+                    {/* Interactive CTAs */}
                     <View style={styles.actionRow}>
                       <TouchableOpacity
-                        style={[
-                          styles.applyBtn,
-                          { flex: 2, flexDirection: "row", gap: 6 },
-                        ]}
+                        style={[styles.applyBtn, { backgroundColor: Theme.colors.primary }]}
                         onPress={() =>
                           router.push({
                             pathname: "/builder/ats",
                             params: {
-                              jobUrl:
-                                job.apply_options?.[0]?.link || job.share_link,
+                              jobUrl: job.apply_options?.[0]?.link || job.share_link,
                               autoScan: "true",
+                              jobTitle: job.title,
+                              company: job.company_name,
                             },
                           })
                         }
+                        activeOpacity={0.85}
                       >
-                        <Zap size={14} color="#FFF" fill="#FFF" />
-                        <Text style={styles.applyBtnText}>
-                          Optimize & Apply
-                        </Text>
+                        <Zap size={13} color="#000" fill="#000" />
+                        <Text style={styles.applyBtnText}>ATS Optimize & Apply</Text>
                       </TouchableOpacity>
+                      
                       <TouchableOpacity
-                        style={[styles.outlineBtn, { flex: 1 }]}
-                        onPress={() =>
-                          Linking.openURL(
-                            job.apply_options?.[0]?.link || job.share_link,
-                          )
-                        }
+                        style={[styles.outlineBtn, { borderColor: colors.glassBorder }]}
+                        onPress={() => Linking.openURL(job.apply_options?.[0]?.link || job.share_link)}
+                        activeOpacity={0.8}
                       >
-                        <Globe size={14} color={colors.text} />
-                        <Text
-                          style={[
-                            styles.outlineBtnText,
-                            { color: colors.text },
-                          ]}
-                        >
-                          Apply
-                        </Text>
+                        <Globe size={13} color={colors.text} />
+                        <Text style={[styles.outlineBtnText, { color: colors.text }]}>Apply Link</Text>
                       </TouchableOpacity>
                     </View>
                   </GlassCard>
@@ -486,7 +507,34 @@ export default function JobsScreen() {
             )}
           </Animated.View>
         ) : (
-          <Animated.View entering={FadeInRight}>
+          <Animated.View entering={FadeInRight} style={styles.verifiedSectionWrapper}>
+            
+            {/* Location Pill Selector for Verified choice */}
+            <View style={[styles.pillsWrapper, { marginTop: 5, marginBottom: 15 }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsContainer}>
+                {LOCATIONS.map((loc) => {
+                  const isActive = selectedLocation.toLowerCase() === loc.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={loc}
+                      onPress={() => setSelectedLocation(loc)}
+                      style={[
+                        styles.locPill,
+                        {
+                          backgroundColor: isActive ? Theme.colors.primary : colors.surface,
+                          borderColor: isActive ? Theme.colors.primary : colors.glassBorder,
+                        }
+                      ]}
+                    >
+                      <Text style={[styles.locPillText, { color: isActive ? "#000" : colors.text }]}>
+                        {loc}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
             {(VERIFIED_COMPANIES[selectedLocation] || VERIFIED_COMPANIES["Tamil Nadu"]).map((job, idx) => (
               <React.Fragment key={job.id}>
                 {idx > 0 && idx % 3 === 0 && (
@@ -498,6 +546,8 @@ export default function JobsScreen() {
                     />
                   </View>
                 )}
+
+                {/* Premium Verified Company Card */}
                 <TouchableOpacity
                   style={[
                     styles.throneCard,
@@ -506,72 +556,96 @@ export default function JobsScreen() {
                       borderColor: colors.glassBorder,
                     },
                   ]}
-                  onPress={() => Linking.openURL(job.url)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/job-details",
+                      params: {
+                        title: job.title,
+                        company: job.company,
+                        location: job.loc,
+                        logo: "",
+                        applyLink: job.url,
+                        salary: job.salary || "Competitive",
+                      },
+                    })
+                  }
+                  activeOpacity={0.8}
                 >
-                  <View style={styles.hotBadge}>
-                    <ShieldCheck size={10} color="#000" fill="#000" />
-                    <Text style={styles.hotText}>VERIFIED SOURCE</Text>
+                  <View style={[styles.hotBadge, { backgroundColor: Theme.colors.primary }]}>
+                    <ShieldCheck size={11} color="#000" fill="#000" />
+                    <Text style={styles.hotText}>OFFICIAL CAREER PORTAL</Text>
                   </View>
+
                   <View style={styles.throneTop}>
                     <View
                       style={[
                         styles.throneLogo,
-                        { backgroundColor: Theme.colors.primary + "20" },
+                        { backgroundColor: Theme.colors.primary + "15", borderColor: Theme.colors.primary + "30" },
                       ]}
                     >
-                      <Briefcase size={24} color={Theme.colors.primary} />
+                      <Briefcase size={22} color={Theme.colors.primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.throneTitle, { color: colors.text }]}
-                      >
+                      <Text style={[styles.throneTitle, { color: colors.text }]} numberOfLines={1}>
                         {job.title}
                       </Text>
-                      <Text
-                        style={[
-                          styles.throneCompany,
-                          { color: colors.textMuted },
-                        ]}
-                      >
+                      <Text style={[styles.throneCompany, { color: colors.textMuted }]}>
                         {job.company}
                       </Text>
                     </View>
-                    <ChevronRight size={20} color={colors.textMuted} />
+                    
+                    <TouchableOpacity 
+                      onPress={() => {
+                        if (isJobSaved(job.id)) {
+                          unsaveJob(job.id);
+                        } else {
+                          saveJob({
+                            id: job.id,
+                            title: job.title,
+                            company: job.company,
+                            location: job.loc,
+                            url: job.url,
+                            source: 'verified',
+                            salary: job.salary,
+                            savedAt: Date.now()
+                          });
+                        }
+                      }}
+                      style={[styles.saveBtn, { backgroundColor: colors.background, borderColor: colors.glassBorder }]}
+                      activeOpacity={0.8}
+                    >
+                      <Heart 
+                        size={18} 
+                        color={isJobSaved(job.id) ? Theme.colors.primary : colors.textMuted} 
+                        fill={isJobSaved(job.id) ? Theme.colors.primary : "transparent"} 
+                      />
+                    </TouchableOpacity>
                   </View>
+
+                  <View style={[styles.horizontalDivider, { backgroundColor: colors.glassBorder }]} />
+
                   <View style={styles.throneMeta}>
                     <View style={styles.metaItem}>
-                      <MapPin size={14} color={colors.textMuted} />
-                      <Text
-                        style={[styles.metaText, { color: colors.textMuted }]}
-                      >
+                      <MapPin size={13} color={colors.textMuted} />
+                      <Text style={[styles.metaText, { color: colors.text }]}>
                         {job.loc}
                       </Text>
                     </View>
-                    <View style={styles.metaItem}>
-                      <Text
-                        style={[
-                          styles.salaryText,
-                          { color: Theme.colors.secondary },
-                        ]}
-                      >
-                        {job.salary}
+                    <View style={[styles.salaryBadge, { backgroundColor: Theme.colors.secondary + "12" }]}>
+                      <Text style={[styles.salaryText, { color: Theme.colors.secondary }]}>
+                        {job.type} • Portal
                       </Text>
                     </View>
                   </View>
-                  <View
-                    style={[
-                      styles.postedBy,
-                      { borderTopColor: colors.glassBorder },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.postedText, { color: colors.textMuted }]}
-                    >
-                      Source:{" "}
-                      <Text style={{ color: colors.text, fontWeight: "700" }}>
-                        Official Career Portal
+
+                  <View style={[styles.postedBy, { borderTopColor: colors.glassBorder }]}>
+                    <Text style={[styles.postedText, { color: colors.textMuted }]}>
+                      Safety Status:{" "}
+                      <Text style={{ color: '#10b981', fontWeight: "800" }}>
+                        100% Secure Direct Link
                       </Text>
                     </Text>
+                    <ChevronRight size={16} color={colors.textMuted} />
                   </View>
                 </TouchableOpacity>
               </React.Fragment>
@@ -595,22 +669,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
-    marginTop: 4,
+    fontSize: 13,
+    marginTop: 2,
+    fontWeight: "600",
+  },
+  filterBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.2,
   },
   tabContainer: {
     flexDirection: "row",
     padding: 6,
     borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 20,
+    borderWidth: 1.2,
+    marginBottom: 16,
   },
   tab: {
     flex: 1,
@@ -619,71 +703,126 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 16,
+    borderRadius: 15,
+  },
+  tabActive: {
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "800",
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 120,
+    paddingBottom: 100,
   },
-  filterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
+  
+  // Search section overrides
+  searchSectionWrapper: {
+    gap: 15,
   },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
+  unifiedSearchCard: {
+    borderRadius: 26,
+    padding: 20,
+    borderWidth: 1.2,
     gap: 12,
-    marginBottom: 16,
-    borderRadius: 20,
-    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  searchRowField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 4,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
+    fontWeight: '600',
+    padding: 0,
   },
-  locChip: {
+  searchDivider: {
+    height: 1.2,
+    width: '100%',
+  },
+  mainSearchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  mainSearchBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#000',
+  },
+
+  // Pills Selection styling
+  pillsWrapper: {
+    marginVertical: 4,
+  },
+  pillsContainer: {
+    gap: 10,
+    paddingRight: 20,
+  },
+  locPill: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 1.2,
   },
-  locChipText: {
+  locPillText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: '700',
   },
+
+  // Loading overrides
   loadingContainer: {
-    paddingVertical: 100,
+    paddingVertical: 80,
     justifyContent: "center",
     alignItems: "center",
+    gap: 12,
   },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Cards design overhaul
   jobCard: {
     padding: 20,
-    borderRadius: 28,
-    borderWidth: 1,
-    marginBottom: 16,
+    borderRadius: 26,
+    borderWidth: 1.2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 4,
+    marginBottom: 14,
   },
   jobHeader: {
     flexDirection: "row",
-    gap: 16,
-    marginBottom: 16,
+    gap: 14,
+    marginBottom: 14,
+    alignItems: 'center',
   },
   logoContainer: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#eee",
+    borderWidth: 1.2,
     overflow: "hidden",
   },
   logo: {
@@ -692,25 +831,35 @@ const styles = StyleSheet.create({
   },
   jobInfo: {
     flex: 1,
+    gap: 2,
   },
   jobTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
+    lineHeight: 20,
   },
   companyName: {
-    fontSize: 14,
-    marginTop: 2,
+    fontSize: 13,
     fontWeight: "600",
+  },
+  saveBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.2,
   },
   tagRow: {
     flexDirection: "row",
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 16,
   },
   tag: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
+    gap: 6,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
   },
@@ -718,92 +867,107 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
-  applyBtn: {
-    backgroundColor: Theme.colors.primary,
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  applyBtnText: {
-    fontWeight: "900",
-    fontSize: 13,
-    color: "#FFFFFF",
-  },
   actionRow: {
     flexDirection: "row",
     gap: 10,
     alignItems: "center",
   },
-  outlineBtn: {
+  applyBtn: {
+    flex: 1.8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.colors.glassBorder,
-    flexDirection: "row",
+    borderRadius: 14,
+  },
+  applyBtnText: {
+    fontWeight: "800",
+    fontSize: 13,
+    color: "#000",
+  },
+  outlineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1.2,
   },
   outlineBtnText: {
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: 12,
+  },
+
+  // Verified section (Throne) overrides
+  verifiedSectionWrapper: {
+    gap: 15,
   },
   throneCard: {
     padding: 20,
-    borderRadius: 28,
-    borderWidth: 1,
-    marginBottom: 20,
+    borderRadius: 26,
+    borderWidth: 1.2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 4,
+    position: 'relative',
     overflow: "hidden",
   },
   hotBadge: {
     position: "absolute",
     top: 0,
     right: 0,
-    backgroundColor: Theme.colors.primary,
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderBottomLeftRadius: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
   hotText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
+    color: '#000',
+    letterSpacing: 0.5,
   },
   throneTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    marginBottom: 20,
+    gap: 14,
+    marginTop: 12,
+    marginBottom: 14,
   },
   throneLogo: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
   },
   throneTitle: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
   },
   throneCompany: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 2,
     fontWeight: "600",
+  },
+  horizontalDivider: {
+    height: 1,
+    width: '100%',
+    marginVertical: 4,
   },
   throneMeta: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    paddingVertical: 10,
   },
   metaItem: {
     flexDirection: "row",
@@ -814,23 +978,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+  salaryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
   salaryText: {
-    fontSize: 14,
-    fontWeight: "900",
+    fontSize: 11,
+    fontWeight: "800",
   },
   postedBy: {
-    paddingTop: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   postedText: {
     fontSize: 12,
+    fontWeight: '500',
   },
+
+  // Sponsoring benefit overrides
   adCard: {
     padding: 20,
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 1.2,
     marginBottom: 16,
-    borderStyle: "dashed",
   },
   adHeader: {
     flexDirection: "row",
@@ -839,15 +1013,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   adBadge: {
-    backgroundColor: "#3b82f6",
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   adBadgeText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
-    color: "#fff",
+    color: "#000",
+    letterSpacing: 0.5,
   },
   adTitle: {
     fontSize: 15,
@@ -869,13 +1043,6 @@ const styles = StyleSheet.create({
     color: "#000",
     fontWeight: "900",
     fontSize: 14,
-  },
-  bannerContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    backgroundColor: "transparent",
-    paddingBottom: 4,
   },
   inlineBanner: {
     alignItems: "center",

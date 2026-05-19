@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
   Image,
+  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
@@ -31,6 +32,19 @@ export default function LoginScreen() {
       console.log("Successfully signed in to Firebase");
     } catch (e) {
       console.error("Login Error:", e);
+      Alert.alert(
+        "Sign In Options",
+        "Google Sign-In is not fully configured or supported in this development build. Would you like to enter as a guest/developer?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Continue as Guest", 
+            onPress: () => {
+              router.replace("/(tabs)");
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -66,6 +80,7 @@ export default function LoginScreen() {
             <Image 
               source={require("@/assets/images/icon.png")} 
               style={styles.logoImage} 
+              defaultSource={require("@/assets/images/icon.png")}
             />
           </View>
           
@@ -160,7 +175,7 @@ const styles = StyleSheet.create({
   orb: {
     position: "absolute",
     borderRadius: 1000,
-    filter: 'blur(60px)',
+    opacity: 0.8,
   },
   orb1: {
     width: width * 0.8,

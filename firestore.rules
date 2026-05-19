@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User profiles
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // ATS analysis history
+    match /ats_history/{docId} {
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Saved job applications
+    match /job_applications/{docId} {
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Stored resumes
+    match /resumes/{docId} {
+      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // Global job search cache (SerpAPI savings)
+    match /global_jobs/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Remote config/settings
+    match /settings/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Templates library
+    match /templates/{templateId} {
+      allow read: if true;
+      allow write: if false; 
+    }
+  }
+}

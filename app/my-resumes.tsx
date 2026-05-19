@@ -20,6 +20,34 @@ import { getAtsHistory } from '@/services/firestore';
 import { exportToPDF } from '@/utils/resume-exporter';
 import { ActivityIndicator } from 'react-native';
 
+const formatDate = (timestamp: number | string | undefined) => {
+  if (!timestamp) return "Recent";
+  const numStamp = typeof timestamp === "string" ? parseInt(timestamp, 10) : timestamp;
+  if (isNaN(numStamp)) return "Recent";
+  
+  const date = new Date(numStamp);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - date.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays <= 1) {
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    if (diffHours < 1) {
+      const diffMins = Math.floor(diffTime / (1000 * 60));
+      return diffMins <= 1 ? "Just now" : `${diffMins}m ago`;
+    }
+    return `${diffHours}h ago`;
+  }
+  if (diffDays === 2) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 export default function MyResumesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -106,87 +134,82 @@ export default function MyResumesScreen() {
            <ActivityIndicator color={Theme.colors.primary} size="large" style={{ marginTop: 100 }} />
         ) : resumes.length > 0 ? (
           resumes.map((resume, i) => (
-            <Animated.View key={i} entering={FadeInDown.delay(i * 100)}>
-              <TouchableOpacity
-                style={[
-                  styles.resumeCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.glassBorder,
-                  },
-                ]}
-                onPress={() =>
-                  router.push(
-                    resume.type === "ats"
-                      ? "/builder/ats"
-                      : ({
-                          pathname: "/builder/manual",
-                          params: { resumeId: resume.id },
-                        } as any),
-                  )
-                }
-              >
-                <View
-                  style={[
-                    styles.avatarBox,
-                    {
-                      backgroundColor:
-                        resume.type === "ats"
-                          ? Theme.colors.secondary + "15"
-                          : Theme.colors.primary + "15",
-                    },
-                  ]}
-                >
-                  {resume.snapshotUri ? (
-                    <Image
-                      source={{ uri: resume.snapshotUri }}
-                      style={styles.snapshot}
-                    />
-                  ) : resume.imageUrl ? (
-                    <Image
-                      source={{ uri: resume.imageUrl }}
-                      style={styles.snapshot}
-                    />
-                  ) : resume.type === "ats" ? (
-                    <ShieldCheck size={24} color={Theme.colors.secondary} />
-                  ) : (
-                    <FileText size={24} color={Theme.colors.primary} />
-                  )}
-                </View>
+             <Animated.View key={i} entering={FadeInDown.delay(i * 100)}>
+               <TouchableOpacity
+                 key={resume.id || i}
+                 style={[
+                   styles.chatCard,
+                   {
+                     backgroundColor: colors.surface,
+                   },
+                 ]}
+                 onPress={() =>
+                   router.push(
+                     resume.type === "ats"
+                       ? "/builder/ats"
+                       : ({
+                           pathname: "/builder/manual",
+                           params: { resumeId: resume.id },
+                         } as any),
+                   )
+                 }
+               >
+                 <View style={styles.resumeCardLeft}>
+                   <View style={styles.resumeIconBox}>
+                     <Image
+                       source={require("@/assets/images/nav-icons/resume.png")}
+                       style={styles.resumeIcon}
+                       resizeMode="contain"
+                     />
+                   </View>
+                 </View>
 
-                <View style={styles.infoBox}>
-                  <Text style={[styles.resumeName, { color: colors.text }]}>
-                    {resume.name}
-                  </Text>
-                  <Text style={[styles.resumeMeta, { color: colors.textMuted }]}>
-                    {resume.type === "ats"
-                      ? `ATS Checked • ${resume.score}%`
-                      : `Modified ${resume.date}`}
-                  </Text>
-                </View>
+                 <View style={styles.chatInfo}>
+                   <Text style={[styles.chatName, { color: colors.text }]} numberOfLines={1}>
+                     {resume.name}
+                   </Text>
+                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                     {resume.type === "ats" ? (
+                       <View style={[styles.badgeContainer, { backgroundColor: isDark ? 'rgba(34, 191, 192, 0.15)' : 'rgba(26, 158, 159, 0.1)' }]}>
+                         <Text style={[styles.badgeText, { color: isDark ? '#22BFC0' : '#1A9E9F' }]}>
+                           ATS {resume.score}%
+                         </Text>
+                       </View>
+                     ) : (
+                       <View style={[styles.badgeContainer, { backgroundColor: isDark ? 'rgba(137, 196, 244, 0.15)' : 'rgba(137, 196, 244, 0.1)' }]}>
+                         <Text style={[styles.badgeText, { color: '#89C4F4' }]}>
+                           Manual
+                         </Text>
+                       </View>
+                     )}
+                     <Text style={[styles.chatMessage, { color: colors.textMuted }]}>
+                       {resume.type === "ats" ? "Checked" : `Modified ${formatDate(resume.lastModified)}`}
+                     </Text>
+                   </View>
+                 </View>
 
-                <View style={styles.actionRow}>
-                  {resume.type === "builder" && (
-                    <TouchableOpacity
-                      onPress={async () => await exportToPDF(resume.data, resume.template)}
-                      style={styles.actionBtn}
-                    >
-                      <Download size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                  {resume.type === "builder" && (
-                    <TouchableOpacity
-                      onPress={() => handleDelete(resume.id)}
-                      style={styles.actionBtn}
-                    >
-                      <Trash2 size={18} color="#ef4444" />
-                    </TouchableOpacity>
-                  )}
-                  <ChevronRight size={18} color={colors.textMuted} />
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-          ))
+                 <View style={styles.chatMeta}>
+                   {resume.type === "builder" && (
+                     <TouchableOpacity
+                       onPress={async () => await exportToPDF(resume.data, resume.template, resume.color)}
+                       style={styles.downloadIconBtn}
+                     >
+                       <Download size={18} color={colors.textMuted} />
+                     </TouchableOpacity>
+                   )}
+                   {resume.type === "builder" && (
+                     <TouchableOpacity
+                       onPress={() => handleDelete(resume.id)}
+                       style={styles.deleteIconBtn}
+                     >
+                       <Trash2 size={18} color="#ef4444" />
+                     </TouchableOpacity>
+                   )}
+                   <ChevronRight size={18} color={colors.textMuted} />
+                 </View>
+               </TouchableOpacity>
+             </Animated.View>
+           ))
         ) : (
           <View style={styles.emptyContainer}>
             <FileText size={64} color={colors.textMuted} opacity={0.3} />
@@ -218,63 +241,83 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 20,
   },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
     fontSize: 20,
     fontWeight: '900',
   },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scrollBody: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+    paddingTop: 10,
   },
-  resumeCard: {
+  chatCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
+    padding: 12,
     borderRadius: 24,
-    borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  avatarBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+  resumeCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  resumeIconBox: {
+    width: 68,
+    height: 68,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
-    overflow: 'hidden'
+    marginRight: 14,
   },
-  snapshot: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
+  resumeIcon: {
+    width: 68,
+    height: 68,
   },
-  infoBox: {
+  chatInfo: {
     flex: 1,
   },
-  resumeName: {
+  chatName: {
     fontSize: 16,
     fontWeight: "700",
     marginBottom: 2,
   },
-  resumeMeta: {
+  chatMessage: {
     fontSize: 13,
   },
-  actionRow: {
+  chatMeta: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  actionBtn: {
+  downloadIconBtn: {
     padding: 8,
     backgroundColor: "rgba(128,128,128,0.1)",
     borderRadius: 10,
+  },
+  deleteIconBtn: {
+    padding: 8,
+    backgroundColor: "rgba(128,128,128,0.1)",
+    borderRadius: 10,
+  },
+  badgeContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   emptyContainer: {
     alignItems: 'center',

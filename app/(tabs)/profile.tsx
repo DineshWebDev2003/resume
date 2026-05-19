@@ -97,8 +97,10 @@ export const getCountryBasedPricing = () => {
       currency: "INR",
       symbol: "₹",
       monthlyPrice: "₹99",
+      weeklyPrice: "₹29",
       annualPrice: "₹599",
       monthlyVal: 99,
+      weeklyVal: 29,
       annualVal: 599,
       country: "India",
       discountBadge: "Save 50%"
@@ -108,8 +110,10 @@ export const getCountryBasedPricing = () => {
       currency: "EUR",
       symbol: "€",
       monthlyPrice: "€4.99",
+      weeklyPrice: "€1.49",
       annualPrice: "€29.99",
       monthlyVal: 4.99,
+      weeklyVal: 1.49,
       annualVal: 29.99,
       country: "Europe",
       discountBadge: "Save 50%"
@@ -119,8 +123,10 @@ export const getCountryBasedPricing = () => {
       currency: "GBP",
       symbol: "£",
       monthlyPrice: "£3.99",
+      weeklyPrice: "£0.99",
       annualPrice: "£23.99",
       monthlyVal: 3.99,
+      weeklyVal: 0.99,
       annualVal: 23.99,
       country: "United Kingdom",
       discountBadge: "Save 50%"
@@ -132,8 +138,10 @@ export const getCountryBasedPricing = () => {
     currency: "USD",
     symbol: "$",
     monthlyPrice: "$9.99",
+    weeklyPrice: "$2.99",
     annualPrice: "$59.99",
     monthlyVal: 9.99,
+    weeklyVal: 2.99,
     annualVal: 59.99,
     country: "United States",
     discountBadge: "Save 50%"
@@ -223,7 +231,7 @@ export default function ProfileScreen() {
         setLoadingIap(true);
         // Dynamically require react-native-iap to prevent any runtime compile-time errors in Expo Go
         const IAP = require('react-native-iap');
-        if (!IAP || typeof IAP.initConnection !== 'function' || typeof IAP.getProducts !== 'function') {
+        if (!IAP || typeof IAP.initConnection !== 'function' || typeof IAP.getSubscriptions !== 'function') {
           console.log("[IAP] Native billing module not available in this host (e.g. Expo Go). Falling back to sandbox.");
           return;
         }
@@ -231,8 +239,13 @@ export default function ProfileScreen() {
         const connected = await IAP.initConnection();
         setIapConnected(connected);
         if (connected) {
-          const products = await IAP.getProducts({ skus: ['pro_monthly', 'pro_yearly'] });
-          setIapProducts(products);
+          try {
+            const products = await IAP.getSubscriptions({ skus: ['pro_plan'] });
+            setIapProducts(products || []);
+            console.log("[IAP] Successfully fetched pro_plan subscription details:", products);
+          } catch (err) {
+            console.log("[IAP] Error fetching subscriptions details:", err);
+          }
         }
       } catch (e) {
         console.warn("[IAP] Connection to Google Play Store failed:", e);
@@ -804,16 +817,13 @@ export default function ProfileScreen() {
                           style={[styles.periodBtn, subBillingPeriod === "monthly" && [styles.periodBtnActive, { backgroundColor: Theme.colors.primary }]]}
                           onPress={() => setSubBillingPeriod("monthly")}
                         >
-                          <Text style={[styles.periodBtnText, { color: subBillingPeriod === "monthly" ? "#fff" : colors.textMuted }]}>Monthly</Text>
+                          <Text style={[styles.periodBtnText, { color: subBillingPeriod === "monthly" ? "#fff" : colors.textMuted }]}>Monthly Plan</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
-                          style={[styles.periodBtn, subBillingPeriod === "yearly" && [styles.periodBtnActive, { backgroundColor: Theme.colors.primary }]]}
-                          onPress={() => setSubBillingPeriod("yearly")}
+                          style={[styles.periodBtn, subBillingPeriod === "weekly" && [styles.periodBtnActive, { backgroundColor: Theme.colors.primary }]]}
+                          onPress={() => setSubBillingPeriod("weekly")}
                         >
-                          <Text style={[styles.periodBtnText, { color: subBillingPeriod === "yearly" ? "#fff" : colors.textMuted }]}>Yearly</Text>
-                          <View style={styles.discountBadgeSmall}>
-                            <Text style={styles.discountBadgeText}>-50%</Text>
-                          </View>
+                          <Text style={[styles.periodBtnText, { color: subBillingPeriod === "weekly" ? "#fff" : colors.textMuted }]}>Weekly Plan</Text>
                         </TouchableOpacity>
                       </View>
 
@@ -834,10 +844,10 @@ export default function ProfileScreen() {
 
                         <View style={styles.priceContainerRow}>
                           <Text style={[styles.premiumPriceNew, { color: colors.text }]}>
-                            {subBillingPeriod === "monthly" ? pricing.monthlyPrice : pricing.annualPrice}
+                            {subBillingPeriod === "monthly" ? pricing.monthlyPrice : pricing.weeklyPrice}
                           </Text>
                           <Text style={[styles.priceSubNew, { color: colors.textMuted }]}>
-                            {subBillingPeriod === "monthly" ? "/month" : "/year"}
+                            {subBillingPeriod === "monthly" ? "/month" : "/week"}
                           </Text>
                         </View>
 
@@ -876,13 +886,36 @@ export default function ProfileScreen() {
                           disabled={simulatedPaying}
                           onPress={async () => {
                             const IAP = require('react-native-iap');
-                            if (!IS_REAL_IAP_MUTED && iapConnected && IAP && typeof IAP.requestPurchase === 'function') {
-                              // Real Google Play Purchase logic via react-native-iap
+                            if (!IS_REAL_IAP_MUTED && iapConnected && IAP && typeof IAP.requestSubscription === 'function') {
                               try {
                                 setSimulatedPaying(true);
-                                const sku = subBillingPeriod === "monthly" ? "pro_monthly" : "pro_yearly";
-                                await IAP.requestPurchase({ sku });
-                                Alert.alert("Success", "Subscription purchased successfully!");
+                                const subProduct = iapProducts.find((p: any) => p.productId === 'pro_plan');
+                                if (subProduct && subProduct.subscriptionOfferDetails) {
+                                  const offer = subProduct.subscriptionOfferDetails.find(
+                                    (o: any) => o.basePlanId === subBillingPeriod
+                                  );
+                                  if (offer) {
+                                    await IAP.requestSubscription({
+                                      sku: 'pro_plan',
+                                      subscriptionOffers: [{
+                                        sku: 'pro_plan',
+                                        offerToken: offer.offerToken,
+                                      }]
+                                    });
+                                    Alert.alert("Success", "Subscription processed successfully!");
+                                  } else {
+                                    Alert.alert("Error", `Base plan ${subBillingPeriod} offer details not found.`);
+                                  }
+                                } else {
+                                  // Fallback direct request
+                                  await IAP.requestSubscription({
+                                    sku: 'pro_plan',
+                                    subscriptionOffers: [{
+                                      sku: 'pro_plan',
+                                      offerToken: '', 
+                                    }]
+                                  });
+                                }
                               } catch (e: any) {
                                 console.log("[IAP] Purchase error, opening simulated sheet", e);
                                 setShowTestCheckout(true);
@@ -1196,7 +1229,7 @@ export default function ProfileScreen() {
                 {simulatedPaying ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.saveBtnText}>Pay Simulated {subBillingPeriod === "monthly" ? pricing.monthlyPrice : pricing.annualPrice}</Text>
+                  <Text style={styles.saveBtnText}>Pay Simulated {subBillingPeriod === "monthly" ? pricing.monthlyPrice : pricing.weeklyPrice}</Text>
                 )}
               </TouchableOpacity>
 

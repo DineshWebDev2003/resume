@@ -807,6 +807,19 @@ export default function ProfileScreen() {
               )}
 
               {activeModal === "Subscription" && (() => {
+                const getDisplayPrice = (period: "monthly" | "weekly") => {
+                  const subProduct = iapProducts.find((p: any) => p.productId === 'pro_plan');
+                  if (subProduct && subProduct.subscriptionOfferDetails) {
+                    const offer = subProduct.subscriptionOfferDetails.find(
+                      (o: any) => o.basePlanId === period
+                    );
+                    if (offer && offer.pricingPhases && offer.pricingPhases.pricingPhaseList && offer.pricingPhases.pricingPhaseList[0]) {
+                      return offer.pricingPhases.pricingPhaseList[0].formattedPrice;
+                    }
+                  }
+                  return period === "monthly" ? pricing.monthlyPrice : pricing.weeklyPrice;
+                };
+
                 return (
                   <View style={styles.pricingContainer}>
                     <View style={{ paddingHorizontal: 25, gap: 20 }}>
@@ -844,7 +857,7 @@ export default function ProfileScreen() {
 
                         <View style={styles.priceContainerRow}>
                           <Text style={[styles.premiumPriceNew, { color: colors.text }]}>
-                            {subBillingPeriod === "monthly" ? pricing.monthlyPrice : pricing.weeklyPrice}
+                            {getDisplayPrice(subBillingPeriod)}
                           </Text>
                           <Text style={[styles.priceSubNew, { color: colors.textMuted }]}>
                             {subBillingPeriod === "monthly" ? "/month" : "/week"}

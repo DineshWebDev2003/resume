@@ -1,45 +1,51 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // User profiles
+
+    // ── User documents (only owner can read/write) ──────────────────────────
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
-    
-    // ATS analysis history
+
+    // ── ATS History (owner only) ────────────────────────────────────────────
     match /ats_history/{docId} {
+      allow read, write: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
-    
-    // Saved job applications
+
+    // ── Job Applications (owner only) ───────────────────────────────────────
     match /job_applications/{docId} {
+      allow read, write: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
-    
-    // Stored resumes
+
+    // ── Resumes (owner only) ────────────────────────────────────────────────
     match /resumes/{docId} {
-      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-    }
-    
-    // Global job search cache (SerpAPI savings)
-    match /global_jobs/{docId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
-    // Remote config/settings
-    match /settings/{docId} {
+    // ── Notifications (owner only) ──────────────────────────────────────────
+    match /notifications/{docId} {
+      allow read, write: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, delete, update: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Global Job Cache (any authenticated user can read; write allowed) ───
+    // Jobs are shared across all users to reduce API calls.
+    // Write is allowed to any authenticated user so the first fetcher caches
+    // results for everyone else.
+    match /global_jobs/{cacheId} {
       allow read: if request.auth != null;
-      allow write: if false;
+      allow write: if request.auth != null;
     }
 
-    // Templates library
-    match /templates/{templateId} {
-      allow read: if true;
-      allow write: if false; 
+    // ── Catch-all: deny everything else ────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

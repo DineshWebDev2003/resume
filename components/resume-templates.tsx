@@ -19,13 +19,30 @@ export type ResumeData = {
     id: string;
     title: string;
     description: string;
+    link?: string;
   }>;
   education: {
     degree: string;
     school: string;
     year: string;
+    honors?: string;
+    cgpa?: string;
+    coursework?: string;
   };
   skills: string;
+  tools?: string;
+  languages?: string;
+  certifications?: Array<{
+    title: string;
+    issuer: string;
+    year: string;
+  }>;
+  achievements?: string[];
+  interests?: string;
+  links?: Array<{
+    label: string;
+    url: string;
+  }>;
 };
 
 export type TemplateProps = {
@@ -1177,7 +1194,7 @@ export const ProfessionalTemplate = ({
                 color: "#1e3a8a",
                 marginBottom: 8,
                 wordBreak: "break-all",
-              },
+              } as any,
             ]}
           >
             {resumeData.email}

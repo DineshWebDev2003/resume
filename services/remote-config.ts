@@ -28,7 +28,8 @@ export const RemoteConfigService = {
         return { groq_key: '', gemini_key: '' };
       }
     } catch (error) {
-      console.error('Error fetching remote keys:', error);
+      // Suppress noisy permission errors in the console and gracefully fallback
+      console.log('Using local AI keys (Remote config unavailable)');
       return { groq_key: '', gemini_key: '' };
     }
   }

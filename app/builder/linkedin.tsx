@@ -901,58 +901,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  guideContainer: {
+  content: {
     width: '100%',
-    marginTop: 32,
-    padding: 20,
-    backgroundColor: '#0077B505',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#0077B510',
   },
-  guideTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 16,
-  },
-  guideStep: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  stepNum: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Theme.colors.primary + '20',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepNumText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: Theme.colors.primary,
-  },
-  stepText: {
-    fontSize: 12,
-    fontWeight: '600',
+  syncBtnGradient: {
     flex: 1,
-    lineHeight: 18,
-  },
-  portalBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#00000008',
+    gap: 12,
   },
-  portalBtnText: {
-    color: Theme.colors.primary,
-    fontSize: 13,
-    fontWeight: '800',
+  syncBtnText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
   },
 });

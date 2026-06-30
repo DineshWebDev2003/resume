@@ -1,223 +1,399 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Dimensions, ActivityIndicator, Modal, ScrollView, NativeModules, TextInput } from 'react-native';
-import { Theme, Colors } from '@/constants/theme';
-import { GlassCard } from '@/components/glass-card';
-import { Mic, MicOff, Volume2, ArrowRight, CheckCircle2, Layout as LayoutIcon, BrainCircuit, Sparkles, ChevronLeft, Keyboard } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { LinearGradient } from 'expo-linear-gradient';
-import LottieView from 'lottie-react-native';
-import * as Haptics from 'expo-haptics';
-import { WebView } from 'react-native-webview';
-import { useAuth } from '@/hooks/use-auth';
-import { db } from '@/services/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { useRewardedAd } from '@/hooks/use-rewarded-ad';
-import { callAI } from '@/services/ai';
-import { Alert } from 'react-native';
-import { Audio } from 'expo-av';
-import { AudioService } from '@/services/audio';
+import { Colors, Theme } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation, useRouter } from "expo-router";
+import {
+  ArrowRight,
+  Award,
+  Briefcase,
+  CheckCircle2,
+  ChevronLeft,
+  Clock,
+  FileText,
+  FolderGit2,
+  GraduationCap,
+  History,
+  Layout as LayoutIcon,
+  Play,
+  Plus,
+  RotateCcw,
+  SkipForward,
+  Sparkles,
+  Trash2,
+  User,
+  Wrench,
+  X
+} from "lucide-react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Animated, { FadeInUp } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const QUESTIONS = [
-  { id: 'name', question: "Hello! I'm your AI Resume Architect. To get started, what is your full name?", key: 'name' },
-  { id: 'role', question: "Great to meet you! And what professional role are you currently in or targeting?", key: 'role' },
-  { id: 'summary', question: "Excellent. Now, briefly describe your professional background and what makes you unique.", key: 'summary' },
-  { id: 'experience', question: "Tell me about your most significant work experience. Include the company name and one key achievement there.", key: 'experience_text' },
-  { id: 'skills', question: "Finally, what are your top professional skills?", key: 'skills_text' },
+import { useAuth } from "@/hooks/use-auth";
+import { useRewardedAd } from "@/hooks/use-rewarded-ad";
+import { callAI } from "@/services/ai";
+import { db } from "@/services/firebase";
+import { ResizeMode, Video } from "expo-av";
+import { BlurView } from "expo-blur";
+import { doc, getDoc } from "firebase/firestore";
+import { Alert } from "react-native";
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+
+const STEPS = [
+  { id: "basic", icon: User, label: "Basic Details" },
+  { id: "education", icon: GraduationCap, label: "Education" },
+  { id: "skills", icon: Wrench, label: "Skills" },
+  { id: "experience", icon: Briefcase, label: "Experience" },
+  { id: "projects", icon: FolderGit2, label: "Projects" },
+  { id: "final", icon: FileText, label: "Final Details" },
 ];
 
-// Using project-wide AudioService singleton instead of local variables
+const TECH_ROLES = [
+  "Frontend Developer",
+  "Backend Developer",
+  "Full Stack Developer",
+  "UI UX Designer",
+  "Mobile Developer",
+  "Data Analyst",
+  "Other",
+];
+const NON_TECH_ROLES = [
+  "Marketing Manager",
+  "Sales Executive",
+  "HR Manager",
+  "Business Analyst",
+  "Project Manager",
+  "Customer Support",
+  "Finance Analyst",
+  "Other",
+];
+const TECH_SKILLS = [
+  "JavaScript",
+  "React",
+  "Node.js",
+  "Python",
+  "Java",
+  "SQL",
+  "AWS",
+  "Git",
+  "Other",
+];
+const NON_TECH_SKILLS = [
+  "Communication",
+  "Leadership",
+  "Marketing",
+  "Sales",
+  "Management",
+  "Customer Support",
+  "Finance",
+  "Other",
+];
+const TECH_TOOLS = [
+  "VS Code",
+  "Git",
+  "Docker",
+  "Figma",
+  "Postman",
+  "Jira",
+  "Linux",
+  "Webpack",
+  "Jenkins",
+  "Other",
+];
+const NON_TECH_TOOLS = [
+  "Excel",
+  "PowerPoint",
+  "Word",
+  "Salesforce",
+  "HubSpot",
+  "Trello",
+  "Asana",
+  "Google Analytics",
+  "Tableau",
+  "Other",
+];
+const CERTIFICATIONS_LIST = [
+  "AWS Certified",
+  "Google Cloud",
+  "Azure",
+  "PMP",
+  "Scrum Master",
+  "CPA",
+  "CFA",
+  "Other",
+];
+
+interface InterviewDraft {
+  id: string;
+  title: string;
+  date: number;
+  data: any;
+}
 
 export default function AIInterviewScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
 
   const [currentStep, setCurrentStep] = useState(0);
-  const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [answers, setAnswers] = useState<any>({});
-  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
-  const [showTextInput, setShowTextInput] = useState(false);
-  const [manualText, setManualText] = useState('');
   const [finalData, setFinalData] = useState<any>(null);
-  const [isVocalWoken, setIsVocalWoken] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [drafts, setDrafts] = useState<InterviewDraft[]>([]);
   const [isPro, setIsPro] = useState(false);
-  const [lastTranscript, setLastTranscript] = useState<string>('');
-  const [isBusyUI, setIsBusyUI] = useState(false);
-  const { user } = useAuth();
-  const { loaded: adLoaded, showAd } = useRewardedAd();
+  const [videoFinished, setVideoFinished] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [showRoleInput, setShowRoleInput] = useState(false);
+  const [showCustomSkillInput, setShowCustomSkillInput] = useState(false);
+  const [showCustomToolInput, setShowCustomToolInput] = useState(false);
+  const [customSkill, setCustomSkill] = useState("");
+  const [customTool, setCustomTool] = useState("");
+  const videoRef = useRef<Video>(null);
 
-  const lottieRef = useRef<LottieView>(null);
-  const vocalBridgeRef = useRef<WebView>(null);
-  const currentQuestion = QUESTIONS[currentStep];
+  const YEARS_LIST = [
+    "Fresher",
+    "0-1 years",
+    "1-2 years",
+    "2-3 years",
+    "3-5 years",
+    "5-10 years",
+    "10+ years",
+  ];
+
+  const [form, setForm] = useState<any>({
+    name: "",
+    mobile: "",
+    email: "",
+    portfolio: "",
+    profileType: "",
+    role: "",
+    roleManual: "",
+    experienceLevel: "",
+    highestQualification: "",
+    college: "",
+    gradYear: "",
+    certification: "",
+    skills: [] as string[],
+    tools: [] as string[],
+    certifications: [] as string[],
+    experiences: [] as any[],
+    projects: [] as any[],
+    summary: "",
+    achievementsFinal: "",
+    languages: "",
+    location: "",
+  });
+
+  const { user, userProfile } = useAuth();
+  const { showAd } = useRewardedAd();
+  const navigation = useNavigation();
+
+  const FORM_DRAFT_KEY = "interview_form_draft";
+
+  useEffect(() => {
+    const p = userProfile;
+    if (user) {
+      setForm((f: any) => ({
+        ...f,
+        name: p?.name || user.displayName || f.name,
+        email: p?.email || user.email || f.email,
+        mobile: p?.phone || user.phoneNumber || f.mobile,
+        portfolio: p?.portfolio || f.portfolio,
+        profileType:
+          p?.isIT === true
+            ? "Technical"
+            : p?.isIT === false
+              ? "Non Technical"
+              : f.profileType,
+        role: p?.primaryRole || f.role,
+        location: p?.location || f.location,
+        highestQualification: p?.education || f.highestQualification,
+      }));
+    }
+  }, [user, userProfile]);
+
+  // Check for saved draft on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(FORM_DRAFT_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (saved.form && saved.currentStep !== undefined) {
+            setShowResumePrompt(true);
+          }
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // Auto-save form on changes (debounced)
+  const saveTimerRef = useRef<any>(null);
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      AsyncStorage.setItem(
+        FORM_DRAFT_KEY,
+        JSON.stringify({ form, currentStep }),
+      ).catch(() => {});
+    }, 1500);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [form, currentStep]);
+
+  // Save on leave
+  useEffect(() => {
+    const unsub = navigation.addListener("beforeRemove", () => {
+      AsyncStorage.setItem(
+        FORM_DRAFT_KEY,
+        JSON.stringify({ form, currentStep }),
+      ).catch(() => {});
+    });
+    return unsub;
+  }, [navigation, form, currentStep]);
+
+  const clearSavedDraft = async () => {
+    await AsyncStorage.removeItem(FORM_DRAFT_KEY).catch(() => {});
+  };
+
+  const resumeSavedDraft = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(FORM_DRAFT_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.form) setForm(saved.form);
+        if (saved.currentStep !== undefined) setCurrentStep(saved.currentStep);
+      }
+    } catch {}
+    setShowResumePrompt(false);
+  };
+
+  const dismissResumePrompt = () => {
+    clearSavedDraft();
+    setShowResumePrompt(false);
+  };
 
   useEffect(() => {
     const checkPro = async () => {
       if (user) {
-        const docRef = doc(db, 'users', user.uid);
+        const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setIsPro(docSnap.data().isPro || false);
-        }
+        if (docSnap.exists()) setIsPro(docSnap.data().isPro || false);
       }
     };
     checkPro();
-    return () => {
-      AudioService.hardReset();
-      stopSpeech();
-    };
   }, [user]);
 
   useEffect(() => {
-    if (isVocalWoken) {
-      // Small delay to ensure WebView is ready
-      const timer = setTimeout(askQuestion, 800);
-      return () => {
-        clearTimeout(timer);
-        stopSpeech();
-      };
+    setVideoFinished(false);
+    setVideoProgress(0);
+    setVideoDuration(0);
+  }, [currentStep]);
+
+  const updateField = (field: string, value: any) =>
+    setForm((p: any) => ({ ...p, [field]: value }));
+  const toggleSkill = (skill: string) => {
+    const skills = form.skills.includes(skill)
+      ? form.skills.filter((s: string) => s !== skill)
+      : [...form.skills, skill];
+    updateField("skills", skills);
+  };
+  const toggleTool = (tool: string) => {
+    const tools = form.tools.includes(tool)
+      ? form.tools.filter((t: string) => t !== tool)
+      : [...form.tools, tool];
+    updateField("tools", tools);
+  };
+  const toggleCertification = (cert: string) => {
+    const certs = form.certifications.includes(cert)
+      ? form.certifications.filter((c: string) => c !== cert)
+      : [...form.certifications, cert];
+    updateField("certifications", certs);
+  };
+  const addCustomSkill = () => {
+    const v = customSkill.trim();
+    if (v && !form.skills.includes(v)) {
+      updateField("skills", [...form.skills, v]);
+      setCustomSkill("");
+      setShowCustomSkillInput(false);
     }
-    return () => {
-      AudioService.hardReset();
+  };
+  const addCustomTool = () => {
+    const v = customTool.trim();
+    if (v && !form.tools.includes(v)) {
+      updateField("tools", [...form.tools, v]);
+      setCustomTool("");
+      setShowCustomToolInput(false);
+    }
+  };
+  const handlePrev = async () => {
+    if (videoRef.current) await videoRef.current.stopAsync();
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+      setVideoFinished(false);
+      setVideoProgress(0);
+    }
+  };
+  const handleSkip = async () => {
+    if (videoRef.current) await videoRef.current.stopAsync();
+    setVideoFinished(true);
+  };
+  const handleNext = () => {
+    if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1);
+    else generateFinalStructure(form);
+  };
+
+  const DRAFTS_KEY = "interview_drafts";
+
+  const loadDrafts = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(DRAFTS_KEY);
+      if (raw) setDrafts(JSON.parse(raw));
+    } catch {}
+  };
+
+  const saveDraft = async (data: any) => {
+    const newDraft: InterviewDraft = {
+      id: Date.now().toString(),
+      title: `${data.role || "Resume"} - ${data.name || "Untitled"}`,
+      date: Date.now(),
+      data,
     };
-  }, [currentStep, isVocalWoken]);
-
-  const wakeAssistant = () => {
-    setIsVocalWoken(true);
-    // Initial silent sound to unlock audio context
-    if (vocalBridgeRef.current) {
-      const js = `
-        var msg = new SpeechSynthesisUtterance("Vocal engine activated");
-        msg.volume = 0; // Silent first speak to unlock
-        window.speechSynthesis.speak(msg);
-        window.ReactNativeWebView.postMessage("vocal_woken");
-      `;
-      vocalBridgeRef.current.injectJavaScript(js);
-    }
+    let updated = [newDraft, ...drafts];
+    if (updated.length > 3) updated = updated.slice(0, 3);
+    setDrafts(updated);
+    await AsyncStorage.setItem(DRAFTS_KEY, JSON.stringify(updated));
   };
 
-  const speakThroughWeb = (text: string) => {
-    if (vocalBridgeRef.current && isVocalWoken) {
-      const encoded = encodeURIComponent(text);
-      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=en&client=tw-ob`;
-      
-      const js = `
-        var audio = new Audio("${ttsUrl}");
-        audio.onended = function() { window.ReactNativeWebView.postMessage("speech_done"); };
-        audio.onerror = function() { window.ReactNativeWebView.postMessage("speech_error"); };
-        audio.play().catch(function(e) { 
-           // If play fails, try synthesis as backup 
-           var msg = new SpeechSynthesisUtterance(${JSON.stringify(text)});
-           msg.onend = function() { window.ReactNativeWebView.postMessage("speech_done"); };
-           window.speechSynthesis.speak(msg);
-        });
-      `;
-      vocalBridgeRef.current.injectJavaScript(js);
-      setIsSpeaking(true);
-    }
+  const deleteDraft = async (id: string) => {
+    const updated = drafts.filter((d) => d.id !== id);
+    setDrafts(updated);
+    await AsyncStorage.setItem(DRAFTS_KEY, JSON.stringify(updated));
   };
 
-  const stopSpeech = () => {
-    if (vocalBridgeRef.current) {
-      vocalBridgeRef.current.injectJavaScript('window.speechSynthesis.cancel();');
-    }
-    setIsSpeaking(false);
-  };
-
-  const askQuestion = () => {
-    speakThroughWeb(QUESTIONS[currentStep].question);
-  };
-
-
-  const startRecording = async () => {
-    if (AudioService.isBusy() || AudioService.isRecording() || isBusyUI) {
-      return;
-    }
-
-    try {
-      setIsBusyUI(true);
-      await AudioService.startRecording();
-      setIsListening(true);
-      setLastTranscript(''); 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
-      console.error('Failed to start recording', err);
-    } finally {
-      setIsBusyUI(false);
-    }
-  };
-
-  const stopRecording = async () => {
-    if (AudioService.isBusy() || !AudioService.isRecording() || isBusyUI) return;
-    
-    setIsListening(false);
-    setIsProcessing(true);
-    setIsBusyUI(true);
-    
-    try {
-      const uri = await AudioService.stopRecording();
-      
-      if (uri) {
-        const transcript = await transcribeAudio(uri);
-        setLastTranscript(transcript);
-        const newAnswers = { ...answers, [currentQuestion.key]: transcript };
-        setAnswers(newAnswers);
-
-        if (currentStep < QUESTIONS.length - 1) {
-          setCurrentStep(currentStep + 1);
-        } else {
-          await generateFinalStructure(newAnswers);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to stop recording', err);
-    } finally {
-      setIsProcessing(false);
-      setIsBusyUI(false);
-    }
-  };
-
-  const transcribeAudio = async (uri: string) => {
-    try {
-      const FileSystem = require('expo-file-system');
-      const formData = new FormData();
-      // @ts-ignore
-      formData.append('file', { uri, type: 'audio/m4a', name: 'recording.m4a' });
-      formData.append('model', 'whisper-large-v3');
-
-      const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${API_CONFIG.GROQ_API_KEY}` },
-        body: formData,
-      });
-
-      const data = await response.json();
-      return data.text || "";
-    } catch(e) {
-      return "Audio capture failed";
-    }
-  };
-
-  const handleManualSubmit = async () => {
-    if (!manualText.trim()) return;
-    const text = manualText;
-    setManualText('');
-    setShowTextInput(false);
-    
-    const newAnswers = { ...answers, [currentQuestion.key]: text };
-    setAnswers(newAnswers);
-
-    if (currentStep < QUESTIONS.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      await generateFinalStructure(newAnswers);
-    }
+  const loadDraftToForm = (draft: InterviewDraft) => {
+    const { synthesizedData, ...cleanData } = draft.data;
+    setForm(cleanData);
+    setShowHistory(false);
+    deleteDraft(draft.id);
+    startSynthesis(cleanData);
   };
 
   const generateFinalStructure = async (allAnswers: any) => {
@@ -227,53 +403,48 @@ export default function AIInterviewScreen() {
         "AI Interview Synthesis is a pro feature. Watch one short ad to unlock it for this resume?",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Watch Ad", onPress: () => showAd(() => startSynthesis(allAnswers)) }
-        ]
+          {
+            text: "Watch Ad",
+            onPress: () => showAd(() => startSynthesis(allAnswers)),
+          },
+        ],
       );
       return;
     }
-    
     startSynthesis(allAnswers);
   };
 
   const startSynthesis = async (allAnswers: any) => {
     setIsProcessing(true);
     try {
+      const payload = {
+        ...allAnswers,
+        role:
+          allAnswers.role === "Other" ? allAnswers.roleManual : allAnswers.role,
+        experiences: allAnswers.experiences || [],
+        projects: allAnswers.projects || [],
+      };
       const messages = [
-        { 
-          role: 'system' as const, 
-          content: 'You are an elite resume architect. Analyze interview answers and generate a high-end JSON resume. Return ONLY JSON.' 
+        {
+          role: "system" as const,
+          content:
+            "You are an elite ATS resume architect. Generate a high-end JSON resume optimized for Applicant Tracking Systems. Use strong action verbs, quantify achievements, include relevant keywords from the role, and write compelling bullet points. Return ONLY valid JSON.",
         },
-        { 
-          role: 'user' as const, 
-          content: `
-            Analyze these interview answers and generate a high-end, professional JSON resume:
-            ${JSON.stringify(allAnswers)}
-            
-            JSON Format:
-            {
-              "name": "string",
-              "role": "string",
-              "phone": "string",
-              "email": "string",
-              "location": "string",
-              "website": "string",
-              "summary": "string (professional & high-impact)",
-              "experience": [{"title": "string", "company": "string", "period": "string", "description": "string"}],
-              "skills": ["string"],
-              "education": [{"school": "string", "degree": "string", "year": "string"}],
-              "projects": [{"name": "string", "description": "string", "link": "string"}]
-            }
-          ` 
-        }
+        {
+          role: "user" as const,
+          content: `Generate a professional ATS-optimized JSON resume from this candidate data:\n${JSON.stringify(payload)}\n\nRules:\n- Summary: 2-3 punchy lines with keywords, metrics, and role-specific terms\n- Experience: Rewrite each entry with action verbs (Led, Built, Increased, Optimized), quantify results (%, $, time saved), and include relevant keywords\n- Skills: Merge tools + certifications into the skills array, categorize as Technical/Professional\n- Projects: Write concise descriptions highlighting impact and technologies\n- Education: Include degree, school, year\n\nJSON Format:\n{\n  "name": "string",\n  "role": "string",\n  "phone": "string",\n  "email": "string",\n  "location": "string",\n  "website": "string",\n  "summary": "string (ATS-optimized, 2-3 lines)",\n  "experience": [{"title":"string","company":"string","period":"string","description":"string (action-oriented with metrics)"}],\n  "skills": ["string"],\n  "education": [{"school":"string","degree":"string","year":"string"}],\n  "projects": [{"name":"string","description":"string (impact-focused)","link":"string"}],\n  "certifications": ["string"],\n  "languages": ["string"]\n}`,
+        },
       ];
-
       const resultText = await callAI(messages, { jsonMode: true });
-      const result = JSON.parse(resultText);
-      setFinalData(result);
-      setShowTemplatePicker(true);
-    } catch (error) {
-      console.error("Synthesis Error:", error);
+      const parsed = JSON.parse(resultText);
+      setFinalData(parsed);
+      await saveDraft({ ...allAnswers, synthesizedData: parsed });
+      await clearSavedDraft();
+      router.replace({
+        pathname: "/builder/manual",
+        params: { theme: "Modern", initialData: JSON.stringify(parsed) },
+      });
+    } catch {
       Alert.alert("Error", "Could not connect to AI. Please try again.");
     } finally {
       setIsProcessing(false);
@@ -283,257 +454,1870 @@ export default function AIInterviewScreen() {
   const handleTemplateSelect = (template: string) => {
     setShowTemplatePicker(false);
     router.push({
-      pathname: '/builder/manual',
-      params: { theme: template, initialData: JSON.stringify(finalData) }
+      pathname: "/builder/manual",
+      params: { theme: template, initialData: JSON.stringify(finalData) },
     });
   };
 
+  const fmt = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+  };
+
+  const renderInput = (
+    field: string,
+    placeholder: string,
+    multiline = false,
+  ) => (
+    <TextInput
+      style={[
+        s.input,
+        {
+          color: "#fff",
+          borderColor: "rgba(255,255,255,0.2)",
+          backgroundColor: "rgba(255,255,255,0.07)",
+        },
+      ]}
+      placeholder={placeholder}
+      placeholderTextColor="rgba(255,255,255,0.5)"
+      value={form[field]}
+      onChangeText={(v) => updateField(field, v)}
+      multiline={multiline}
+    />
+  );
+
+  const roleOptions =
+    form.profileType === "Technical"
+      ? TECH_ROLES
+      : form.profileType === "Non Technical"
+        ? NON_TECH_ROLES
+        : [];
+
+  const renderForm = () => {
+    switch (currentStep) {
+      case 0:
+        return (
+          <>
+            <View style={s.sbRow}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <User size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>Full Name</Text>
+                {renderInput("name", "Your full name")}
+                <Text style={[s.fl, { marginTop: 14 }]}>Mobile Number</Text>
+                {renderInput("mobile", "+91 98765 43210")}
+                <Text style={[s.fl, { marginTop: 14 }]}>Email</Text>
+                {renderInput("email", "your@email.com")}
+                <Text style={[s.fl, { marginTop: 14 }]}>
+                  Portfolio / Website
+                </Text>
+                {renderInput("portfolio", "https://yourportfolio.com")}
+              </View>
+            </View>
+            <View style={s.sbRow}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <Wrench size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>Profile Type</Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity
+                    style={[
+                      s.ptBtn,
+                      {
+                        borderColor:
+                          form.profileType === "Technical"
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.15)",
+                        backgroundColor:
+                          form.profileType === "Technical"
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.05)",
+                      },
+                    ]}
+                    onPress={() => {
+                      updateField("profileType", "Technical");
+                      updateField("role", "");
+                      setShowRoleInput(false);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color:
+                          form.profileType === "Technical"
+                            ? "#fff"
+                            : "rgba(255,255,255,0.7)",
+                        fontWeight: "800",
+                        fontSize: 14,
+                      }}
+                    >
+                      Technical
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      s.ptBtn,
+                      {
+                        borderColor:
+                          form.profileType === "Non Technical"
+                            ? Theme.colors.secondary
+                            : "rgba(255,255,255,0.15)",
+                        backgroundColor:
+                          form.profileType === "Non Technical"
+                            ? Theme.colors.secondary
+                            : "rgba(255,255,255,0.05)",
+                      },
+                    ]}
+                    onPress={() => {
+                      updateField("profileType", "Non Technical");
+                      updateField("role", "");
+                      setShowRoleInput(false);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color:
+                          form.profileType === "Non Technical"
+                            ? "#fff"
+                            : "rgba(255,255,255,0.7)",
+                        fontWeight: "800",
+                        fontSize: 14,
+                      }}
+                    >
+                      Non Technical
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+            {form.profileType && (
+              <View style={s.sbRow}>
+                <View
+                  style={[
+                    s.sbBox,
+                    {
+                      backgroundColor: "rgba(255,255,255,0.1)",
+                      borderColor: "rgba(255,255,255,0.2)",
+                    },
+                  ]}
+                >
+                  <Briefcase size={18} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.fl}>Target Role</Text>
+                  <View
+                    style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                  >
+                    {roleOptions.map((r) => (
+                      <TouchableOpacity
+                        key={r}
+                        style={[
+                          s.chip,
+                          {
+                            borderColor:
+                              form.role === r
+                                ? Theme.colors.primary
+                                : "rgba(255,255,255,0.15)",
+                            backgroundColor:
+                              form.role === r
+                                ? Theme.colors.primary
+                                : "rgba(255,255,255,0.06)",
+                          },
+                        ]}
+                        onPress={() => {
+                          updateField("role", r);
+                          setShowRoleInput(r === "Other");
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color:
+                              form.role === r
+                                ? "#fff"
+                                : "rgba(255,255,255,0.8)",
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {r}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {showRoleInput && (
+                    <TextInput
+                      style={[s.input, { marginTop: 8 }]}
+                      placeholder="Enter your role manually"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={form.roleManual}
+                      onChangeText={(v) => updateField("roleManual", v)}
+                    />
+                  )}
+                </View>
+              </View>
+            )}
+            <View style={s.sbRow}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <User size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>Experience</Text>
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                >
+                  {YEARS_LIST.map((y) => (
+                    <TouchableOpacity
+                      key={y}
+                      style={[
+                        s.chip,
+                        {
+                          borderColor:
+                            form.experienceLevel === y
+                              ? Theme.colors.primary
+                              : "rgba(255,255,255,0.15)",
+                          backgroundColor:
+                            form.experienceLevel === y
+                              ? Theme.colors.primary
+                              : "rgba(255,255,255,0.06)",
+                        },
+                      ]}
+                      onPress={() => updateField("experienceLevel", y)}
+                    >
+                      <Text
+                        style={{
+                          color:
+                            form.experienceLevel === y
+                              ? "#fff"
+                              : "rgba(255,255,255,0.8)",
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {y}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[s.nbG, { backgroundColor: Theme.colors.primary }]}
+              onPress={handleNext}
+            >
+              <View style={s.nbI}>
+                <Text style={s.nbT}>Next Step</Text>
+                <ArrowRight size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 1:
+        return (
+          <>
+            <View style={s.sbRow}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <GraduationCap size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>Highest Qualification</Text>
+                {renderInput("highestQualification", "e.g. Bachelor Degree")}
+                <Text style={[s.fl, { marginTop: 14 }]}>
+                  College / University
+                </Text>
+                {renderInput("college", "Enter college name")}
+                <Text style={[s.fl, { marginTop: 14 }]}>Graduation Year</Text>
+                {renderInput("gradYear", "e.g. 2024")}
+                <Text style={[s.fl, { marginTop: 14 }]}>
+                  Certification (Optional)
+                </Text>
+                {renderInput("certification", "e.g. AWS Certified")}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[s.nbG, { backgroundColor: Theme.colors.primary }]}
+              onPress={handleNext}
+            >
+              <View style={s.nbI}>
+                <Text style={s.nbT}>Next Step</Text>
+                <ArrowRight size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 2:
+        const isTech = form.profileType === "Technical";
+        const skillPool = isTech ? TECH_SKILLS : NON_TECH_SKILLS;
+        const toolPool = isTech ? TECH_TOOLS : NON_TECH_TOOLS;
+        const customSkills = form.skills.filter(
+          (s: string) => !skillPool.includes(s),
+        );
+        const customTools = form.tools.filter(
+          (t: string) => !toolPool.includes(t),
+        );
+        const customCerts = form.certifications.filter(
+          (c: string) => !CERTIFICATIONS_LIST.includes(c),
+        );
+        return (
+          <>
+            <View style={s.sbRow}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <Wrench size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>
+                  {isTech ? "Technical Skills" : "Professional Skills"}
+                </Text>
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                >
+                  {skillPool.map((sk) => (
+                    <TouchableOpacity
+                      key={sk}
+                      style={[
+                        s.chip,
+                        {
+                          borderColor: form.skills.includes(sk)
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.15)",
+                          backgroundColor: form.skills.includes(sk)
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.06)",
+                        },
+                      ]}
+                      onPress={() => toggleSkill(sk)}
+                    >
+                      <Text
+                        style={{
+                          color: form.skills.includes(sk)
+                            ? "#fff"
+                            : "rgba(255,255,255,0.8)",
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {sk}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {customSkills.length > 0 && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      marginTop: 6,
+                    }}
+                  >
+                    {customSkills.map((sk: string) => (
+                      <TouchableOpacity
+                        key={sk}
+                        style={[
+                          s.chip,
+                          {
+                            borderColor: Theme.colors.primary,
+                            backgroundColor: Theme.colors.primary,
+                          },
+                        ]}
+                        onPress={() => toggleSkill(sk)}
+                      >
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {sk}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                {showCustomSkillInput ? (
+                  <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
+                    <TextInput
+                      style={[s.input, { flex: 1 }]}
+                      placeholder="Type a skill"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={customSkill}
+                      onChangeText={setCustomSkill}
+                      onSubmitEditing={addCustomSkill}
+                    />
+                    <TouchableOpacity
+                      onPress={addCustomSkill}
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        backgroundColor: Theme.colors.primary,
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Plus size={20} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setShowCustomSkillInput(true)}
+                    style={{ marginTop: 8 }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Plus size={14} color={Theme.colors.primary} />
+                      <Text
+                        style={{
+                          color: Theme.colors.primary,
+                          fontSize: 13,
+                          fontWeight: "600",
+                        }}
+                      >
+                        Add custom skill
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            <View style={[s.sbRow, { marginTop: 14 }]}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <Wrench size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>Tools</Text>
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                >
+                  {toolPool.map((tl) => (
+                    <TouchableOpacity
+                      key={tl}
+                      style={[
+                        s.chip,
+                        {
+                          borderColor: form.tools.includes(tl)
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.15)",
+                          backgroundColor: form.tools.includes(tl)
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.06)",
+                        },
+                      ]}
+                      onPress={() => toggleTool(tl)}
+                    >
+                      <Text
+                        style={{
+                          color: form.tools.includes(tl)
+                            ? "#fff"
+                            : "rgba(255,255,255,0.8)",
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {tl}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {customTools.length > 0 && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      marginTop: 6,
+                    }}
+                  >
+                    {customTools.map((tl: string) => (
+                      <TouchableOpacity
+                        key={tl}
+                        style={[
+                          s.chip,
+                          {
+                            borderColor: Theme.colors.primary,
+                            backgroundColor: Theme.colors.primary,
+                          },
+                        ]}
+                        onPress={() => toggleTool(tl)}
+                      >
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {tl}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                {showCustomToolInput ? (
+                  <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
+                    <TextInput
+                      style={[s.input, { flex: 1 }]}
+                      placeholder="Type a tool"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={customTool}
+                      onChangeText={setCustomTool}
+                      onSubmitEditing={addCustomTool}
+                    />
+                    <TouchableOpacity
+                      onPress={addCustomTool}
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        backgroundColor: Theme.colors.primary,
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Plus size={20} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setShowCustomToolInput(true)}
+                    style={{ marginTop: 8 }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Plus size={14} color={Theme.colors.primary} />
+                      <Text
+                        style={{
+                          color: Theme.colors.primary,
+                          fontSize: 13,
+                          fontWeight: "600",
+                        }}
+                      >
+                        Add custom tool
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            <View style={[s.sbRow, { marginTop: 14 }]}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <Award size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>Certifications</Text>
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                >
+                  {CERTIFICATIONS_LIST.map((cert) => (
+                    <TouchableOpacity
+                      key={cert}
+                      style={[
+                        s.chip,
+                        {
+                          borderColor: form.certifications.includes(cert)
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.15)",
+                          backgroundColor: form.certifications.includes(cert)
+                            ? Theme.colors.primary
+                            : "rgba(255,255,255,0.06)",
+                        },
+                      ]}
+                      onPress={() => toggleCertification(cert)}
+                    >
+                      <Text
+                        style={{
+                          color: form.certifications.includes(cert)
+                            ? "#fff"
+                            : "rgba(255,255,255,0.8)",
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {cert}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {customCerts.length > 0 && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      marginTop: 6,
+                    }}
+                  >
+                    {customCerts.map((cert: string) => (
+                      <TouchableOpacity
+                        key={cert}
+                        style={[
+                          s.chip,
+                          {
+                            borderColor: Theme.colors.primary,
+                            backgroundColor: Theme.colors.primary,
+                          },
+                        ]}
+                        onPress={() => toggleCertification(cert)}
+                      >
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {cert}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[s.nbG, { backgroundColor: Theme.colors.primary }]}
+              onPress={handleNext}
+            >
+              <View style={s.nbI}>
+                <Text style={s.nbT}>Next Step</Text>
+                <ArrowRight size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 3:
+        if (form.experienceLevel === "Fresher") {
+          return (
+            <View
+              style={{ alignItems: "center", gap: 16, paddingVertical: 30 }}
+            >
+              <CheckCircle2 size={48} color={Theme.colors.primary} />
+              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>
+                Skipped — Fresher
+              </Text>
+              <TouchableOpacity
+                style={[s.nbG, { backgroundColor: Theme.colors.primary }]}
+                onPress={handleNext}
+              >
+                <View style={s.nbI}>
+                  <Text style={s.nbT}>Next Step</Text>
+                  <ArrowRight size={20} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            </View>
+          );
+        }
+        const addExperience = () => {
+          setForm((p: any) => ({
+            ...p,
+            experiences: [
+              ...p.experiences,
+              { company: "", jobTitle: "", duration: "", responsibilities: "" },
+            ],
+          }));
+        };
+        const updateExp = (idx: number, field: string, value: string) => {
+          setForm((p: any) => {
+            const exps = [...p.experiences];
+            exps[idx] = { ...exps[idx], [field]: value };
+            return { ...p, experiences: exps };
+          });
+        };
+        const removeExp = (idx: number) => {
+          setForm((p: any) => ({
+            ...p,
+            experiences: p.experiences.filter((_: any, i: number) => i !== idx),
+          }));
+        };
+        return (
+          <>
+            <View style={{ gap: 16, paddingBottom: 8 }}>
+              {form.experiences.length === 0 && (
+                <View style={{ alignItems: "center", paddingVertical: 12 }}>
+                  <Text
+                    style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}
+                  >
+                    No experience added yet
+                  </Text>
+                </View>
+              )}
+              {form.experiences.map((exp: any, idx: number) => (
+                <View
+                  key={idx}
+                  style={[
+                    s.sbRow,
+                    {
+                      borderWidth: 1,
+                      borderColor: "rgba(255,255,255,0.1)",
+                      borderRadius: 16,
+                      padding: 12,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      s.sbBox,
+                      {
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        borderColor: "rgba(255,255,255,0.2)",
+                      },
+                    ]}
+                  >
+                    <Briefcase size={18} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text style={s.fl}>Experience {idx + 1}</Text>
+                      <TouchableOpacity onPress={() => removeExp(idx)}>
+                        <X size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={[s.fl, { marginTop: 8 }]}>Company Name</Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                        },
+                      ]}
+                      placeholder="Enter company name"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={exp.company}
+                      onChangeText={(v) => updateExp(idx, "company", v)}
+                    />
+                    <Text style={[s.fl, { marginTop: 10 }]}>Job Title</Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                        },
+                      ]}
+                      placeholder="Enter your job title"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={exp.jobTitle}
+                      onChangeText={(v) => updateExp(idx, "jobTitle", v)}
+                    />
+                    <Text style={[s.fl, { marginTop: 10 }]}>Duration</Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                        },
+                      ]}
+                      placeholder="e.g. 2 years"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={exp.duration}
+                      onChangeText={(v) => updateExp(idx, "duration", v)}
+                    />
+                    <Text style={[s.fl, { marginTop: 10 }]}>
+                      Responsibilities
+                    </Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                          minHeight: 100,
+                          textAlignVertical: "top",
+                        },
+                      ]}
+                      placeholder="Describe your responsibilities"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={exp.responsibilities}
+                      onChangeText={(v) =>
+                        updateExp(idx, "responsibilities", v)
+                      }
+                      multiline
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity
+              onPress={addExperience}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 14,
+                borderRadius: 14,
+                borderWidth: 2,
+                borderColor: Theme.colors.primary,
+                marginBottom: 8,
+              }}
+            >
+              <Plus size={18} color={Theme.colors.primary} />
+              <Text
+                style={{
+                  color: Theme.colors.primary,
+                  fontSize: 14,
+                  fontWeight: "700",
+                }}
+              >
+                Add Experience
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.nbG, { backgroundColor: Theme.colors.primary }]}
+              onPress={handleNext}
+            >
+              <View style={s.nbI}>
+                <Text style={s.nbT}>Next Step</Text>
+                <ArrowRight size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 4:
+        const addProject = () => {
+          setForm((p: any) => ({
+            ...p,
+            projects: [
+              ...p.projects,
+              { name: "", description: "", tech: "", role: "", link: "" },
+            ],
+          }));
+        };
+        const updateProject = (idx: number, field: string, value: string) => {
+          setForm((p: any) => {
+            const projs = [...p.projects];
+            projs[idx] = { ...projs[idx], [field]: value };
+            return { ...p, projects: projs };
+          });
+        };
+        const removeProject = (idx: number) => {
+          setForm((p: any) => ({
+            ...p,
+            projects: p.projects.filter((_: any, i: number) => i !== idx),
+          }));
+        };
+        return (
+          <>
+            <View style={{ gap: 16, paddingBottom: 8 }}>
+              {form.projects.length === 0 && (
+                <View style={{ alignItems: "center", paddingVertical: 12 }}>
+                  <Text
+                    style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}
+                  >
+                    No projects added yet
+                  </Text>
+                </View>
+              )}
+              {form.projects.map((proj: any, idx: number) => (
+                <View
+                  key={idx}
+                  style={[
+                    s.sbRow,
+                    {
+                      borderWidth: 1,
+                      borderColor: "rgba(255,255,255,0.1)",
+                      borderRadius: 16,
+                      padding: 12,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      s.sbBox,
+                      {
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        borderColor: "rgba(255,255,255,0.2)",
+                      },
+                    ]}
+                  >
+                    <FolderGit2 size={18} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text style={s.fl}>Project {idx + 1}</Text>
+                      <TouchableOpacity onPress={() => removeProject(idx)}>
+                        <X size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={[s.fl, { marginTop: 8 }]}>Project Name</Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                        },
+                      ]}
+                      placeholder="Enter project name"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={proj.name}
+                      onChangeText={(v) => updateProject(idx, "name", v)}
+                    />
+                    <Text style={[s.fl, { marginTop: 10 }]}>Description</Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                          minHeight: 80,
+                          textAlignVertical: "top",
+                        },
+                      ]}
+                      placeholder="Describe the project"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={proj.description}
+                      onChangeText={(v) => updateProject(idx, "description", v)}
+                      multiline
+                    />
+                    <Text style={[s.fl, { marginTop: 10 }]}>
+                      Technologies Used
+                    </Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                        },
+                      ]}
+                      placeholder="e.g. React, Node.js"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={proj.tech}
+                      onChangeText={(v) => updateProject(idx, "tech", v)}
+                    />
+                    <Text style={[s.fl, { marginTop: 10 }]}>Your Role</Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                        },
+                      ]}
+                      placeholder="e.g. Lead Developer"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={proj.role}
+                      onChangeText={(v) => updateProject(idx, "role", v)}
+                    />
+                    <Text style={[s.fl, { marginTop: 10 }]}>
+                      Project Link (Optional)
+                    </Text>
+                    <TextInput
+                      style={[
+                        s.input,
+                        {
+                          color: "#fff",
+                          borderColor: "rgba(255,255,255,0.2)",
+                          backgroundColor: "rgba(255,255,255,0.07)",
+                        },
+                      ]}
+                      placeholder="https://..."
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={proj.link}
+                      onChangeText={(v) => updateProject(idx, "link", v)}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity
+              onPress={addProject}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 14,
+                borderRadius: 14,
+                borderWidth: 2,
+                borderColor: Theme.colors.primary,
+                marginBottom: 8,
+              }}
+            >
+              <Plus size={18} color={Theme.colors.primary} />
+              <Text
+                style={{
+                  color: Theme.colors.primary,
+                  fontSize: 14,
+                  fontWeight: "700",
+                }}
+              >
+                Add Project
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.nbG, { backgroundColor: Theme.colors.primary }]}
+              onPress={handleNext}
+            >
+              <View style={s.nbI}>
+                <Text style={s.nbT}>Next Step</Text>
+                <ArrowRight size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </>
+        );
+
+      case 5:
+        return (
+          <>
+            <View style={s.sbRow}>
+              <View
+                style={[
+                  s.sbBox,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    borderColor: "rgba(255,255,255,0.2)",
+                  },
+                ]}
+              >
+                <FileText size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.fl}>Professional Summary</Text>
+                {renderInput("summary", "Brief summary", true)}
+                <Text style={[s.fl, { marginTop: 14 }]}>Achievements</Text>
+                {renderInput("achievementsFinal", "Key achievements", true)}
+                <Text style={[s.fl, { marginTop: 14 }]}>Languages Known</Text>
+                {renderInput("languages", "e.g. English, Tamil")}
+                <Text style={[s.fl, { marginTop: 14 }]}>Location</Text>
+                {renderInput("location", "City, Country")}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[s.nbG, { backgroundColor: Theme.colors.primary }]}
+              onPress={handleNext}
+            >
+              <View style={s.nbI}>
+                <Text style={s.nbT}>
+                  {isProcessing ? "Generating..." : "Generate Resume"}
+                </Text>
+                {!isProcessing && <ArrowRight size={20} color="#fff" />}
+              </View>
+            </TouchableOpacity>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const videoSource = (() => {
+    const sources: Record<number, any> = {
+      0: require("../../assets/videos/interview/step1_basic_details.mp4"),
+      1: require("../../assets/videos/interview/step2_education.mp4"),
+      2: require("../../assets/videos/interview/step3_skills.mp4"),
+      3: require("../../assets/videos/interview/step4_experience.mp4"),
+      4: require("../../assets/videos/interview/step5_projects.mp4"),
+      5: require("../../assets/videos/interview/step6_final_details.mp4"),
+    };
+    return sources[currentStep];
+  })();
+
+  const VIDEO_BOX_H = (SCREEN_W - 32) * (16 / 9);
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <LinearGradient 
-        colors={isDark ? ['#001a2c', '#121212'] : ['#e0f2ff', '#ffffff']}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { top: insets.top + 10, backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
-        <ChevronLeft color={colors.text} size={28} />
-      </TouchableOpacity>
-
-      <View style={styles.centerContent}>
-        <TouchableOpacity 
-          activeOpacity={0.8}
-          onPress={!isVocalWoken ? wakeAssistant : undefined}
-          style={styles.robotWrapper}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* TOP: header with Resume Creator + history */}
+      <View
+        style={{
+          paddingTop: insets.top + 12,
+          paddingHorizontal: 16,
+          zIndex: 20,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
         >
-          <Animated.View entering={FadeInUp.delay(300)}>
-            <LottieView
-              source={require('../../assets/Ai Robot Animation.json')}
-              autoPlay
-              loop
-              style={styles.robotAnimation}
-            />
-          </Animated.View>
-          
-          {!isVocalWoken && (
-            <Animated.View entering={FadeInDown} style={styles.wakePill}>
-               <Sparkles size={16} color="#fff" />
-               <Text style={styles.wakePillText}>TAP TO WAKE ASSISTANT</Text>
-            </Animated.View>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.questionContainer}>
-          <Text style={[styles.stepText, { color: Theme.colors.primary }]}>STEP {currentStep + 1} OF 5</Text>
-          <Animated.Text key={currentStep} entering={FadeInDown} style={[styles.questionText, { color: colors.text }]}>
-            {currentQuestion.question}
-          </Animated.Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  "Cancel Interview",
+                  "Do you want to discard this interview draft? Your progress will be lost.",
+                  [
+                    { text: "Keep Editing", style: "cancel" },
+                    {
+                      text: "Discard Draft",
+                      style: "destructive",
+                      onPress: async () => {
+                        await clearSavedDraft();
+                        router.back();
+                      },
+                    },
+                  ],
+                );
+              }}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <ChevronLeft color="#fff" size={24} />
+            </TouchableOpacity>
+            <Text
+              style={{ color: colors.text, fontSize: 20, fontWeight: "900" }}
+            >
+              Resume Creator
+            </Text>
+          </View>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              onPress={async () => {
+                await loadDrafts();
+                setShowHistory(true);
+              }}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <History color="#fff" size={20} />
+            </TouchableOpacity>
+          </View>
         </View>
-
-        {isSpeaking && (
-          <View style={styles.statusRow}>
-             <Volume2 size={16} color={Theme.colors.primary} />
-             <Text style={[styles.statusText, { color: colors.text }]}>AI Architect is speaking...</Text>
-          </View>
-        )}
-
-        {isProcessing && (
-          <View style={styles.statusRow}>
-             <ActivityIndicator size="small" color={Theme.colors.primary} />
-             <Text style={[styles.statusText, { color: colors.textMuted }]}>AI is drafting your story...</Text>
-          </View>
-        )}
-
-        {isListening && !isProcessing && (
-          <View style={styles.statusRow}>
-             <View style={[styles.pulseCircle, { backgroundColor: Theme.colors.primary + '30' }]} />
-             <Text style={[styles.statusText, { color: Theme.colors.primary }]}>Listening to you...</Text>
-          </View>
-        )}
-
-        {lastTranscript ? (
-          <View style={[styles.transcriptCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-             <Text style={[styles.transcriptLabel, { color: Theme.colors.primary }]}>YOU SAID:</Text>
-             <Text style={[styles.transcriptText, { color: colors.text }]}>"{lastTranscript}"</Text>
-          </View>
-        ) : null}
       </View>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 40 }]}>
-        <View style={styles.footerRow}>
-           <TouchableOpacity 
-             style={[styles.smallActionBtn, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
-             onPress={() => setShowTextInput(true)}
-           >
-             <Keyboard size={24} color={Theme.colors.primary} />
-           </TouchableOpacity>
-
-           <TouchableOpacity 
-            onPress={isListening ? stopRecording : startRecording}
-            disabled={isSpeaking || isProcessing || isBusyUI}
-            style={[
-              styles.micBtn, 
-              { 
-                backgroundColor: isListening ? '#ef4444' : Theme.colors.primary,
-                opacity: (isSpeaking || isProcessing || isBusyUI) ? 0.5 : 1
+      {/* VIDEO BOX with sketch outline */}
+      <View
+        style={{ flex: 1, paddingHorizontal: 12, justifyContent: "center" }}
+      >
+        <View
+          style={{
+            borderRadius: 28,
+            overflow: "hidden",
+            backgroundColor: colors.surface,
+            height: VIDEO_BOX_H,
+            position: "relative",
+            borderWidth: 3,
+            borderColor: Theme.border.color,
+            shadowColor: Theme.border.color,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.2,
+            shadowRadius: 10,
+            elevation: 8,
+          }}
+        >
+          <Video
+            ref={videoRef}
+            source={videoSource}
+            style={{ width: "105%", height: "105%", alignSelf: "center" }}
+            shouldPlay
+            isMuted={false}
+            resizeMode={ResizeMode.CONTAIN}
+            onPlaybackStatusUpdate={(s) => {
+              if (s.isLoaded) {
+                if (s.durationMillis) setVideoDuration(s.durationMillis);
+                if (s.positionMillis) setVideoProgress(s.positionMillis);
+                if (s.didJustFinish) setVideoFinished(true);
               }
-            ]}
-          >
-            {isListening ? <MicOff size={32} color="#fff" /> : <Mic size={32} color="#fff" />}
-          </TouchableOpacity>
+            }}
+          />
 
-          <View style={styles.smallActionBtnPlaceholder} />
+          {/* During play overlay */}
+          {!videoFinished && (
+            <>
+              <View style={{ position: "absolute", top: 12, left: 12 }}>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    backgroundColor: "rgba(0,0,0,0.55)",
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 14,
+                  }}
+                  onPress={() => {
+                    if (currentStep > 0) handlePrev();
+                  }}
+                >
+                  <ChevronLeft size={12} color="#fff" />
+                  <Text
+                    style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}
+                  >
+                    Prev
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ position: "absolute", top: 12, right: 12 }}>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    backgroundColor: "rgba(0,0,0,0.55)",
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 14,
+                  }}
+                  onPress={handleSkip}
+                >
+                  <SkipForward size={12} color="#fff" />
+                  <Text
+                    style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}
+                  >
+                    Skip
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 16,
+                  left: 12,
+                  right: 12,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => videoRef.current?.replayAsync()}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    backgroundColor: "rgba(0,0,0,0.55)",
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                  }}
+                >
+                  <Play size={10} color="#fff" />
+                  <Text
+                    style={{ color: "#fff", fontSize: 10, fontWeight: "600" }}
+                  >
+                    Interviewer
+                  </Text>
+                </TouchableOpacity>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    backgroundColor: "rgba(0,0,0,0.55)",
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                  }}
+                >
+                  <Clock size={10} color="#fff" />
+                  <Text
+                    style={{ color: "#fff", fontSize: 10, fontWeight: "600" }}
+                  >
+                    {fmt(videoProgress)} / {fmt(videoDuration)}
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: 3,
+                  backgroundColor: "rgba(255,255,255,0.15)",
+                }}
+              >
+                <View
+                  style={{
+                    height: "100%",
+                    width:
+                      videoDuration > 0
+                        ? `${(videoProgress / videoDuration) * 100}%`
+                        : "0%",
+                    backgroundColor: Theme.colors.primary,
+                  }}
+                />
+              </View>
+            </>
+          )}
+
+          {/* Form overlay on video after finish */}
+          {videoFinished && (
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+              }}
+            >
+              <BlurView intensity={40} tint="dark" style={{ flex: 1 }}>
+                <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.3)" }}>
+                  <ScrollView
+                    contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {renderForm()}
+                  </ScrollView>
+                </View>
+              </BlurView>
+            </View>
+          )}
         </View>
-        <Text style={[styles.micHint, { color: colors.textMuted }]}>
-          {isListening ? 'Tap to Stop' : 'Tap to Answer'}
-        </Text>
+        {/* Step name below video */}
+        <View
+          style={{ paddingHorizontal: 4, paddingTop: 8, alignItems: "center" }}
+        >
+          <Text style={{ color: colors.text, fontSize: 20, fontWeight: "800" }}>
+            Step {currentStep + 1}: {STEPS[currentStep].label}
+          </Text>
+        </View>
+        {/* Progress dots at bottom */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 6,
+            paddingVertical: 16,
+          }}
+        >
+          {STEPS.map((_, i) => (
+            <View
+              key={i}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor:
+                  i === currentStep
+                    ? Theme.colors.primary
+                    : i < currentStep
+                      ? Theme.colors.primary
+                      : colors.text,
+              }}
+            />
+          ))}
+        </View>
       </View>
 
-      <Modal visible={showTextInput} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-           <GlassCard style={[styles.inputModalContent, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.inputModalTitle, { color: colors.text }]}>{currentQuestion.id === 'name' ? 'What is your name?' : 'Your Answer'}</Text>
-              <TextInput
-                style={[styles.manualTextInput, { color: colors.text, borderColor: colors.glassBorder }]}
-                placeholder="Type your answer here..."
-                placeholderTextColor={colors.textMuted}
-                multiline
-                value={manualText}
-                onChangeText={setManualText}
-                autoFocus
-              />
-              <TouchableOpacity style={styles.submitBtn} onPress={handleManualSubmit}>
-                 <LinearGradient colors={[Theme.colors.primary, Theme.colors.secondary]} style={styles.submitBtnGradient}>
-                    <Text style={styles.submitBtnText}>Submit Answer</Text>
-                    <ArrowRight size={20} color="#fff" />
-                 </LinearGradient>
+      {/* RESUME PROMPT */}
+      <Modal
+        visible={showResumePrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissResumePrompt}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.85)",
+            justifyContent: "center",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 28,
+              padding: 28,
+              borderWidth: 2.5,
+              borderColor: Theme.border.color,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 22,
+                fontWeight: "900",
+                textAlign: "center",
+              }}
+            >
+              Resume Draft Found
+            </Text>
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 14,
+                textAlign: "center",
+                marginTop: 8,
+                lineHeight: 20,
+                opacity: 0.6,
+              }}
+            >
+              You have an unfinished interview. Would you like to continue where
+              you left off?
+            </Text>
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 24 }}>
+              <TouchableOpacity
+                onPress={dismissResumePrompt}
+                style={{
+                  flex: 1,
+                  height: 50,
+                  borderRadius: 14,
+                  borderWidth: 2,
+                  borderColor: colors.text,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 15,
+                    fontWeight: "700",
+                  }}
+                >
+                  Cancel
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowTextInput(false)} style={styles.cancelBtn}>
-                 <Text style={{ color: colors.textMuted, fontWeight: '700' }}>Cancel</Text>
+              <TouchableOpacity
+                onPress={resumeSavedDraft}
+                style={{
+                  flex: 1,
+                  height: 50,
+                  borderRadius: 14,
+                  backgroundColor: Theme.colors.primary,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}
+                >
+                  Continue
+                </Text>
               </TouchableOpacity>
-           </GlassCard>
+            </View>
+          </View>
         </View>
       </Modal>
 
+      {/* LOADING STATE */}
+      {isProcessing && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 30,
+            backgroundColor: "rgba(0,0,0,0.7)",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <ActivityIndicator size="large" color={Theme.colors.primary} />
+          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+            AI is drafting your resume...
+          </Text>
+        </View>
+      )}
+
+      {/* TEMPLATE PICKER */}
       <Modal visible={showTemplatePicker} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <Animated.View entering={FadeInUp} style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-            <View style={styles.modalHeader}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.85)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <Animated.View
+            entering={FadeInUp}
+            style={{
+              backgroundColor: colors.surface,
+              padding: 30,
+              borderTopLeftRadius: 40,
+              borderTopRightRadius: 40,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 12,
+              }}
+            >
               <Sparkles size={24} color={Theme.colors.primary} />
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Your Design</Text>
+              <Text style={{ color: "#fff", fontSize: 24, fontWeight: "900" }}>
+                Choose Your Design
+              </Text>
             </View>
-            <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.6)",
+                fontSize: 14,
+                lineHeight: 20,
+                marginBottom: 30,
+              }}
+            >
               We've synthesized your story. Select a template to finish.
             </Text>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templateScroll}>
-              {['Executive', 'Modern', 'Professional', 'Creative'].map((temp) => (
-                <TouchableOpacity key={temp} style={styles.templateCard} onPress={() => handleTemplateSelect(temp)}>
-                   <View style={[styles.templateIconBox, { backgroundColor: colors.background, borderColor: colors.glassBorder }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 20, paddingBottom: 20 }}
+            >
+              {["Executive", "Modern", "Professional", "Creative"].map(
+                (temp) => (
+                  <TouchableOpacity
+                    key={temp}
+                    style={{ width: 120, alignItems: "center", gap: 12 }}
+                    onPress={() => handleTemplateSelect(temp)}
+                  >
+                    <View
+                      style={{
+                        width: 100,
+                        height: 140,
+                        borderRadius: 20,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        borderWidth: 1,
+                        borderColor: "rgba(255,255,255,0.15)",
+                        backgroundColor: "#222",
+                      }}
+                    >
                       <LayoutIcon size={32} color={Theme.colors.primary} />
-                   </View>
-                   <Text style={[styles.templateName, { color: colors.text }]}>{temp}</Text>
-                </TouchableOpacity>
-              ))}
+                    </View>
+                    <Text
+                      style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}
+                    >
+                      {temp}
+                    </Text>
+                  </TouchableOpacity>
+                ),
+              )}
             </ScrollView>
           </Animated.View>
         </View>
       </Modal>
 
-      <View style={{ height: 0, width: 0, opacity: 0 }}>
-        <WebView 
-          ref={vocalBridgeRef}
-          mediaPlaybackRequiresUserAction={false}
-          allowsInlineMediaPlayback={true}
-          source={{ html: '<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body><script>console.log("Vocal Engine Rooted");</script></body></html>' }}
-          onMessage={(event) => {
-            const data = event.nativeEvent.data;
-            if (data === 'speech_done') {
-              setIsSpeaking(false);
-              // One full second delay to ensure native reset
-              setTimeout(() => {
-                startRecording();
-              }, 1000);
-            } else if (data === 'vocal_woken') {
-              // Immediately ask first question
-              askQuestion();
-            }
+      {/* HISTORY POPUP */}
+      <Modal
+        visible={showHistory}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHistory(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setShowHistory(false)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.85)",
+            justifyContent: "center",
+            padding: 24,
           }}
-        />
-      </View>
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 28,
+              padding: 24,
+              borderWidth: 2.5,
+              borderColor: Theme.border.color,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 20,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <History size={20} color={colors.text} />
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 20,
+                    fontWeight: "900",
+                  }}
+                >
+                  Interview History
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowHistory(false)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: Theme.colors.primary,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <X size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            {drafts.length === 0 ? (
+              <View
+                style={{ paddingVertical: 30, alignItems: "center", gap: 12 }}
+              >
+                <Text style={{ fontSize: 56 }}>😶</Text>
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 15,
+                    fontWeight: "600",
+                  }}
+                >
+                  No interviews yet
+                </Text>
+                <Text
+                  style={{ color: colors.text, fontSize: 13, opacity: 0.5 }}
+                >
+                  Complete an interview to see it here
+                </Text>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 350 }}>
+                {drafts.map((d) => (
+                  <View
+                    key={d.id}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      paddingVertical: 14,
+                      borderBottomWidth: 1,
+                      borderBottomColor: "rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: colors.text,
+                          fontSize: 15,
+                          fontWeight: "700",
+                        }}
+                        numberOfLines={1}
+                      >
+                        {d.title}
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.text,
+                          fontSize: 12,
+                          marginTop: 2,
+                          opacity: 0.5,
+                        }}
+                      >
+                        {new Date(d.date).toLocaleDateString()}{" "}
+                        {new Date(d.date).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => loadDraftToForm(d)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 12,
+                        backgroundColor: Theme.colors.primary,
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <RotateCcw size={16} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => deleteDraft(d.id)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 12,
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Trash2 size={16} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  backBtn: {
-    position: 'absolute',
-    left: 20, zIndex: 10, width: 44, height: 44, borderRadius: 22,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
-  transcriptCard: {
-    marginTop: 25,
-    padding: 15,
+const s = StyleSheet.create({
+  input: {
+    borderWidth: 2.5,
     borderRadius: 16,
-    width: '100%',
-    borderWidth: 1,
-  },
-  transcriptLabel: { fontSize: 10, fontWeight: '900', marginBottom: 6, letterSpacing: 1 },
-  transcriptText: { fontSize: 14, fontWeight: '600', fontStyle: 'italic', lineHeight: 20 },
-  robotWrapper: { alignItems: 'center', justifyContent: 'center' },
-  robotAnimation: { width: 280, height: 280 },
-  wakePill: {
-    position: 'absolute',
-    bottom: 20,
-    backgroundColor: Theme.colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontWeight: "500",
+    borderStyle: "dashed",
+    borderColor: Theme.border.color,
+    color: Colors.dark.text,
+    backgroundColor: "transparent",
+  },
+  fl: {
+    color: Colors.dark.text,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  sbRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  sbBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2.5,
+    marginTop: 4,
+    borderStyle: "dashed",
+    borderColor: Theme.border.color,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 25,
-    gap: 8,
-    shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 5,
+    borderWidth: 2.5,
+    borderColor: Theme.border.color,
   },
-  wakePillText: { color: '#fff', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
-  questionContainer: { alignItems: 'center', marginTop: -20 },
-  stepText: { fontSize: 12, fontWeight: '900', letterSpacing: 2, marginBottom: 12 },
-  questionText: { fontSize: 22, fontWeight: '800', textAlign: 'center', lineHeight: 30 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 30, gap: 10 },
-  statusText: { fontSize: 14, fontWeight: '600' },
-  pulseCircle: { width: 10, height: 10, borderRadius: 5 },
-  footer: { alignItems: 'center' },
-  footerRow: { flexDirection: 'row', alignItems: 'center', gap: 20, width: '100%', justifyContent: 'center', paddingHorizontal: 40 },
-  micBtn: {
-    width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10,
+  ptBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 2.5,
+    alignItems: "center",
+    borderColor: Theme.border.color,
   },
-  smallActionBtn: {
-    width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', borderWidth: 1,
+  nbG: {
+    marginTop: 6,
+    height: 56,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 2.5,
+    borderColor: Theme.border.color,
   },
-  smallActionBtnPlaceholder: { width: 52 },
-  micHint: { marginTop: 12, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  inputModalContent: { padding: 30, borderTopLeftRadius: 40, borderTopRightRadius: 40, width: '100%' },
-  inputModalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16 },
-  manualTextInput: {
-    width: '100%', minHeight: 120, borderRadius: 20, borderWidth: 1, padding: 20, fontSize: 16,
-    textAlignVertical: 'top', marginBottom: 20,
+  nbI: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
   },
-  submitBtn: { width: '100%', height: 56, borderRadius: 16, overflow: 'hidden' },
-  submitBtnGradient: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  cancelBtn: { alignItems: 'center', marginTop: 20, padding: 10 },
-  modalContent: { padding: 30, borderTopLeftRadius: 40, borderTopRightRadius: 40 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  modalTitle: { fontSize: 24, fontWeight: '900' },
-  modalSubtitle: { fontSize: 14, lineHeight: 20, marginBottom: 30 },
-  templateScroll: { paddingBottom: 20, gap: 20 },
-  templateCard: { width: 120, alignItems: 'center', gap: 12 },
-  templateIconBox: { width: 100, height: 140, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
-  templateName: { fontSize: 14, fontWeight: '700' },
+  nbT: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });

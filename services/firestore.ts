@@ -31,6 +31,9 @@ export interface UserProfile {
   referralCount: number;
   groqKey?: string;
   geminiKey?: string;
+  onboardingCompleted?: boolean;
+  isIT?: boolean;
+  primaryRole?: string;
   createdAt: any;
   updatedAt: any;
 }
@@ -52,6 +55,7 @@ export const checkAndInitProfile = async (user: any) => {
       resumeLimit: 3,
       referralCode,
       referralCount: 0,
+      onboardingCompleted: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -80,6 +84,7 @@ export const updateUserProfile = async (data: Partial<UserProfile>) => {
       resumeLimit: 3,
       referralCode,
       referralCount: 0,
+      onboardingCompleted: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       ...data,
@@ -124,7 +129,7 @@ export const saveAtsHistory = async (atsData: {
     where('userId', '==', user.uid)
   );
   const snapshot = await getDocs(q);
-  const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
   // Sort in-memory if needed for limit check
   docs.sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
@@ -282,44 +287,91 @@ export const applyReferralCode = async (code: string) => {
   return true;
 };
 
-// --- Global Job Caching (To save SerpAPI credits) ---
+// --- Global Job Caching (7-day TTL, auto-purge jobs older than 7 days) ---
 
-export const getGlobalJobs = async (query: string, location: string) => {
-  const cacheId = `${query.toLowerCase().replace(/\s+/g, '_')}_${location.toLowerCase().replace(/\s+/g, '_')}`;
-  const docRef = doc(db, 'global_jobs', cacheId);
-  
-  try {
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      const lastUpdated = data.updatedAt?.toDate() || new Date(0);
-      const hoursSinceUpdate = (new Date().getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
-      
-      // Cache valid for 12 hours
-      if (hoursSinceUpdate < 12) {
-        console.log("Using Global Job Cache for:", cacheId);
-        return data.jobs;
-      }
-    }
-  } catch (e) {
-    console.warn("Firestore: Global cache read restricted", e);
-  }
-  return null;
+const CACHE_TTL_DAYS = 7;
+const JOB_MAX_AGE_DAYS = 7;
+
+/** Returns true if a job's posted date is older than JOB_MAX_AGE_DAYS */
+const isJobStale = (job: any): boolean => {
+  // Check various date fields that job APIs might return
+  const rawDate =
+    job.date_posted ||
+    job.posted_at ||
+    job.pubDate ||
+    job.created ||
+    job.publishedAt ||
+    null;
+
+  if (!rawDate) return false; // Keep jobs with no date (can't determine age)
+
+  const posted = new Date(rawDate);
+  if (isNaN(posted.getTime())) return false;
+
+  const ageMs = Date.now() - posted.getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  return ageDays > JOB_MAX_AGE_DAYS;
 };
 
-export const saveGlobalJobs = async (query: string, location: string, jobs: any[]) => {
-  const cacheId = `${query.toLowerCase().replace(/\s+/g, '_')}_${location.toLowerCase().replace(/\s+/g, '_')}`;
+export const getGlobalJobs = async (queryStr: string, location: string): Promise<any[] | null> => {
+  const cacheId = `${queryStr.toLowerCase().replace(/\s+/g, '_')}_${location.toLowerCase().replace(/\s+/g, '_')}`;
   const docRef = doc(db, 'global_jobs', cacheId);
-  
+
+  try {
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return null;
+
+    const data = docSnap.data();
+    const lastUpdated: Date = data.updatedAt?.toDate() || new Date(0);
+    const ageDays = (Date.now() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24);
+
+    // Cache expired after 7 days — force a fresh fetch
+    if (ageDays >= CACHE_TTL_DAYS) {
+      console.log(`[JobCache] Expired (${ageDays.toFixed(1)} days old), refreshing: ${cacheId}`);
+      return null;
+    }
+
+    // Filter out stale job listings older than 7 days
+    const freshJobs = (data.jobs || []).filter((j: any) => !isJobStale(j));
+    const purged = (data.jobs || []).length - freshJobs.length;
+
+    if (purged > 0) {
+      console.log(`[JobCache] Purged ${purged} stale jobs from cache: ${cacheId}`);
+      // Silently update cache with purged results
+      setDoc(docRef, { ...data, jobs: freshJobs, updatedAt: serverTimestamp() }).catch(() => {});
+    }
+
+    if (freshJobs.length === 0) return null; // All jobs stale, refetch
+
+    console.log(`[JobCache] HIT — ${freshJobs.length} jobs, ${ageDays.toFixed(1)} days old: ${cacheId}`);
+    return freshJobs;
+  } catch (e) {
+    // Permissions error or offline — degrade gracefully, fetch fresh
+    console.warn('[JobCache] Read failed (offline/permissions), fetching live:', e);
+    return null;
+  }
+};
+
+export const saveGlobalJobs = async (queryStr: string, location: string, jobs: any[]): Promise<void> => {
+  const cacheId = `${queryStr.toLowerCase().replace(/\s+/g, '_')}_${location.toLowerCase().replace(/\s+/g, '_')}`;
+  const docRef = doc(db, 'global_jobs', cacheId);
+
+  // Strip stale jobs before persisting
+  const freshJobs = jobs.filter((j: any) => !isJobStale(j));
+
   try {
     await setDoc(docRef, {
-      jobs,
+      jobs: freshJobs,
       updatedAt: serverTimestamp(),
-      query,
-      location
+      cachedAt: serverTimestamp(),
+      query: queryStr,
+      location,
+      jobCount: freshJobs.length,
     });
+    console.log(`[JobCache] Saved ${freshJobs.length} fresh jobs: ${cacheId}`);
   } catch (e) {
-    console.error("Global cache save error:", e);
+    // Non-fatal — app works fine without caching
+    console.warn('[JobCache] Save skipped (offline/permissions):', e);
   }
 };
 
@@ -373,3 +425,52 @@ export const getReferredUsers = async () => {
     createdAt: doc.data().createdAt?.toDate() || new Date(),
   })).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };
+
+// --- Chat Session History ---
+
+export const saveChatSession = async (chatData: {
+  messages: any[];
+  collectedAnswers: any;
+  resumeData?: any;
+}) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const chatCollection = collection(db, 'users', user.uid, 'chat_history');
+  
+  const q = query(chatCollection);
+  const snapshot = await getDocs(q);
+  const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+  docs.sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+  
+  // Keep the last 10 chat sessions
+  if (docs.length >= 10) {
+    const oldest = docs[0];
+    await deleteDoc(doc(db, 'users', user.uid, 'chat_history', oldest.id));
+  }
+
+  const docRef = await addDoc(chatCollection, {
+    ...chatData,
+    userId: user.uid,
+    createdAt: serverTimestamp(),
+  });
+  
+  return docRef.id;
+};
+
+export const getChatSessions = async () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const q = query(
+    collection(db, 'users', user.uid, 'chat_history')
+  );
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+};
+

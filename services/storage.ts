@@ -29,16 +29,25 @@ export const UserStorage = {
     const existing = await AsyncStorage.getItem(KEYS.RESUME_VERSIONS);
     let versions = existing ? JSON.parse(existing) : [];
     
+    const dateStr = new Date().toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    
     // Check if name already exists, update it, otherwise add
     const index = versions.findIndex((v: any) => v.name === name);
     if (index > -1) {
       versions[index].data = data;
       versions[index].updatedAt = new Date().toISOString();
+      versions[index].date = dateStr;
     } else {
       if (versions.length >= 3) {
         throw new Error("Maximum of 3 versions allowed. Please delete one to save a new one.");
       }
-      versions.push({ name, data, updatedAt: new Date().toISOString() });
+      versions.push({ name, data, updatedAt: new Date().toISOString(), date: dateStr });
     }
     
     await AsyncStorage.setItem(KEYS.RESUME_VERSIONS, JSON.stringify(versions));
@@ -93,5 +102,38 @@ export const UserStorage = {
   
   clearImportHistory: async () => {
     await AsyncStorage.removeItem(KEYS.IMPORT_HISTORY);
+  },
+  
+  deleteImportHistory: async (id: string) => {
+    const existing = await AsyncStorage.getItem(KEYS.IMPORT_HISTORY);
+    if (existing) {
+      let history = JSON.parse(existing);
+      history = history.filter((item: any) => item.id !== id);
+      await AsyncStorage.setItem(KEYS.IMPORT_HISTORY, JSON.stringify(history));
+    }
+  },
+
+  renameResumeVersion: async (oldName: string, newName: string) => {
+    const existing = await AsyncStorage.getItem(KEYS.RESUME_VERSIONS);
+    if (existing) {
+      let versions = JSON.parse(existing);
+      const index = versions.findIndex((v: any) => v.name === oldName);
+      if (index > -1) {
+        versions[index].name = newName;
+        await AsyncStorage.setItem(KEYS.RESUME_VERSIONS, JSON.stringify(versions));
+      }
+    }
+  },
+
+  renameImportHistory: async (id: string, newName: string) => {
+    const existing = await AsyncStorage.getItem(KEYS.IMPORT_HISTORY);
+    if (existing) {
+      let history = JSON.parse(existing);
+      const index = history.findIndex((item: any) => item.id === id);
+      if (index > -1) {
+        history[index].name = newName;
+        await AsyncStorage.setItem(KEYS.IMPORT_HISTORY, JSON.stringify(history));
+      }
+    }
   }
 };

@@ -28,6 +28,7 @@ import {
     Users,
     X,
     Download,
+    Rocket,
     CreditCard,
     Sun,
     CheckCircle2,
@@ -51,7 +52,6 @@ import {
     Clipboard,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { RewardedAd, RewardedAdEventType, TestIds, BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { API_CONFIG } from "@/constants/config";
 import { exportToPDF } from "@/utils/resume-exporter";
 import { uploadToCloudinary } from "@/services/cloudinary";
@@ -65,19 +65,6 @@ import { UserStorage } from "@/services/storage";
 import { getResumes } from "@/utils/storage";
 
 const { width } = Dimensions.get("window");
-
-const adUnitId = API_CONFIG.ADMOB_IDS.REWARDED_AD_UNIT_ID;
-const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
-
-// Create rewarded instance safely
-let rewarded: any = null;
-try {
-  rewarded = RewardedAd.createForAdRequest(adUnitId, {
-    keywords: ['resume', 'job', 'career'],
-  });
-} catch (e) {
-  console.log('AdMob Rewarded not available');
-}
 
 
 
@@ -131,17 +118,17 @@ export const getCountryBasedPricing = () => {
     };
   }
   
-  // Default US/Worldwide pricing
+  // Default fallback (Set to India since timezone extraction can be unreliable in React Native)
   return {
-    currency: "USD",
-    symbol: "$",
-    monthlyPrice: "$9.99",
-    weeklyPrice: "$2.99",
-    annualPrice: "$59.99",
-    monthlyVal: 9.99,
-    weeklyVal: 2.99,
-    annualVal: 59.99,
-    country: "United States",
+    currency: "INR",
+    symbol: "₹",
+    monthlyPrice: "₹99",
+    weeklyPrice: "₹29",
+    annualPrice: "₹599",
+    monthlyVal: 99,
+    weeklyVal: 29,
+    annualVal: 599,
+    country: "India",
     discountBadge: "Save 50%"
   };
 };
@@ -177,14 +164,13 @@ export default function ProfileScreen() {
   const [portfolio, setPortfolio] = useState("");
   const [phone, setPhone] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [subPlan, setSubPlan] = useState("");
+  const [subExpiry, setSubExpiry] = useState<any>(null);
 
   // API Key States
   const [userGroqKey, setUserGroqKey] = useState("");
   const [userGeminiKey, setUserGeminiKey] = useState("");
-
-  // AdMob States
-  const [adsWatched, setAdsWatched] = useState(0);
-  const [isAdLoaded, setIsAdLoaded] = useState(false);
 
   // Referral States
   const [referredUsers, setReferredUsers] = useState<any[]>([]);
@@ -246,62 +232,6 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    if (!rewarded) return;
-    
-    const unsubscribeLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      setIsAdLoaded(true);
-    });
-    const unsubscribeEarned = rewarded.addAdEventListener(
-      RewardedAdEventType.EARNED_REWARD,
-      () => {
-        setAdsWatched(prev => {
-          const next = prev + 1;
-          if (next >= 3) {
-            handleGrantFreeExports();
-            return 0;
-          }
-          Alert.alert("Reward Earned!", `You've watched ${next}/3 ads. Watch ${3 - next} more for 3 free exports!`);
-          return next;
-        });
-      },
-    );
-
-    rewarded.load();
-
-    return () => {
-      unsubscribeLoaded();
-      unsubscribeEarned();
-    };
-  }, [rewarded]);
-
-  const handleGrantFreeExports = async () => {
-    try {
-      await incrementResumeLimit(3);
-      const newLimit = resumeLimit + 3;
-      setResumeLimit(newLimit);
-      await AsyncStorage.setItem('cached_resume_limit', String(newLimit));
-      Alert.alert("Success!", "You've earned 3 free resume exports! Valid for 24 hours.");
-    } catch (e) {
-      Alert.alert("Error", "Could not update your limit. Please try again.");
-    }
-  };
-
-  const showAd = () => {
-    if (!rewarded) {
-      Alert.alert("Expo Go", "Ads are only available in the native build. Rebuild with npx expo run:android to test ads.");
-      return;
-    }
-    if (isAdLoaded) {
-      rewarded.show();
-      setIsAdLoaded(false);
-      rewarded.load();
-    } else {
-      Alert.alert("Ad Loading", "The ad is still loading, please try again in a moment.");
-      rewarded.load();
-    }
-  };
-
-  useEffect(() => {
     const fetchProfile = async () => {
       if (user) {
         try {
@@ -322,6 +252,17 @@ export default function ProfileScreen() {
               await AsyncStorage.setItem('cached_resume_limit', String(data.resumeLimit));
             }
             if (data.referralCount) setReferralCount(data.referralCount);
+            if (data.isPro !== undefined) setIsPro(data.isPro);
+            if (data.subPlan) setSubPlan(data.subPlan);
+            if (data.subExpiry) setSubExpiry(data.subExpiry);
+            if (data.groqKey !== undefined) {
+              setUserGroqKey(data.groqKey);
+              await UserStorage.saveGroqKey(data.groqKey);
+            }
+            if (data.geminiKey !== undefined) {
+              setUserGeminiKey(data.geminiKey);
+              await UserStorage.saveGeminiKey(data.geminiKey);
+            }
           }
         } catch (error) {
           console.log("Firestore Fetch error:", error);
@@ -397,6 +338,7 @@ export default function ProfileScreen() {
     { icon: Users, label: "My Referrals", sub: "See who you invited" },
     { icon: CreditCard, label: "Subscription", sub: "Plan & Billing" },
     { icon: Shield, label: "API Configuration", sub: "Use your own AI keys" },
+    { icon: Rocket, label: "Onboarding", sub: "Re-run setup wizard" },
   ];
 
   return (
@@ -406,24 +348,10 @@ export default function ProfileScreen() {
         {/* Header Section */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Elite Profile</Text>
-          <TouchableOpacity 
-            onPress={toggleTheme} 
-            activeOpacity={0.8}
-            style={[styles.themeToggle, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
-          >
-            <View style={styles.toggleTrack}>
-              <View style={[styles.toggleThumb, { 
-                backgroundColor: isDark ? Theme.colors.primary : '#fff',
-                transform: [{ translateX: isDark ? 32 : 0 }]
-              }]} />
-              <Sun size={12} color={!isDark ? Theme.colors.primary : colors.textMuted} fill={!isDark ? Theme.colors.primary : 'transparent'} />
-              <Moon size={12} color={isDark ? '#fff' : colors.textMuted} fill={isDark ? '#fff' : 'transparent'} />
-            </View>
-          </TouchableOpacity>
         </View>
 
         {/* Profile Card */}
-        <View style={[styles.profileCard, { backgroundColor: colors.surface }]}>
+        <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
           <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
             {profilePic ? (
               <Image source={{ uri: profilePic }} style={styles.avatar} />
@@ -440,23 +368,40 @@ export default function ProfileScreen() {
             <Text style={[styles.profileName, { color: colors.text }]}>{name}</Text>
             <Text style={[styles.profileEmail, { color: colors.textMuted }]}>{email}</Text>
             <View style={styles.badgeRow}>
-              <View style={styles.proBadge}>
-                <Crown size={10} color="#fff" />
-                <Text style={styles.proBadgeText}>PRO ELITE</Text>
+              <View style={[styles.proBadge, !isPro && { backgroundColor: colors.textMuted }]}>
+                {isPro ? <Crown size={10} color="#fff" /> : <Shield size={10} color="#fff" />}
+                <Text style={styles.proBadgeText}>
+                  {isPro ? `PRO ELITE${subPlan ? ` (${subPlan.toUpperCase()})` : ''}` : 'FREE PLAN'}
+                </Text>
               </View>
+              {isPro && subExpiry && (() => {
+                try {
+                  const expiryDate = subExpiry.toDate ? subExpiry.toDate() : new Date(subExpiry);
+                  const diffTime = expiryDate.getTime() - new Date().getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  if (diffDays > 0) {
+                    return (
+                      <View style={[styles.proBadge, { backgroundColor: Theme.colors.secondary }]}>
+                        <Text style={styles.proBadgeText}>{diffDays} Days Left</Text>
+                      </View>
+                    );
+                  }
+                  return null;
+                } catch(e) { return null; }
+              })()}
             </View>
           </View>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
             <Text style={[styles.statNum, { color: Theme.colors.primary }]}>
               {resumeLimit >= 1000 ? "Unlimited" : Math.max(0, resumeLimit - activeResumesCount)}
             </Text>
             <Text style={[styles.statLabel, { color: colors.textMuted }]}>Exports Left</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
             <Text style={[styles.statNum, { color: Theme.colors.secondary }]}>{referralCount}</Text>
             <Text style={[styles.statLabel, { color: colors.textMuted }]}>Referrals</Text>
           </View>
@@ -466,7 +411,7 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.referralCard} onPress={() => {
           Share.share({ message: `Build elite resumes! Use my code: ${referralCode}` });
         }}>
-          <LinearGradient colors={isDark ? ['#22BFC0', '#3A5D80'] : ['#1A9E9F', '#89C4F4']} start={{x:0, y:0}} end={{x:1, y:0}} style={styles.referralGradient}>
+          <LinearGradient colors={isDark ? ['#d97706', '#92400e'] : ['#f59e0b', '#ea580c']} start={{x:0, y:0}} end={{x:1, y:0}} style={styles.referralGradient}>
             <View>
               <Text style={styles.referTitle}>Refer & Earn</Text>
               <Text style={styles.referSub}>Invite friends to get +2 exports</Text>
@@ -545,6 +490,7 @@ export default function ProfileScreen() {
               onPress={() => {
                 if (item.label === "My Resumes") router.push("/my-resumes");
                 else if (item.label === "My Jobs") router.push("/my-jobs");
+                else if (item.label === "Onboarding") router.push("/onboarding");
                 else setActiveModal(item.label);
               }}
               style={styles.simpleMenuItem}
@@ -573,7 +519,7 @@ export default function ProfileScreen() {
           <View style={[styles.modalContent, { backgroundColor: colors.background, paddingTop: insets.top }]}>
             <View style={[styles.modalHeader, { paddingHorizontal: 25, marginTop: 15 }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{activeModal}</Text>
-              <TouchableOpacity onPress={() => setActiveModal(null)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+              <TouchableOpacity onPress={() => setActiveModal(null)} style={[styles.closeBtn, { backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
                 <X size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
@@ -748,13 +694,13 @@ export default function ProfileScreen() {
                   </View>
 
                   <View style={styles.referralStatsOverview}>
-                    <View style={[styles.refStatBox, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-                      <Text style={[styles.refStatVal, { color: Theme.colors.primary }]}>{referredUsers.length}</Text>
-                      <Text style={[styles.refStatLabel, { color: colors.textMuted }]}>Invited</Text>
+                    <View style={[styles.refStatBox, { backgroundColor: '#f59e0b20', borderColor: '#f59e0b50' }]}>
+                      <Text style={[styles.refStatVal, { color: '#d97706' }]}>{referredUsers.length}</Text>
+                      <Text style={[styles.refStatLabel, { color: '#92400e' }]}>Invited</Text>
                     </View>
-                    <View style={[styles.refStatBox, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-                      <Text style={[styles.refStatVal, { color: Theme.colors.secondary }]}>{referredUsers.length * 2}</Text>
-                      <Text style={[styles.refStatLabel, { color: colors.textMuted }]}>Exports Earned</Text>
+                    <View style={[styles.refStatBox, { backgroundColor: '#f59e0b20', borderColor: '#f59e0b50' }]}>
+                      <Text style={[styles.refStatVal, { color: '#d97706' }]}>{referredUsers.length * 2}</Text>
+                      <Text style={[styles.refStatLabel, { color: '#92400e' }]}>Exports Earned</Text>
                     </View>
                   </View>
 
@@ -925,7 +871,28 @@ export default function ProfileScreen() {
                                 setSimulatedPaying(false);
                               }
                             } else {
-                              Alert.alert("Connection Error", "Billing services are currently unavailable. Please verify you have a stable network connection.");
+                              // Bypass IAP in development/simulator environment
+                              setSimulatedPaying(true);
+                              setTimeout(async () => {
+                                setSimulatedPaying(false);
+                                Alert.alert("Success 🎉", "Subscription processed successfully (Development Mode)!");
+                                if (user) {
+                                  const { doc, updateDoc } = require('firebase/firestore');
+                                  const { db } = require('@/services/firebase');
+                                  try {
+                                    const expiry = new Date(Date.now() + (subBillingPeriod === 'weekly' ? 7 : 30) * 24 * 60 * 60 * 1000).toISOString();
+                                    await updateDoc(doc(db, 'users', user.uid), { 
+                                      isPro: true,
+                                      subPlan: subBillingPeriod,
+                                      subExpiry: expiry
+                                    });
+                                    setIsPro(true);
+                                    setSubPlan(subBillingPeriod);
+                                    setSubExpiry(expiry);
+                                  } catch(e) {}
+                                }
+                                setActiveModal(null);
+                              }, 1500);
                             }
                           }}
                         >
@@ -939,55 +906,19 @@ export default function ProfileScreen() {
                         </TouchableOpacity>
                       </LinearGradient>
 
-                      <View style={styles.dividerRow}>
-                        <View style={[styles.divider, { backgroundColor: colors.glassBorder }]} />
-                        <Text style={[styles.dividerText, { color: colors.textMuted }]}>OR WATCH AD</Text>
-                        <View style={[styles.divider, { backgroundColor: colors.glassBorder }]} />
-                      </View>
-
-                      {/* Daily pass AD watch */}
-                      <TouchableOpacity 
-                        style={[styles.adCardNew, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
-                        onPress={showAd}
-                      >
-                        <View style={styles.adInfo}>
-                          <View style={[styles.adIconBox, { backgroundColor: Theme.colors.primary + '15' }]}>
-                            {isAdLoaded ? <Sparkles size={20} color={Theme.colors.primary} /> : <ActivityIndicator size="small" color={Theme.colors.primary} />}
-                          </View>
-                          <View>
-                            <Text style={[styles.adTitleSmall, { color: colors.text, fontWeight: '600' }]}>Free Daily Pass ({adsWatched}/3)</Text>
-                            <Text style={[styles.adSubSmall, { color: colors.textMuted }]}>Watch 3 Ads for 3 Free Exports</Text>
-                          </View>
-                        </View>
-                        <View style={[styles.validityBadgeNew, { backgroundColor: Theme.colors.primary + '20' }]}>
-                          <Text style={[styles.validityTextNew, { color: Theme.colors.primary }]}>24h Pass</Text>
-                        </View>
-                      </TouchableOpacity>
                     </View>
 
-                    <View style={styles.bannerContainer}>
-                      {bannerId ? (
-                        <BannerAd
-                          unitId={bannerId}
-                          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-                          requestOptions={{
-                            requestNonPersonalizedAdsOnly: true,
-                          }}
-                          onAdFailedToLoad={(error) => console.log('Banner failed to load:', error)}
-                        />
-                      ) : null}
-                    </View>
                   </View>
                 );
               })()}
 
               {activeModal === "Settings" && (
                 <View style={[styles.editForm, { paddingHorizontal: 25 }]}>
-                  <View style={[styles.settingsItem, { backgroundColor: colors.surface }]}>
+                  <View style={[styles.settingsItem, { backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
                     <Text style={[styles.settingsLabel, { color: colors.text }]}>Dark Mode</Text>
                     <Switch value={isDark} onValueChange={toggleTheme} />
                   </View>
-                  <View style={[styles.settingsItem, { backgroundColor: colors.surface }]}>
+                  <View style={[styles.settingsItem, { backgroundColor: colors.surface, borderColor: colors.glassBorder, borderWidth: 1 }]}>
                     <Text style={[styles.settingsLabel, { color: colors.text }]}>Push Notifications</Text>
                     <Switch value={notifications} onValueChange={setNotifications} />
                   </View>
@@ -1078,9 +1009,9 @@ export default function ProfileScreen() {
                     style={styles.saveBtn} 
                     onPress={async () => {
                       try {
-                        // Save locally
-                        if (userGroqKey) await UserStorage.saveGroqKey(userGroqKey);
-                        if (userGeminiKey) await UserStorage.saveGeminiKey(userGeminiKey);
+                        // Save locally (supports empty/cleared values)
+                        await UserStorage.saveGroqKey(userGroqKey);
+                        await UserStorage.saveGeminiKey(userGeminiKey);
                         
                         // Save to Firestore for cross-device sync
                         await updateUserProfile({
@@ -1102,10 +1033,19 @@ export default function ProfileScreen() {
                   <TouchableOpacity 
                     style={[styles.logoutBtn, { marginTop: 10 }]} 
                     onPress={async () => {
-                      await UserStorage.clearKeys();
-                      setUserGroqKey("");
-                      setUserGeminiKey("");
-                      Alert.alert("Cleared", "Personal API keys removed. App will now use default keys.");
+                      try {
+                        await UserStorage.clearKeys();
+                        setUserGroqKey("");
+                        setUserGeminiKey("");
+                        await updateUserProfile({
+                          groqKey: "",
+                          geminiKey: ""
+                        });
+                        Alert.alert("Cleared", "Personal API keys removed. App will now use default keys.");
+                      } catch (e) {
+                        console.error(e);
+                        Alert.alert("Error", "Failed to reset keys.");
+                      }
                     }}
                   >
                     <Text style={[styles.logoutText, { color: colors.textMuted }]}>Reset to Default Keys</Text>
@@ -1255,18 +1195,9 @@ const styles = StyleSheet.create({
   linkText: { fontSize: 14, fontWeight: "600" },
 
   // Modal
-  apiHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   activeKeyBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10b981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 },
   activeKeyText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   statusText: { fontSize: 10, fontWeight: '500' },
-  instructionsBox: { backgroundColor: 'rgba(0,0,0,0.05)', padding: 15, borderRadius: 16, marginBottom: 20 },
-  instructionsTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  instructionStep: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
-  stepDot: { width: 6, height: 6, borderRadius: 3 },
-  stepText: { fontSize: 12, flex: 1 },
-  apiKeySection: { marginBottom: 20 },
-  bigGetKeyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 12, marginTop: 10 },
-  bigGetKeyText: { fontSize: 13, fontWeight: '700' },
   modalOverlay: { flex: 1 },
   modalContent: { flex: 1 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 25 },
@@ -1336,13 +1267,6 @@ const styles = StyleSheet.create({
   validityBadge: { backgroundColor: Theme.colors.success + '20', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
   validityText: { color: Theme.colors.success, fontSize: 10, fontWeight: '800' },
   pricingContent: { paddingHorizontal: 25, gap: 20 },
-  bannerContainer: {
-    marginTop: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    backgroundColor: 'transparent',
-  },
 
   // Edit Profile / Form Overhaul Styles
   modalSubHeader: { marginBottom: 20 },

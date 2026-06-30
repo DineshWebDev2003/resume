@@ -8,14 +8,13 @@
  * 5. Full Dark Theme support with dynamic colors and Status Bar integration.
  */
 
+import { GlassCard } from "@/components/glass-card";
 import { generateResumeHtml } from "@/components/resume-html-generator";
-import { API_CONFIG } from "@/constants/config";
+import { getLimits } from "@/constants/limits";
 import { Colors, Theme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { getLimits } from "@/constants/limits";
 import { callAI } from "@/services/ai";
 import { auth, db } from "@/services/firebase";
-import { doc, getDoc } from "firebase/firestore";
 import { UserStorage } from "@/services/storage";
 import { getResumes, saveResume } from "@/utils/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -25,42 +24,50 @@ import * as IntentLauncher from "expo-intent-launcher";
 import * as Print from "expo-print";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { StatusBar } from "expo-status-bar";
+import { doc, getDoc } from "firebase/firestore";
 import {
-    ArrowLeft,
-    ChevronDown,
-    Download,
-    Edit2,
-    Eye,
-    FolderOpen,
-    History,
-    Plus,
-    Save,
-    Sparkles,
-    Trash2,
-    X,
-    Zap,
+  ArrowLeft,
+  Briefcase,
+  ChevronDown,
+  Download,
+  Edit2,
+  Eye,
+  FolderOpen,
+  GraduationCap,
+  Handshake,
+  History,
+  MessageSquare,
+  MoreVertical,
+  Palette,
+  Plus,
+  Redo2,
+  Rocket,
+  RotateCcw,
+  Save,
+  Sparkles,
+  Trash2,
+  Undo2,
+  User,
+  X,
+  Zap,
 } from "lucide-react-native";
 import React from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { BannerAd, BannerAdSize } from "react-native-google-mobile-ads";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
-
-const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -86,6 +93,15 @@ const AVAILABLE_TEMPLATES = [
   { id: "Jocker-3", name: "Jocker 3: Bold" },
   { id: "Jocker-4", name: "Jocker 4: Trick" },
   { id: "Jocker-5", name: "Jocker 5: Royal" },
+  { id: "Fresher-1", name: "Fresher 1: Bloom" },
+  { id: "Fresher-2", name: "Fresher 2: Spark" },
+  { id: "Fresher-3", name: "Fresher 3: Rise" },
+  { id: "Fresher-4", name: "Fresher 4: Pro" },
+  { id: "Fresher-5", name: "Fresher 5: Build" },
+  { id: "Rich-1", name: "Rich 1: Classic" },
+  { id: "Rich-2", name: "Rich 2: Compact" },
+  { id: "Rich-3", name: "Rich 3: Modern" },
+  { id: "Rich-4", name: "Rich 4: Grid" },
 ];
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -98,6 +114,7 @@ interface Experience {
 }
 
 interface Education {
+  id?: string;
   school: string;
   degree: string;
   year: string;
@@ -107,7 +124,6 @@ interface Education {
 interface Project {
   id: string;
   name: string;
-  link: string;
   description: string;
 }
 
@@ -120,6 +136,7 @@ interface Reference {
 }
 
 interface ResumeData {
+  id?: string;
   name: string;
   title: string;
   email: string;
@@ -134,73 +151,78 @@ interface ResumeData {
   languages: string;
   photo?: string;
   references?: Reference[];
+  tools?: string;
+  interests?: string;
+  certifications?: any[];
+  links?: any[];
 }
 
 // We now use getLimits(selectedTemplate) instead of static FIELD_LIMITS
 
 // ─── default data ────────────────────────────────────────────────────────────
 const INITIAL_DATA: ResumeData = {
-  name: "DINESH KUMAR",
-  title: "Senior Full-Stack Developer",
-  email: "dinesh@example.com",
-  phone: "+91 9876543210",
-  location: "Tamil Nadu, India",
+  name: "Jane Doe",
+  title: "Professional Title",
+  email: "jane.doe@example.com",
+  phone: "+1 234 567 8900",
+  location: "New York, USA",
   summary:
-    "Dynamic and results-driven Senior Full-Stack Developer with over 5 years of experience in architecting and deploying high-performance mobile and web applications. Expert in React Native, Node.js, and Cloud Infrastructure. Proven track record of leading cross-functional teams to deliver scalable solutions that enhance user engagement by 40%. Committed to writing clean, maintainable code and staying ahead of emerging technology trends to drive business growth.",
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
   experience: [
     {
       id: "1",
-      company: "Innovate Tech Hub",
-      role: "Lead Full-Stack Developer",
+      company: "Company Name",
+      role: "Job Title",
       period: "2022 – Present",
       description:
-        "Architected and launched a flagship fintech mobile application using React Native, reaching 100k+ active users within the first quarter. Engineered a robust Node.js microservices backend that improved API response times by 60% and integrated complex payment gateways with 99.9% reliability.",
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
     },
     {
       id: "2",
-      company: "Digital Stream Systems",
-      role: "Software Engineer",
+      company: "Previous Company",
+      role: "Previous Title",
       period: "2019 – 2022",
       description:
-        "Developed and maintained highly responsive web interfaces for high-traffic e-commerce platforms. Collaborated with UI/UX designers to implement pixel-perfect designs and optimized front-end performance, resulting in a 25% reduction in page load speeds across all major browsers.",
+        "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
     },
   ],
   education: [
     {
       id: "1",
-      school: "Anna University",
-      degree: "B.Tech Information Technology",
+      school: "University Name",
+      degree: "Degree Name",
       year: "2015 – 2019",
-      honors: "First Class with Distinction",
+      honors: "Honors/Awards (Optional)",
     },
   ],
   projects: [
     {
       id: "1",
-      name: "Elite AI Resume Builder",
-      link: "https://github.com/dinesh/resume-builder",
+      name: "Project Name",
       description:
-        "A state-of-the-art resume platform featuring real-time AI optimization, Canva-style previews, and professional PDF generation using Expo and Groq AI for instant content suggestions.",
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
     },
     {
       id: "2",
-      name: "CryptoPulse Tracker",
-      link: "https://github.com/dinesh/cryptopulse",
+      name: "Another Project",
       description:
-        "A comprehensive real-time cryptocurrency monitoring dashboard providing live price updates, advanced trend analysis charts, and automated price alerts using WebSockets and React Native.",
+        "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
     },
   ],
-  skills:
-    "React Native, React, Node.js, TypeScript, Firebase, AWS, Docker, Kubernetes",
-  tools: "VS Code, Git, Figma, Postman, Jira",
-  languages: "English, Tamil",
+  skills: "Skill 1, Skill 2, Skill 3, Skill 4, Skill 5, Skill 6",
+  tools: "Tool 1, Tool 2, Tool 3",
+  languages: "English, Spanish",
   links: [
-    { label: "GitHub", url: "github.com/dinesh" },
-    { label: "Portfolio", url: "dinesh.dev" },
+    { label: "LinkedIn", url: "linkedin.com/in/janedoe" },
+    { label: "Portfolio", url: "janedoe.com" },
   ],
   certifications: [
-    { title: "AWS Certified Developer", issuer: "Amazon", year: "2023" },
-    { title: "Meta Front-End Developer", issuer: "Coursera", year: "2022" },
+    {
+      title: "Certification Name",
+      issuer: "Issuing Organization",
+      year: "2023",
+    },
+    { title: "Another Certification", issuer: "Organization", year: "2022" },
   ],
   references: [
     {
@@ -222,17 +244,21 @@ const INITIAL_DATA: ResumeData = {
 
 export default function ManualBuilderScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
 
-  const [activeTab, setActiveTab] = React.useState<"edit" | "preview" | "history">(
-    "preview",
-  );
+  const [activeTab, setActiveTab] = React.useState<
+    "edit" | "preview" | "history"
+  >("preview");
   const [data, setData] = React.useState<ResumeData>(INITIAL_DATA);
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [primaryColor, setPrimaryColor] = React.useState("#f59e0b");
+  const [loadedResumeId, setLoadedResumeId] = React.useState<string | null>(
+    null,
+  );
 
   // Version States
   const [versions, setVersions] = React.useState<any[]>([]);
@@ -241,6 +267,123 @@ export default function ManualBuilderScreen() {
   const [showSaveModal, setShowSaveModal] = React.useState(false);
   const [newVersionName, setNewVersionName] = React.useState("");
   const [showVersionDropdown, setShowVersionDropdown] = React.useState(false);
+  const [showOptionsMenu, setShowOptionsMenu] = React.useState(false);
+
+  // Rename States
+  const [showRenameModal, setShowRenameModal] = React.useState(false);
+  const [renameTarget, setRenameTarget] = React.useState<{ type: 'version'; oldName: string } | { type: 'history'; id: string; oldName: string } | null>(null);
+  const [renameText, setRenameText] = React.useState("");
+
+  // Draggable Text States
+  const [customTexts, setCustomTexts] = React.useState<
+    Array<{ id: string; text: string; x: number; y: number }>
+  >([]);
+  const [showAddTextModal, setShowAddTextModal] = React.useState(false);
+  const [newCustomText, setNewCustomText] = React.useState("");
+
+  const formatVersionDate = (v: any) => {
+    if (v.date) return v.date;
+    if (v.updatedAt) {
+      try {
+        const d = new Date(v.updatedAt);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    return "Saved version";
+  };
+
+  // Editor and History States
+  const EDITOR_TABS = [
+    { name: "Theme", icon: Palette },
+    { name: "Personal", icon: User },
+    { name: "Experience", icon: Briefcase },
+    { name: "Projects", icon: Rocket },
+    { name: "Education", icon: GraduationCap },
+    { name: "References", icon: Handshake },
+    { name: "Skills", icon: Zap },
+    { name: "Tools", icon: Zap },
+    { name: "Certificates", icon: Sparkles },
+  ];
+  const [activeEditorSection, setActiveEditorSection] =
+    React.useState("Personal");
+
+  // Per-character undo/redo
+  const dataRef = React.useRef(data);
+  dataRef.current = data;
+  const textUndoStack = React.useRef<Array<{ apply: (v: string) => void; prev: string; next: string }>>([]);
+  const textRedoStack = React.useRef<Array<{ apply: (v: string) => void; prev: string; next: string }>>([]);
+
+  const pushTextEdit = React.useCallback((apply: (v: string) => void, prev: string, next: string) => {
+    textUndoStack.current.push({ apply, prev, next });
+    textRedoStack.current = [];
+    if (textUndoStack.current.length > 500) textUndoStack.current.splice(0, 100);
+  }, []);
+
+  const applyEdit = (edit: { apply: (v: string) => void; prev: string; next: string }) => {
+    edit.apply(edit.prev);
+    Haptics.selectionAsync();
+  };
+
+  const handleUndo = () => {
+    const edit = textUndoStack.current.pop();
+    if (edit) {
+      textRedoStack.current.push({ apply: edit.apply, prev: edit.next, next: edit.prev });
+      applyEdit(edit);
+    }
+  };
+
+  const handleRedo = () => {
+    const edit = textRedoStack.current.pop();
+    if (edit) {
+      textUndoStack.current.push({ apply: edit.apply, prev: edit.next, next: edit.prev });
+      applyEdit(edit);
+    }
+  };
+
+  React.useEffect(() => {
+    if (params?.importData && typeof params.importData === "string") {
+      try {
+        const parsed = JSON.parse(params.importData);
+        setData((prev) => ({
+          ...prev,
+          ...parsed,
+          id: prev.id,
+        }));
+        router.setParams({ importData: undefined });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e) {
+        console.error("Failed to parse importData:", e);
+      }
+    }
+  }, [params?.importData]);
+
+  const handleReset = () => {
+    Alert.alert(
+      "Reset Layout",
+      "Are you sure you want to clear all data and start fresh?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => {
+            setData(INITIAL_DATA);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          },
+        },
+      ],
+    );
+  };
 
   const fetchVersions = async () => {
     const v = await UserStorage.getResumeVersions();
@@ -264,11 +407,11 @@ export default function ManualBuilderScreen() {
     }
     try {
       setIsSaving(true);
-      
+
       // 1. Save to Local Versions
       await UserStorage.saveResumeVersion(newVersionName.trim(), data);
       await fetchVersions();
-      
+
       // 2. Save to Main Resumes Store (My Resumes Dashboard)
       const savePayload = {
         name: newVersionName.trim(),
@@ -278,20 +421,26 @@ export default function ManualBuilderScreen() {
         data: data,
       };
 
-      const result = await saveResume(savePayload, loadedResumeId || undefined);
-      
+      const result = await saveResume(
+        savePayload as any,
+        loadedResumeId || undefined,
+      );
+
       if (result.success) {
         // If it was a new resume created, find it and set loadedResumeId
         const list = await getResumes();
-        const match = list.find(r => r.name === newVersionName.trim());
+        const match = list.find((r) => r.name === newVersionName.trim());
         if (match) {
           setLoadedResumeId(match.id);
         }
-        
+
         setShowSaveModal(false);
         setNewVersionName("");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Saved Successfully", "Your resume has been saved to My Resumes and is accessible on the dashboard.");
+        Alert.alert(
+          "Saved Successfully",
+          "Your resume has been saved to My Resumes and is accessible on the dashboard.",
+        );
       } else {
         Alert.alert("Error", result.message);
       }
@@ -308,7 +457,7 @@ export default function ManualBuilderScreen() {
       setShowSaveModal(true);
       return;
     }
-    
+
     try {
       setIsSaving(true);
       // Retrieve the current name of the loaded resume so we keep it
@@ -317,13 +466,16 @@ export default function ManualBuilderScreen() {
       const nameOfDraft = loaded ? loaded.name : "My Resume Draft";
 
       // Save to main Resumes Store
-      const result = await saveResume({
-        name: nameOfDraft,
-        role: data.title || "Resume",
-        template: selectedTemplate,
-        color: primaryColor,
-        data: data,
-      }, loadedResumeId);
+      const result = await saveResume(
+        {
+          name: nameOfDraft,
+          role: data.title || "Resume",
+          template: selectedTemplate,
+          color: primaryColor,
+          data: data,
+        } as any,
+        loadedResumeId,
+      );
 
       if (result.success) {
         // Also save to version tracking in the background
@@ -333,9 +485,12 @@ export default function ManualBuilderScreen() {
         } catch (vErr) {
           console.warn("Version save background error:", vErr);
         }
-        
+
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Draft Saved", "Successfully saved changes to My Resumes draft!");
+        Alert.alert(
+          "Draft Saved",
+          "Successfully saved changes to My Resumes draft!",
+        );
       } else {
         Alert.alert("Failed to Save", result.message);
       }
@@ -383,40 +538,76 @@ export default function ManualBuilderScreen() {
   };
 
   React.useEffect(() => {
-    const loadProfileData = async () => {
-      const user = auth.currentUser;
+    const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
-        // Pre-populate with auth data first
         setData((prev) => ({
           ...prev,
-          name: user.displayName || prev.name,
-          email: user.email || prev.email,
-          photo: user.photoURL || undefined,
+          name:
+            prev.name === "Jane Doe"
+              ? user.displayName || prev.name
+              : prev.name,
+          email:
+            prev.email === "jane.doe@example.com" ||
+            prev.email === "jane.doe@gmail.com"
+              ? user.email || prev.email
+              : prev.email,
+          photo: user.photoURL || prev.photo,
         }));
 
-        // Fetch Firestore profile data
-        try {
-          const docRef = doc(db, 'users', user.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const profile = docSnap.data();
-            setData((prev) => ({
-              ...prev,
-              name: profile.name || prev.name,
-              phone: profile.phone || prev.phone,
-              location: profile.location || prev.location,
-              website: profile.portfolio || prev.website,
-            }));
+        const loadProfile = async () => {
+          try {
+            const docRef = doc(db, "users", user.uid);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+              const profile = docSnap.data();
+              setData((prev) => ({
+                ...prev,
+                name:
+                  prev.name === "Jane Doe"
+                    ? profile.name || prev.name
+                    : prev.name,
+                email:
+                  prev.email === "jane.doe@example.com" ||
+                  prev.email === "jane.doe@gmail.com"
+                    ? user.email || profile.email || prev.email
+                    : prev.email,
+                phone:
+                  prev.phone === "+1 234 567 8900"
+                    ? profile.phone || prev.phone
+                    : prev.phone,
+                location:
+                  prev.location === "New York, USA"
+                    ? profile.location || prev.location
+                    : prev.location,
+                website: !prev.website
+                  ? profile.portfolio || prev.website
+                  : prev.website,
+                title:
+                  prev.title === "Professional Title"
+                    ? profile.primaryRole ||
+                      (profile.jobRoles && profile.jobRoles.length > 0
+                        ? profile.jobRoles[0]
+                        : prev.title)
+                    : prev.title,
+                photo: profile.profilePic || prev.photo,
+              }));
+            }
+          } catch (error) {
+            console.warn("Error loading user profile in manual.tsx:", error);
           }
-        } catch (error) {
-          console.warn("Error loading user profile in manual.tsx:", error);
-        }
+        };
+        loadProfile();
       }
-    };
-    loadProfileData();
+    });
+    return unsubscribe;
   }, []);
 
-  const { importData, initialData, templateId: initialTemplateId, resumeId } = useLocalSearchParams<{
+  const {
+    importData,
+    initialData,
+    templateId: initialTemplateId,
+    resumeId,
+  } = useLocalSearchParams<{
     importData?: string;
     initialData?: string;
     templateId?: string;
@@ -425,9 +616,15 @@ export default function ManualBuilderScreen() {
   const [selectedTemplate, setSelectedTemplate] = React.useState(
     initialTemplateId || "Elder-1",
   );
-  const [loadedResumeId, setLoadedResumeId] = React.useState<string | null>(resumeId || null);
+  const skipDraftLoad = React.useRef(false);
+  if (importData || initialData) {
+    skipDraftLoad.current = true;
+  }
 
-  const limits = React.useMemo(() => getLimits(selectedTemplate), [selectedTemplate]);
+  const limits = React.useMemo(
+    () => getLimits(selectedTemplate),
+    [selectedTemplate],
+  );
 
   // Unified initial load effect (Resume ID, search params or draft fallback)
   React.useEffect(() => {
@@ -438,9 +635,15 @@ export default function ManualBuilderScreen() {
           const list = await getResumes();
           const found = list.find((r) => r.id === resumeId);
           if (found) {
-            setData(found.data);
+            const resumeData = found.data as any;
+            setData({
+              ...resumeData,
+              location: resumeData.location || "",
+              languages: resumeData.languages || "",
+            });
             if (found.color) setPrimaryColor(found.color);
-            if (found.template) setSelectedTemplate(initialTemplateId || found.template);
+            if (found.template)
+              setSelectedTemplate(initialTemplateId || found.template);
             setLoadedResumeId(found.id);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             return;
@@ -448,7 +651,7 @@ export default function ManualBuilderScreen() {
         }
 
         // Case 2: Import data or Initial data passed (AI or JSON import)
-        if (importData || initialData) {
+        if (importData || initialData || skipDraftLoad.current) {
           if (initialTemplateId) {
             setSelectedTemplate(initialTemplateId);
           }
@@ -456,12 +659,18 @@ export default function ManualBuilderScreen() {
         }
 
         // Case 3: No active override parameters -> Load local builder draft!
-        const rawDraft = await AsyncStorage.getItem("manual_resume_draft");
+        const user = auth.currentUser;
+        const draftKey = user
+          ? `manual_resume_draft_${user.uid}`
+          : "manual_resume_draft";
+        const rawDraft = await AsyncStorage.getItem(draftKey);
         if (rawDraft) {
           const draft = JSON.parse(rawDraft);
           if (draft.data) setData(draft.data);
           if (draft.primaryColor) setPrimaryColor(draft.primaryColor);
-          setSelectedTemplate(initialTemplateId || draft.selectedTemplate || "Elder-1");
+          setSelectedTemplate(
+            initialTemplateId || draft.selectedTemplate || "Elder-1",
+          );
           if (draft.loadedResumeId) setLoadedResumeId(draft.loadedResumeId);
           console.log("Auto-save draft loaded successfully!");
         } else if (initialTemplateId) {
@@ -484,14 +693,21 @@ export default function ManualBuilderScreen() {
           primaryColor,
           loadedResumeId,
         };
-        await AsyncStorage.setItem("manual_resume_draft", JSON.stringify(draftObj));
+        const user = auth.currentUser;
+        const draftKey = user
+          ? `manual_resume_draft_${user.uid}`
+          : "manual_resume_draft";
+        await AsyncStorage.setItem(draftKey, JSON.stringify(draftObj));
       } catch (err) {
         console.error("Error autosaving draft:", err);
       }
     };
-    
+
     // Only save if data exists and is modified beyond empty initial data
-    if (data && (data.name || data.experience?.length > 0 || data.education?.length > 0)) {
+    if (
+      data &&
+      (data.name || data.experience?.length > 0 || data.education?.length > 0)
+    ) {
       const timer = setTimeout(saveDraftObj, 800); // 800ms debounce
       return () => clearTimeout(timer);
     }
@@ -502,7 +718,7 @@ export default function ManualBuilderScreen() {
     if (rawData) {
       try {
         const parsed = JSON.parse(rawData);
-        
+
         setData((prev) => {
           const name = parsed.name || prev.name;
           const title = parsed.role || parsed.title || prev.title;
@@ -511,8 +727,8 @@ export default function ManualBuilderScreen() {
           // Map experience safely
           let experience = prev.experience;
           if (parsed.experience) {
-            const expArray = Array.isArray(parsed.experience) 
-              ? parsed.experience 
+            const expArray = Array.isArray(parsed.experience)
+              ? parsed.experience
               : [parsed.experience];
             experience = expArray.map((e: any) => ({
               id: e.id || Math.random().toString(36).substr(2, 9),
@@ -526,8 +742,8 @@ export default function ManualBuilderScreen() {
           // Map education safely
           let education = prev.education;
           if (parsed.education) {
-            const eduArray = Array.isArray(parsed.education) 
-              ? parsed.education 
+            const eduArray = Array.isArray(parsed.education)
+              ? parsed.education
               : [parsed.education];
             education = eduArray.map((e: any) => ({
               id: e.id || Math.random().toString(36).substr(2, 9),
@@ -546,6 +762,14 @@ export default function ManualBuilderScreen() {
               : parsed.skills;
           }
 
+          // Map tools safely (convert array to comma separated string)
+          let tools = prev.tools;
+          if (parsed.tools) {
+            tools = Array.isArray(parsed.tools)
+              ? parsed.tools.join(", ")
+              : parsed.tools;
+          }
+
           // Map projects safely
           let projects = prev.projects;
           if (parsed.projects) {
@@ -556,7 +780,6 @@ export default function ManualBuilderScreen() {
               id: p.id || Math.random().toString(36).substr(2, 9),
               name: p.name || p.title || "",
               description: p.description || "",
-              link: p.link || "",
             }));
           }
 
@@ -567,7 +790,7 @@ export default function ManualBuilderScreen() {
               ? parsed.certifications
               : [parsed.certifications];
             certifications = certArray.map((c: any) => {
-              if (typeof c === 'string') {
+              if (typeof c === "string") {
                 return { title: c, issuer: "Certification", year: "" };
               }
               return {
@@ -592,7 +815,7 @@ export default function ManualBuilderScreen() {
             website: parsed.website || parsed.portfolio || prev.website,
             location: parsed.location || prev.location,
             email: parsed.email || prev.email,
-            tools: parsed.tools || prev.tools,
+            tools,
             languages: parsed.languages || prev.languages,
             interests: parsed.interests || prev.interests,
           };
@@ -601,18 +824,20 @@ export default function ManualBuilderScreen() {
         // Save entry to import history
         const label = initialData ? "Video AI Sync" : "Smart JSON Import";
         const entryName = `${label} (${parsed.role || parsed.title || "Resume"})`;
-        UserStorage.saveImportHistory(entryName, parsed).then(() => {
-          fetchHistory();
-        }).catch(err => console.warn("Save history error:", err));
+        UserStorage.saveImportHistory(entryName, parsed)
+          .then(() => {
+            fetchHistory();
+          })
+          .catch((err) => console.warn("Save history error:", err));
 
         // Switch to editor tab to show the imported data
         setActiveTab("edit");
-        
+
         // Clear params to avoid re-importing on refresh
         router.setParams({ importData: undefined, initialData: undefined });
         Alert.alert(
           "Import Successful",
-          "Video AI generated details have been successfully synced into your Canva editor!"
+          "Video AI generated details have been successfully synced into your Canva editor!",
         );
       } catch (e) {
         console.error("AI Data Import error:", e);
@@ -631,9 +856,20 @@ export default function ManualBuilderScreen() {
   ];
 
   const set = React.useCallback(
-    <K extends keyof ResumeData>(key: K, value: ResumeData[K]) =>
-      setData((prev) => ({ ...prev, [key]: value })),
-    [],
+    <K extends keyof ResumeData>(key: K, value: ResumeData[K]) => {
+      if (typeof value === 'string') {
+        const prev = (dataRef.current[key] as string) ?? '';
+        if (prev !== value) {
+          pushTextEdit(
+            (v: string) => setData((prev) => ({ ...prev, [key]: v })),
+            prev,
+            value,
+          );
+        }
+      }
+      setData((prev) => ({ ...prev, [key]: value }));
+    },
+    [pushTextEdit],
   );
 
   const handleOptimize = React.useCallback(() => {
@@ -656,7 +892,6 @@ export default function ManualBuilderScreen() {
       projects: prev.projects.map((proj) => ({
         ...proj,
         name: proj.name.slice(0, limits.projectName),
-        link: proj.link.slice(0, limits.projectLink),
         description: proj.description.slice(0, limits.projectDesc),
       })),
       education: prev.education.map((edu) => ({
@@ -676,18 +911,41 @@ export default function ManualBuilderScreen() {
       })),
     }));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Content Optimized", `All fields have been matched to the optimal character limits for ${selectedTemplate}.`);
+    Alert.alert(
+      "Content Optimized",
+      `All fields have been matched to the optimal character limits for ${selectedTemplate}.`,
+    );
   }, [limits, selectedTemplate]);
 
   const setEdu = React.useCallback(
-    (id: string, key: keyof Education, value: string) =>
+    (id: string, key: keyof Education, value: string) => {
+      const prev = dataRef.current.education.find(
+        (e, index) => e.id === id || (!e.id && index.toString() === id),
+      )?.[key] ?? '';
+      if (prev !== value) {
+        pushTextEdit(
+          (v: string) => setData((prev) => ({
+            ...prev,
+            education: prev.education.map((e, index) =>
+              e.id === id || (!e.id && index.toString() === id)
+                ? { ...e, [key]: v }
+                : e,
+            ),
+          })),
+          prev,
+          value,
+        );
+      }
       setData((prev) => ({
         ...prev,
         education: prev.education.map((e, index) =>
-          (e.id === id || (!e.id && index.toString() === id)) ? { ...e, [key]: value } : e
+          e.id === id || (!e.id && index.toString() === id)
+            ? { ...e, [key]: value }
+            : e,
         ),
-      })),
-    [],
+      }));
+    },
+    [pushTextEdit],
   );
 
   const addEdu = React.useCallback(
@@ -712,20 +970,36 @@ export default function ManualBuilderScreen() {
     (id: string) =>
       setData((prev) => ({
         ...prev,
-        education: prev.education.filter((e, index) => e.id !== id && (!e.id ? index.toString() !== id : true)),
+        education: prev.education.filter(
+          (e, index) => e.id !== id && (!e.id ? index.toString() !== id : true),
+        ),
       })),
     [],
   );
 
   const setExp = React.useCallback(
-    (id: string, key: keyof Experience, value: string) =>
+    (id: string, key: keyof Experience, value: string) => {
+      const prev = dataRef.current.experience.find((e) => e.id === id)?.[key] ?? '';
+      if (prev !== value) {
+        pushTextEdit(
+          (v: string) => setData((prev) => ({
+            ...prev,
+            experience: prev.experience.map((e) =>
+              e.id === id ? { ...e, [key]: v } : e,
+            ),
+          })),
+          prev,
+          value,
+        );
+      }
       setData((prev) => ({
         ...prev,
         experience: prev.experience.map((e) =>
           e.id === id ? { ...e, [key]: value } : e,
         ),
-      })),
-    [],
+      }));
+    },
+    [pushTextEdit],
   );
 
   const addExp = React.useCallback(
@@ -756,14 +1030,28 @@ export default function ManualBuilderScreen() {
   );
 
   const setProj = React.useCallback(
-    (id: string, key: keyof Project, value: string) =>
+    (id: string, key: keyof Project, value: string) => {
+      const prev = dataRef.current.projects.find((p) => p.id === id)?.[key] ?? '';
+      if (prev !== value) {
+        pushTextEdit(
+          (v: string) => setData((prev) => ({
+            ...prev,
+            projects: prev.projects.map((p) =>
+              p.id === id ? { ...p, [key]: v } : p,
+            ),
+          })),
+          prev,
+          value,
+        );
+      }
       setData((prev) => ({
         ...prev,
         projects: prev.projects.map((p) =>
           p.id === id ? { ...p, [key]: value } : p,
         ),
-      })),
-    [],
+      }));
+    },
+    [pushTextEdit],
   );
 
   const addProj = React.useCallback(
@@ -775,7 +1063,6 @@ export default function ManualBuilderScreen() {
           {
             id: Date.now().toString(),
             name: "",
-            link: "",
             description: "",
           },
         ],
@@ -793,14 +1080,28 @@ export default function ManualBuilderScreen() {
   );
 
   const setRef = React.useCallback(
-    (id: string, key: keyof Reference, value: string) =>
+    (id: string, key: keyof Reference, value: string) => {
+      const prev = (dataRef.current.references || []).find((r) => r.id === id)?.[key] ?? '';
+      if (prev !== value) {
+        pushTextEdit(
+          (v: string) => setData((prev) => ({
+            ...prev,
+            references: (prev.references || []).map((r) =>
+              r.id === id ? { ...r, [key]: v } : r,
+            ),
+          })),
+          prev,
+          value,
+        );
+      }
       setData((prev) => ({
         ...prev,
         references: (prev.references || []).map((r) =>
           r.id === id ? { ...r, [key]: value } : r,
         ),
-      })),
-    [],
+      }));
+    },
+    [pushTextEdit],
   );
 
   const addRef = React.useCallback(
@@ -830,12 +1131,169 @@ export default function ManualBuilderScreen() {
     [],
   );
 
+  const setCert = React.useCallback(
+    (idx: number, key: string, value: string) => {
+      const certs = dataRef.current.certifications || [];
+      const prev = certs[idx]?.[key as keyof typeof certs[0]] ?? '';
+      if (prev !== value) {
+        pushTextEdit(
+          (v: string) => setData((prev) => {
+            const certs = [...(prev.certifications || [])];
+            if (certs[idx]) certs[idx] = { ...certs[idx], [key]: v };
+            return { ...prev, certifications: certs };
+          }),
+          prev,
+          value,
+        );
+      }
+      setData((prev) => {
+        const certs = [...(prev.certifications || [])];
+        if (certs[idx]) certs[idx] = { ...certs[idx], [key]: value };
+        return { ...prev, certifications: certs };
+      });
+    },
+    [pushTextEdit],
+  );
+
+  const addCert = React.useCallback(
+    () =>
+      setData((prev) => ({
+        ...prev,
+        certifications: [
+          ...(prev.certifications || []),
+          { title: "", issuer: "", year: "" },
+        ],
+      })),
+    [],
+  );
+
+  const removeCert = React.useCallback(
+    (idx: number) =>
+      setData((prev) => ({
+        ...prev,
+        certifications: (prev.certifications || []).filter((_, i) => i !== idx),
+      })),
+    [],
+  );
+
+  const setLinkVal = React.useCallback(
+    (idx: number, key: string, value: string) => {
+      const links = dataRef.current.links || [];
+      const prev = links[idx]?.[key as keyof typeof links[0]] ?? '';
+      if (prev !== value) {
+        pushTextEdit(
+          (v: string) => setData((prev) => {
+            const links = [...(prev.links || [])];
+            if (links[idx]) links[idx] = { ...links[idx], [key]: v };
+            return { ...prev, links };
+          }),
+          prev,
+          value,
+        );
+      }
+      setData((prev) => {
+        const links = [...(prev.links || [])];
+        if (links[idx]) links[idx] = { ...links[idx], [key]: value };
+        return { ...prev, links };
+      });
+    },
+    [pushTextEdit],
+  );
+
+  const addLinkVal = React.useCallback(
+    () =>
+      setData((prev) => ({
+        ...prev,
+        links: [
+          ...(prev.links || []),
+          { label: "", url: "" },
+        ],
+      })),
+    [],
+  );
+
+  const removeLinkVal = React.useCallback(
+    (idx: number) =>
+      setData((prev) => ({
+        ...prev,
+        links: (prev.links || []).filter((_, i) => i !== idx),
+      })),
+    [],
+  );
+
+  // Section Visibility State
+  const [hiddenSections, setHiddenSections] = React.useState<
+    Record<string, boolean>
+  >({});
+
+  const toggleSectionVisibility = (sectionKey: string) => {
+    setHiddenSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const getRenderData = React.useCallback((): ResumeData => {
+    return {
+      ...data,
+      experience:
+        hiddenSections.experience ||
+        !data.experience ||
+        data.experience.length === 0
+          ? []
+          : data.experience,
+      projects:
+        hiddenSections.projects || !data.projects || data.projects.length === 0
+          ? []
+          : data.projects,
+      education:
+        hiddenSections.education ||
+        !data.education ||
+        data.education.length === 0
+          ? []
+          : data.education,
+      references:
+        hiddenSections.references ||
+        !data.references ||
+        data.references.length === 0
+          ? []
+          : data.references,
+      skills:
+        hiddenSections.skills || !data.skills || data.skills.trim() === ""
+          ? ""
+          : data.skills,
+      languages:
+        hiddenSections.languages ||
+        !data.languages ||
+        data.languages.trim() === ""
+          ? ""
+          : data.languages,
+      tools:
+        hiddenSections.tools || !data.tools || data.tools.trim() === ""
+          ? ""
+          : data.tools,
+      certifications:
+        hiddenSections.certifications ||
+        !data.certifications ||
+        data.certifications.length === 0
+          ? []
+          : data.certifications,
+      links:
+        hiddenSections.links ||
+        !data.links ||
+        data.links.length === 0
+          ? []
+          : data.links,
+    };
+  }, [data, hiddenSections]);
+
   const handleDownloadPDF = async () => {
     if (isGenerating) return;
     try {
       setIsGenerating(true);
       const html = generateResumeHtml(
-        data,
+        getRenderData(),
         selectedTemplate,
         primaryColor,
         "Inter",
@@ -957,8 +1415,8 @@ export default function ManualBuilderScreen() {
               // Map experience safely
               let experience = prev.experience;
               if (parsed.experience) {
-                const expArray = Array.isArray(parsed.experience) 
-                  ? parsed.experience 
+                const expArray = Array.isArray(parsed.experience)
+                  ? parsed.experience
                   : [parsed.experience];
                 experience = expArray.map((e: any) => ({
                   id: e.id || Math.random().toString(36).substr(2, 9),
@@ -972,8 +1430,8 @@ export default function ManualBuilderScreen() {
               // Map education safely
               let education = prev.education;
               if (parsed.education) {
-                const eduArray = Array.isArray(parsed.education) 
-                  ? parsed.education 
+                const eduArray = Array.isArray(parsed.education)
+                  ? parsed.education
                   : [parsed.education];
                 education = eduArray.map((e: any) => ({
                   id: e.id || Math.random().toString(36).substr(2, 9),
@@ -1002,7 +1460,6 @@ export default function ManualBuilderScreen() {
                   id: p.id || Math.random().toString(36).substr(2, 9),
                   name: p.name || p.title || "",
                   description: p.description || "",
-                  link: p.link || "",
                 }));
               }
 
@@ -1013,7 +1470,7 @@ export default function ManualBuilderScreen() {
                   ? parsed.certifications
                   : [parsed.certifications];
                 certifications = certArray.map((c: any) => {
-                  if (typeof c === 'string') {
+                  if (typeof c === "string") {
                     return { title: c, issuer: "Certification", year: "" };
                   }
                   return {
@@ -1070,120 +1527,606 @@ export default function ManualBuilderScreen() {
     );
   };
 
+  const handleDeleteHistory = async (id: string, name: string) => {
+    Alert.alert(
+      "Delete Entry",
+      `Are you sure you want to delete "${name}" from your import history?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await UserStorage.deleteImportHistory(id);
+            await fetchHistory();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleRenameVersion = (oldName: string) => {
+    setRenameTarget({ type: 'version', oldName });
+    setRenameText(oldName);
+    setShowRenameModal(true);
+  };
+
+  const handleRenameHistory = (id: string, oldName: string) => {
+    setRenameTarget({ type: 'history', id, oldName });
+    setRenameText(oldName);
+    setShowRenameModal(true);
+  };
+
+  const handleConfirmRename = async () => {
+    if (!renameTarget || !renameText.trim()) return;
+    try {
+      if (renameTarget.type === 'version') {
+        await UserStorage.renameResumeVersion(renameTarget.oldName, renameText.trim());
+        await fetchVersions();
+      } else {
+        await UserStorage.renameImportHistory(renameTarget.id, renameText.trim());
+        await fetchHistory();
+      }
+      setShowRenameModal(false);
+      setRenameTarget(null);
+      setRenameText("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Alert.alert("Rename Error", "Could not rename the entry.");
+    }
+  };
+
   const renderHistoryView = () => {
     return (
-      <View style={{ paddingHorizontal: 20, paddingTop: 15, paddingBottom: 30 }}>
-        {/* Header Title Block */}
-        <View style={{ marginBottom: 20 }}>
-          <Text style={{ fontSize: 20, fontWeight: "800", color: colors.text, marginBottom: 6 }}>
-            Import History
-          </Text>
-          <Text style={{ fontSize: 13, color: colors.textMuted, lineHeight: 18 }}>
-            Restore your latest 4 imports from Video AI sessions or custom JSON payloads. Restoring will overwrite the current editor content.
-          </Text>
-        </View>
-
-        {historyList.length === 0 ? (
+      <View
+        style={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40 }}
+      >
+        {/* ── Page Header ─────────────────────────────────────── */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 24,
+            paddingHorizontal: 4,
+          }}
+        >
           <View
             style={{
-              paddingVertical: 40,
-              paddingHorizontal: 20,
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: colors.glassBorder,
-              backgroundColor: colors.card,
+              width: 46,
+              height: 46,
+              borderRadius: 14,
+              backgroundColor: Theme.colors.primary,
               alignItems: "center",
               justifyContent: "center",
-              gap: 12,
             }}
           >
-            <History size={40} color={colors.textMuted} />
-            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.text, textAlign: "center" }}>
-              No History Recorded Yet
-            </Text>
-            <Text style={{ fontSize: 12, color: colors.textMuted, textAlign: "center", lineHeight: 16 }}>
-              Sync a Video AI session or paste an import JSON payload to see your records here!
-            </Text>
+            <History size={22} color="#fff" />
           </View>
-        ) : (
-          <View style={{ gap: 12 }}>
-            {historyList.map((item, index) => (
-              <View
-                key={item.id || index}
-                style={{
-                  padding: 16,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: colors.glassBorder,
-                  backgroundColor: colors.card,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 10,
-                  elevation: 2,
-                }}
-              >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <View
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 10,
-                      backgroundColor: Theme.colors.primary + "15",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <History size={16} color={Theme.colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "800", color: colors.text }} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>
-                      {item.date}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-                  <TouchableOpacity
-                    onPress={() => handleLoadHistory(item)}
-                    style={{
-                      flex: 2,
-                      backgroundColor: Theme.colors.primary,
-                      height: 38,
-                      borderRadius: 10,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>
-                      Restore Entry
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-
-            <TouchableOpacity
-              onPress={handleClearHistory}
+          <View style={{ flex: 1 }}>
+            <Text
               style={{
-                marginTop: 15,
-                borderColor: colors.glassBorder,
-                borderWidth: 1,
-                borderRadius: 14,
-                height: 44,
-                alignItems: "center",
-                justifyContent: "center",
+                fontSize: 20,
+                fontWeight: "800",
+                color: colors.text,
+                letterSpacing: -0.3,
               }}
             >
-              <Text style={{ color: "#ef4444", fontWeight: "700", fontSize: 13 }}>
-                Clear All Import History
+              History & Versions
+            </Text>
+            <Text
+              style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}
+            >
+              Restore imports or load saved versions
+            </Text>
+          </View>
+        </View>
+
+        {/* ── Saved Versions Section ─────────────────────────── */}
+        <View style={{ marginBottom: 24 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <View
+                style={{
+                  width: 4,
+                  height: 18,
+                  borderRadius: 2,
+                  backgroundColor: Theme.colors.primary,
+                }}
+              />
+              <Text
+                style={{ fontSize: 14, fontWeight: "800", color: colors.text }}
+              >
+                Saved Versions
+              </Text>
+              <View
+                style={{
+                  backgroundColor: Theme.colors.primary + "20",
+                  borderRadius: 8,
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "800",
+                    color: Theme.colors.primary,
+                  }}
+                >
+                  {versions.length}/3
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowSaveModal(true)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: Theme.colors.primary + "15",
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 10,
+              }}
+            >
+              <Save size={14} color={Theme.colors.primary} />
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: "800",
+                  color: Theme.colors.primary,
+                }}
+              >
+                Save New
               </Text>
             </TouchableOpacity>
           </View>
-        )}
+
+          {versions.length === 0 ? (
+            <View
+              style={{
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: colors.glassBorder,
+                borderStyle: "dashed",
+                backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc",
+                paddingVertical: 28,
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Save size={28} color={colors.textMuted} />
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "700",
+                  color: colors.textMuted,
+                }}
+              >
+                No saved versions yet
+              </Text>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.textMuted,
+                  textAlign: "center",
+                  paddingHorizontal: 20,
+                }}
+              >
+                Tap "Save New" to create up to 3 named snapshots
+              </Text>
+            </View>
+          ) : (
+            <View style={{ gap: 10 }}>
+              {versions.map((v, idx) => (
+                <View
+                  key={v.name}
+                  style={{
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor: colors.glassBorder,
+                    backgroundColor: colors.surface,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 14,
+                      gap: 12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
+                        backgroundColor: Theme.colors.primary + "18",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "900",
+                          color: Theme.colors.primary,
+                        }}
+                      >
+                        V{idx + 1}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "800",
+                          color: colors.text,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {v.name}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.textMuted,
+                          marginTop: 2,
+                        }}
+                      >
+                        {formatVersionDate(v)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      borderTopWidth: 1,
+                      borderTopColor: colors.glassBorder,
+                    }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => handleLoadVersion(v)}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        paddingVertical: 11,
+                        borderRightWidth: 1,
+                        borderRightColor: colors.glassBorder,
+                      }}
+                    >
+                      <FolderOpen size={14} color={Theme.colors.primary} />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "800",
+                          color: Theme.colors.primary,
+                        }}
+                      >
+                        Load
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleRenameVersion(v.name)}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        paddingVertical: 11,
+                        borderRightWidth: 1,
+                        borderRightColor: colors.glassBorder,
+                      }}
+                    >
+                      <Edit2 size={14} color="#8b5cf6" />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "800",
+                          color: "#8b5cf6",
+                        }}
+                      >
+                        Rename
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteVersion(v.name)}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        paddingVertical: 11,
+                      }}
+                    >
+                      <Trash2 size={14} color="#ef4444" />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "800",
+                          color: "#ef4444",
+                        }}
+                      >
+                        Delete
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* ── Import History Section ─────────────────────────── */}
+        <View>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <View
+                style={{
+                  width: 4,
+                  height: 18,
+                  borderRadius: 2,
+                  backgroundColor: "#8b5cf6",
+                }}
+              />
+              <Text
+                style={{ fontSize: 14, fontWeight: "800", color: colors.text }}
+              >
+                Import History
+              </Text>
+              <View
+                style={{
+                  backgroundColor: "#8b5cf620",
+                  borderRadius: 8,
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text
+                  style={{ fontSize: 11, fontWeight: "800", color: "#8b5cf6" }}
+                >
+                  {historyList.length}
+                </Text>
+              </View>
+            </View>
+            {historyList.length > 0 && (
+              <TouchableOpacity
+                onPress={handleClearHistory}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: "#ef444430",
+                  backgroundColor: "#ef444410",
+                }}
+              >
+                <Text
+                  style={{ fontSize: 11, fontWeight: "800", color: "#ef4444" }}
+                >
+                  Clear All
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {historyList.length === 0 ? (
+            <View
+              style={{
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: colors.glassBorder,
+                borderStyle: "dashed",
+                backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc",
+                paddingVertical: 28,
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <History size={28} color={colors.textMuted} />
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "700",
+                  color: colors.textMuted,
+                }}
+              >
+                No import history yet
+              </Text>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.textMuted,
+                  textAlign: "center",
+                  paddingHorizontal: 20,
+                }}
+              >
+                Sync a Video AI session or paste a JSON payload to create
+                entries here
+              </Text>
+            </View>
+          ) : (
+            <View style={{ gap: 10 }}>
+              {historyList.map((item, index) => (
+                <View
+                  key={item.id || index}
+                  style={{
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor: colors.glassBorder,
+                    backgroundColor: colors.surface,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 14,
+                      gap: 12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
+                        backgroundColor: "#8b5cf620",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <History size={17} color="#8b5cf6" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: "800",
+                          color: colors.text,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.textMuted,
+                          marginTop: 2,
+                        }}
+                      >
+                        {item.date}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        backgroundColor: "#8b5cf615",
+                        borderRadius: 8,
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: "800",
+                          color: "#8b5cf6",
+                        }}
+                      >
+                        #{index + 1}
+                      </Text>
+                    </View>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      borderTopWidth: 1,
+                      borderTopColor: colors.glassBorder,
+                    }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => handleLoadHistory(item)}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        paddingVertical: 11,
+                        borderRightWidth: 1,
+                        borderRightColor: colors.glassBorder,
+                        backgroundColor: "#8b5cf608",
+                      }}
+                    >
+                      <History size={14} color="#8b5cf6" />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "800",
+                          color: "#8b5cf6",
+                        }}
+                      >
+                        Restore
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleRenameHistory(item.id, item.name)}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        paddingVertical: 11,
+                        borderRightWidth: 1,
+                        borderRightColor: colors.glassBorder,
+                      }}
+                    >
+                      <Edit2 size={14} color="#8b5cf6" />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "800",
+                          color: "#8b5cf6",
+                        }}
+                      >
+                        Rename
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteHistory(item.id, item.name)}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        paddingVertical: 11,
+                      }}
+                    >
+                      <Trash2 size={14} color="#ef4444" />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "800",
+                          color: "#ef4444",
+                        }}
+                      >
+                        Delete
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </View>
     );
   };
@@ -1201,38 +2144,19 @@ export default function ManualBuilderScreen() {
         { paddingTop: insets.top, backgroundColor: colors.background },
       ]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} />
-
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: colors.surface,
-            borderBottomColor: colors.glassBorder,
-          },
-        ]}
-      >
+      <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
             onPress={() => router.back()}
-            style={[
-              styles.backBtn,
-              {
-                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#f1f5f9",
-              },
-            ]}
+            style={styles.headerBtn}
           >
-            <ArrowLeft size={22} color={colors.text} />
+            <ArrowLeft size={22} color="#8b5cf6" />
           </TouchableOpacity>
 
           <View>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>
-              Elite Studio
-            </Text>
+            <Text style={styles.headerTitle}>Elite Studio</Text>
             <View style={styles.headerStatusRow}>
-              <View style={styles.liveIndicator} />
-              <Text style={[styles.headerSub, { color: colors.textMuted }]}>
-                Auto-syncing to PDF •{" "}
+              <Text style={styles.headerSub}>
                 {AVAILABLE_TEMPLATES.find((t) => t.id === selectedTemplate)
                   ?.name || selectedTemplate}
               </Text>
@@ -1242,623 +2166,1130 @@ export default function ManualBuilderScreen() {
 
         <View style={styles.headerRight}>
           <TouchableOpacity
-            onPress={handleQuickSave}
-            disabled={isSaving}
-            style={[
-              styles.backBtn,
-              {
-                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#f1f5f9",
-              },
-            ]}
+            onPress={() => router.push('/builder/voice')}
+            style={styles.headerBtn}
           >
-            {isSaving ? (
-              <ActivityIndicator size="small" color={colors.text} />
-            ) : (
-              <Save size={18} color={colors.text} />
-            )}
+            <MessageSquare size={20} color="#8b5cf6" />
           </TouchableOpacity>
-
+          <TouchableOpacity
+            onPress={() => setShowSaveModal(true)}
+            style={styles.headerBtn}
+          >
+            <Save size={18} color="#8b5cf6" />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={handleDownloadPDF}
             disabled={isGenerating}
-            style={[
-              styles.backBtn,
-              {
-                backgroundColor: Theme.colors.primary + "15",
-              },
-            ]}
+            style={styles.headerBtn}
           >
             {isGenerating ? (
-              <ActivityIndicator size="small" color={Theme.colors.primary} />
+              <ActivityIndicator size="small" color="#8b5cf6" />
             ) : (
-              <Download size={20} color={Theme.colors.primary} />
+              <Download size={18} color="#8b5cf6" />
             )}
           </TouchableOpacity>
         </View>
       </View>
 
       {activeTab === "edit" ? (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.editorContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.editorSection}>
-            <TouchableOpacity
-              onPress={handleOptimize}
-              style={[
-                styles.sectionCard,
-                {
-                  backgroundColor: Theme.colors.primary + "10",
-                  borderColor: Theme.colors.primary,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingVertical: 15,
-                },
-              ]}
+        <View style={{ flex: 1 }}>
+          {/* Sub-Tabs Header */}
+          <View
+            style={{
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.glassBorder,
+              backgroundColor: colors.background,
+            }}
+          >
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 4, paddingHorizontal: 16 }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: Theme.colors.primary,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Zap size={20} color="#fff" />
-                </View>
-                <View>
-                  <Text style={{ fontSize: 15, fontWeight: "800", color: colors.text }}>
-                    Smart Content Optimizer
-                  </Text>
-                  <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                    Auto-fit all content to template limits
-                  </Text>
-                </View>
-              </View>
-              <ArrowLeft size={18} color={Theme.colors.primary} style={{ transform: [{ rotate: '180deg' }] }} />
-            </TouchableOpacity>
+              {EDITOR_TABS.map((tab) => {
+                const isActive = activeEditorSection === tab.name;
+                return (
+                  <TouchableOpacity
+                    key={tab.name}
+                    onPress={() => setActiveEditorSection(tab.name)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
+                      borderRadius: 20,
+                      backgroundColor: isActive
+                        ? Theme.colors.primary + "15"
+                        : "transparent",
+                    }}
+                  >
+                    <tab.icon
+                      size={15}
+                      color={isActive ? Theme.colors.primary : colors.textMuted}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? "800" : "600",
+                        color: isActive ? Theme.colors.primary : colors.textMuted,
+                      }}
+                    >
+                      {tab.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
-          {/* Version Management Section */}
-          <View style={styles.editorSection}>
-            <View style={styles.versionHeader}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: colors.text, marginBottom: 0 },
-                ]}
-              >
-                Resume Versions
-              </Text>
-              <View style={styles.versionActions}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.editorContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── THEME SECTION ── */}
+            {activeEditorSection === "Theme" && (
+              <View style={styles.editorSection}>
                 <TouchableOpacity
-                  onPress={() => setShowVersionDropdown(!showVersionDropdown)}
+                  onPress={handleOptimize}
                   style={[
-                    styles.dropdownBtn,
+                    styles.sectionCard,
                     {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.glassBorder,
+                      backgroundColor: Theme.colors.primary + "10",
+                      borderColor: Theme.colors.primary,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingVertical: 15,
                     },
                   ]}
                 >
-                  <FolderOpen size={16} color={Theme.colors.primary} />
-                  <Text
-                    style={[styles.dropdownBtnText, { color: colors.text }]}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
                   >
-                    Load Version
-                  </Text>
-                  <ChevronDown size={14} color={colors.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setShowSaveModal(true)}
-                  style={[
-                    styles.saveVersionIconBtn,
-                    { backgroundColor: Theme.colors.primary + "15" },
-                  ]}
-                >
-                  <Save size={18} color={Theme.colors.primary} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {showVersionDropdown && (
-              <View
-                style={[
-                  styles.dropdownMenu,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.glassBorder,
-                  },
-                ]}
-              >
-                {versions.length === 0 ? (
-                  <Text
-                    style={[styles.emptyVersions, { color: colors.textMuted }]}
-                  >
-                    No saved versions yet (Max 3)
-                  </Text>
-                ) : (
-                  versions.map((v) => (
-                    <TouchableOpacity
-                      key={v.name}
-                      style={[
-                        styles.dropdownItem,
-                        { borderBottomColor: colors.glassBorder },
-                      ]}
-                      onPress={() => handleLoadVersion(v)}
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: Theme.colors.primary,
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[styles.versionName, { color: colors.text }]}
-                        >
-                          {v.name}
-                        </Text>
+                      <Zap size={20} color="#fff" />
+                    </View>
+                    <View>
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "800",
+                          color: colors.text,
+                        }}
+                      >
+                        Smart Content Optimizer
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                        Auto-fit all content to template limits
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Version Management Section */}
+                <View style={{ marginTop: 20 }}>
+                  <View style={styles.versionHeader}>
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        { color: colors.text, marginBottom: 0 },
+                      ]}
+                    >
+                      Resume Versions
+                    </Text>
+                    <View style={styles.versionActions}>
+                      <TouchableOpacity
+                        onPress={() =>
+                          setShowVersionDropdown(!showVersionDropdown)
+                        }
+                        style={[
+                          styles.dropdownBtn,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: colors.glassBorder,
+                          },
+                        ]}
+                      >
+                        <FolderOpen size={16} color={Theme.colors.primary} />
                         <Text
                           style={[
-                            styles.versionDate,
+                            styles.dropdownBtnText,
+                            { color: colors.text },
+                          ]}
+                        >
+                          Load Version
+                        </Text>
+                        <ChevronDown size={14} color={colors.textMuted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setShowSaveModal(true)}
+                        style={[
+                          styles.saveVersionIconBtn,
+                          { backgroundColor: Theme.colors.primary + "15" },
+                        ]}
+                      >
+                        <Save size={18} color={Theme.colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {showVersionDropdown && (
+                    <View
+                      style={[
+                        styles.dropdownMenu,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.glassBorder,
+                        },
+                      ]}
+                    >
+                      {versions.length === 0 ? (
+                        <Text
+                          style={[
+                            styles.emptyVersions,
                             { color: colors.textMuted },
                           ]}
                         >
-                          Saved {new Date(v.updatedAt).toLocaleDateString()}
+                          No saved versions yet (Max 3)
                         </Text>
+                      ) : (
+                        versions.map((v) => (
+                          <TouchableOpacity
+                            key={v.name}
+                            style={[
+                              styles.dropdownItem,
+                              { borderBottomColor: colors.glassBorder },
+                            ]}
+                            onPress={() => handleLoadVersion(v)}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text
+                                style={[
+                                  styles.versionName,
+                                  { color: colors.text },
+                                ]}
+                              >
+                                {v.name}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.versionDate,
+                                  { color: colors.textMuted },
+                                ]}
+                              >
+                                Saved {formatVersionDate(v)}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteVersion(v.name)}
+                            >
+                              <Trash2 size={16} color="#ef4444" />
+                            </TouchableOpacity>
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: colors.text, marginTop: 20 },
+                  ]}
+                >
+                  Elite Theme
+                </Text>
+                <View
+                  style={[
+                    styles.sectionCard,
+                    {
+                      backgroundColor: colors.surface,
+                      flexDirection: "row",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    },
+                  ]}
+                >
+                  {THEME_COLORS.map((color) => (
+                    <TouchableOpacity
+                      key={color}
+                      onPress={() => {
+                        setPrimaryColor(color);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }}
+                      style={[
+                        styles.colorCircle,
+                        { backgroundColor: color },
+                        primaryColor === color && styles.activeColorCircle,
+                      ]}
+                    />
+                  ))}
+                </View>
+
+                {/* Section Visibility Controls */}
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: colors.text, marginTop: 20 },
+                  ]}
+                >
+                  Manage Layout Sections
+                </Text>
+                <View
+                  style={[
+                    styles.sectionCard,
+                    {
+                      backgroundColor: colors.surface,
+                      gap: 12,
+                    },
+                  ]}
+                >
+                  {[
+                    { key: "experience", label: "Work Experience" },
+                    { key: "projects", label: "Projects" },
+                    { key: "education", label: "Education" },
+                    { key: "references", label: "References" },
+                    { key: "skills", label: "Skills" },
+                    { key: "languages", label: "Languages" },
+                    { key: "tools", label: "Tools" },
+                    { key: "links", label: "Links" },
+                  ].map((sec) => {
+                    const isHidden = !!hiddenSections[sec.key];
+                    return (
+                      <View
+                        key={sec.key}
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          paddingVertical: 8,
+                          borderBottomWidth: 1,
+                          borderBottomColor: colors.glassBorder,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            fontWeight: "700",
+                            color: colors.text,
+                          }}
+                        >
+                          {sec.label}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => toggleSectionVisibility(sec.key)}
+                          style={{
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: 14,
+                            backgroundColor: isHidden
+                              ? "#ef444415"
+                              : "#10b98115",
+                            borderWidth: 1,
+                            borderColor: isHidden ? "#ef444450" : "#10b98150",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: "800",
+                              color: isHidden ? "#ef4444" : "#10b981",
+                            }}
+                          >
+                            {isHidden ? "Hidden" : "Visible"}
+                          </Text>
+                        </TouchableOpacity>
                       </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* ── PERSONAL SECTION ── */}
+            {activeEditorSection === "Personal" && (
+              <View style={styles.editorSection}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  Personal Details
+                </Text>
+                <GlassCard
+                  style={[
+                    styles.sectionCard,
+                    { backgroundColor: colors.surface },
+                  ]}
+                >
+                  <Field
+                    label="Full Name"
+                    value={data.name}
+                    onChange={(v: string) => set("name", v)}
+                    colors={colors}
+                    maxLength={limits.name}
+                  />
+                  <Field
+                    label="Headline"
+                    value={data.title}
+                    onChange={(v: string) => set("title", v)}
+                    colors={colors}
+                    maxLength={limits.title}
+                  />
+                  <View style={styles.rowFields}>
+                    <View style={{ flex: 1 }}>
+                      <Field
+                        label="Email"
+                        value={data.email}
+                        onChange={(v: string) => set("email", v)}
+                        keyboardType="email-address"
+                        colors={colors}
+                        maxLength={limits.email}
+                      />
+                    </View>
+                    <View style={{ width: 12 }} />
+                    <View style={{ flex: 1 }}>
+                      <Field
+                        label="Phone"
+                        value={data.phone}
+                        onChange={(v: string) => set("phone", v)}
+                        keyboardType="phone-pad"
+                        colors={colors}
+                        maxLength={limits.phone}
+                      />
+                    </View>
+                  </View>
+                  <Field
+                    label="Location"
+                    value={data.location}
+                    onChange={(v: string) => set("location", v)}
+                    colors={colors}
+                    maxLength={limits.location}
+                  />
+                  <Field
+                    label="Website / Portfolio"
+                    value={data.website || ""}
+                    onChange={(v: string) => set("website", v)}
+                    colors={colors}
+                    maxLength={limits.website}
+                  />
+                  <Field
+                    label="Summary"
+                    value={data.summary}
+                    onChange={(v: string) => set("summary", v)}
+                    multiline
+                    colors={colors}
+                    onEnhance={() =>
+                      handleEnhance(
+                        data.summary,
+                        "summary",
+                        "professional summary",
+                        (v) => set("summary", v),
+                      )
+                    }
+                    isEnhancing={enhancingField === "summary"}
+                    maxLength={limits.summary}
+                  />
+                </GlassCard>
+              </View>
+            )}
+
+            {/* ── EXPERIENCE SECTION ── */}
+            {activeEditorSection === "Experience" && (
+              <View style={styles.editorSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    Work Experience
+                  </Text>
+                  <TouchableOpacity
+                    onPress={addExp}
+                    style={styles.addSectionBtn}
+                  >
+                    <Plus size={16} color={Theme.colors.primary} />
+                    <Text style={styles.addSectionText}>Add New</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {data.experience.map((exp, idx) => (
+                  <GlassCard
+                    key={exp.id}
+                    style={[
+                      styles.sectionCard,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.cardTop,
+                        { borderBottomColor: Theme.border.color },
+                      ]}
+                    >
+                      <Text style={[styles.cardIndex, { color: colors.text }]}>
+                        Experience #{idx + 1}
+                      </Text>
                       <TouchableOpacity
-                        onPress={() => handleDeleteVersion(v.name)}
+                        onPress={() => removeExp(exp.id)}
+                        style={styles.deleteBtn}
                       >
                         <Trash2 size={16} color="#ef4444" />
                       </TouchableOpacity>
-                    </TouchableOpacity>
-                  ))
-                )}
+                    </View>
+                    <Field
+                      label="Company"
+                      value={exp.company}
+                      onChange={(v: string) => setExp(exp.id, "company", v)}
+                      colors={colors}
+                      maxLength={limits.company}
+                    />
+                    <Field
+                      label="Role"
+                      value={exp.role}
+                      onChange={(v: string) => setExp(exp.id, "role", v)}
+                      colors={colors}
+                      maxLength={limits.role}
+                    />
+                    <Field
+                      label="Duration"
+                      value={exp.period}
+                      onChange={(v: string) => setExp(exp.id, "period", v)}
+                      colors={colors}
+                      maxLength={limits.period}
+                    />
+                    <Field
+                      label="Description"
+                      value={exp.description}
+                      onChange={(v: string) => setExp(exp.id, "description", v)}
+                      multiline
+                      colors={colors}
+                      onEnhance={() =>
+                        handleEnhance(
+                          exp.description,
+                          `exp-${exp.id}`,
+                          "job description",
+                          (v) => setExp(exp.id, "description", v),
+                        )
+                      }
+                      isEnhancing={enhancingField === `exp-${exp.id}`}
+                      maxLength={limits.description}
+                    />
+                  </GlassCard>
+                ))}
               </View>
             )}
-          </View>
 
-          <View style={styles.editorSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Elite Theme
-            </Text>
-            <View
-              style={[
-                styles.sectionCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.glassBorder,
-                  flexDirection: "row",
-                  gap: 12,
-                  flexWrap: "wrap",
-                },
-              ]}
-            >
-              {THEME_COLORS.map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  onPress={() => {
-                    setPrimaryColor(color);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }}
+            {/* ── PROJECTS SECTION ── */}
+            {activeEditorSection === "Projects" && (
+              <View style={styles.editorSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    Personal Projects
+                  </Text>
+                  <TouchableOpacity
+                    onPress={addProj}
+                    style={styles.addSectionBtn}
+                  >
+                    <Plus size={16} color={Theme.colors.primary} />
+                    <Text style={styles.addSectionText}>Add Project</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {data.projects.map((proj, idx) => (
+                  <GlassCard
+                    key={proj.id}
+                    style={[
+                      styles.sectionCard,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.cardTop,
+                        { borderBottomColor: Theme.border.color },
+                      ]}
+                    >
+                      <Text style={[styles.cardIndex, { color: colors.text }]}>
+                        Project #{idx + 1}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => removeProj(proj.id)}
+                        style={styles.deleteBtn}
+                      >
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <Field
+                      label="Project Name"
+                      value={proj.name}
+                      onChange={(v: string) => setProj(proj.id, "name", v)}
+                      colors={colors}
+                      maxLength={limits.projectName}
+                    />
+                    <Field
+                      label="Description"
+                      value={proj.description}
+                      onChange={(v: string) =>
+                        setProj(proj.id, "description", v)
+                      }
+                      multiline
+                      colors={colors}
+                      onEnhance={() =>
+                        handleEnhance(
+                          proj.description,
+                          `proj-${proj.id}`,
+                          "project description",
+                          (v) => setProj(proj.id, "description", v),
+                        )
+                      }
+                      isEnhancing={enhancingField === `proj-${proj.id}`}
+                      maxLength={limits.projectDesc}
+                    />
+                  </GlassCard>
+                ))}
+              </View>
+            )}
+
+            {/* ── EDUCATION SECTION ── */}
+            {activeEditorSection === "Education" && (
+              <View style={styles.editorSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    Education
+                  </Text>
+                  <TouchableOpacity
+                    onPress={addEdu}
+                    style={styles.addSectionBtn}
+                  >
+                    <Plus size={16} color={Theme.colors.primary} />
+                    <Text style={styles.addSectionText}>Add Education</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {data.education.map((edu, idx) => (
+                  <GlassCard
+                    key={edu.id || idx}
+                    style={[
+                      styles.sectionCard,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.cardTop,
+                        { borderBottomColor: Theme.border.color },
+                      ]}
+                    >
+                      <Text style={[styles.cardIndex, { color: colors.text }]}>
+                        Education #{idx + 1}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => removeEdu(edu.id || idx.toString())}
+                        style={styles.deleteBtn}
+                      >
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <Field
+                      label="School / University"
+                      value={edu.school}
+                      onChange={(v: string) =>
+                        setEdu(edu.id || idx.toString(), "school", v)
+                      }
+                      colors={colors}
+                      maxLength={limits.school}
+                    />
+                    <Field
+                      label="Degree / Course"
+                      value={edu.degree}
+                      onChange={(v: string) =>
+                        setEdu(edu.id || idx.toString(), "degree", v)
+                      }
+                      colors={colors}
+                      maxLength={limits.degree}
+                    />
+                    <Field
+                      label="Year / Period"
+                      value={edu.year}
+                      onChange={(v: string) =>
+                        setEdu(edu.id || idx.toString(), "year", v)
+                      }
+                      colors={colors}
+                      maxLength={limits.year}
+                    />
+                  </GlassCard>
+                ))}
+              </View>
+            )}
+
+            {/* ── REFERENCES SECTION ── */}
+            {activeEditorSection === "References" && (
+              <View style={styles.editorSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    References
+                  </Text>
+                  <TouchableOpacity
+                    onPress={addRef}
+                    style={styles.addSectionBtn}
+                  >
+                    <Plus size={16} color={Theme.colors.primary} />
+                    <Text style={styles.addSectionText}>Add Reference</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {(data.references || []).map((ref, idx) => (
+                  <GlassCard
+                    key={ref.id}
+                    style={[
+                      styles.sectionCard,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.cardTop,
+                        { borderBottomColor: Theme.border.color },
+                      ]}
+                    >
+                      <Text style={[styles.cardIndex, { color: colors.text }]}>
+                        Reference #{idx + 1}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => removeRef(ref.id)}
+                        style={styles.deleteBtn}
+                      >
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <Field
+                      label="Name"
+                      value={ref.name}
+                      onChange={(v: string) => setRef(ref.id, "name", v)}
+                      colors={colors}
+                      maxLength={limits.refName}
+                    />
+                    <Field
+                      label="Company / Relation"
+                      value={ref.company}
+                      onChange={(v: string) => setRef(ref.id, "company", v)}
+                      colors={colors}
+                      maxLength={limits.refCompany}
+                    />
+                    <Field
+                      label="Phone"
+                      value={ref.phone}
+                      onChange={(v: string) => setRef(ref.id, "phone", v)}
+                      colors={colors}
+                      maxLength={limits.refPhone}
+                    />
+                    <Field
+                      label="Email / Social"
+                      value={ref.email}
+                      onChange={(v: string) => setRef(ref.id, "email", v)}
+                      colors={colors}
+                      maxLength={limits.refEmail}
+                    />
+                  </GlassCard>
+                ))}
+              </View>
+            )}
+
+            {/* ── SKILLS SECTION ── */}
+            {activeEditorSection === "Skills" && (
+              <View style={styles.editorSection}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  Skills & Languages
+                </Text>
+                <GlassCard
                   style={[
-                    styles.colorCircle,
-                    { backgroundColor: color },
-                    primaryColor === color && styles.activeColorCircle,
+                    styles.sectionCard,
+                    { backgroundColor: colors.surface },
                   ]}
-                />
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.editorSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Personal Details
-            </Text>
-            <View
-              style={[
-                styles.sectionCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.glassBorder,
-                },
-              ]}
-            >
-              <Field
-                label="Full Name"
-                value={data.name}
-                onChange={(v: string) => set("name", v)}
-                colors={colors}
-                maxLength={limits.name}
-              />
-              <Field
-                label="Headline"
-                value={data.title}
-                onChange={(v: string) => set("title", v)}
-                colors={colors}
-                maxLength={limits.title}
-              />
-              <View style={styles.rowFields}>
-                <View style={{ flex: 1 }}>
+                >
                   <Field
-                    label="Email"
-                    value={data.email}
-                    onChange={(v: string) => set("email", v)}
-                    keyboardType="email-address"
+                    label="Skills"
+                    value={data.skills}
+                    onChange={(v: string) => set("skills", v)}
+                    multiline
                     colors={colors}
-                    maxLength={limits.email}
+                    maxLength={limits.skills}
                   />
-                </View>
-                <View style={{ width: 12 }} />
-                <View style={{ flex: 1 }}>
                   <Field
-                    label="Phone"
-                    value={data.phone}
-                    onChange={(v: string) => set("phone", v)}
-                    keyboardType="phone-pad"
+                    label="Languages"
+                    value={data.languages}
+                    onChange={(v: string) => set("languages", v)}
                     colors={colors}
-                    maxLength={limits.phone}
+                    maxLength={limits.languages}
                   />
-                </View>
+                </GlassCard>
               </View>
-              <Field
-                label="Location"
-                value={data.location}
-                onChange={(v: string) => set("location", v)}
-                colors={colors}
-                maxLength={limits.location}
-              />
-              <Field
-                label="Website / Portfolio"
-                value={data.website || ""}
-                onChange={(v: string) => set("website", v)}
-                colors={colors}
-                maxLength={limits.website}
-              />
-              <Field
-                label="Summary"
-                value={data.summary}
-                onChange={(v: string) => set("summary", v)}
-                multiline
-                colors={colors}
-                onEnhance={() =>
-                  handleEnhance(
-                    data.summary,
-                    "summary",
-                    "professional summary",
-                    (v) => set("summary", v),
-                  )
-                }
-                isEnhancing={enhancingField === "summary"}
-                maxLength={limits.summary}
-              />
-            </View>
-          </View>
+            )}
 
-          <View style={styles.editorSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Work Experience
-              </Text>
-              <TouchableOpacity onPress={addExp} style={styles.addSectionBtn}>
-                <Plus size={16} color={Theme.colors.primary} />
-                <Text style={styles.addSectionText}>Add New</Text>
-              </TouchableOpacity>
-            </View>
-
-            {data.experience.map((exp, idx) => (
-              <View
-                key={exp.id}
-                style={[
-                  styles.sectionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.glassBorder,
-                  },
-                ]}
-              >
-                <View
+            {/* ── TOOLS SECTION ── */}
+            {activeEditorSection === "Tools" && (
+              <View style={styles.editorSection}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  Tools & Software
+                </Text>
+                <GlassCard
                   style={[
-                    styles.cardTop,
-                    { borderBottomColor: colors.glassBorder },
+                    styles.sectionCard,
+                    { backgroundColor: colors.surface },
                   ]}
                 >
-                  <Text style={styles.cardIndex}>Experience #{idx + 1}</Text>
+                  <Field
+                    label="Tools / Software"
+                    value={data.tools || ""}
+                    onChange={(v: string) => set("tools", v)}
+                    colors={colors}
+                    maxLength={limits.tools || 300}
+                  />
+                </GlassCard>
+              </View>
+            )}
+
+            {/* ── CERTIFICATES SECTION ── */}
+            {activeEditorSection === "Certificates" && (
+              <View style={styles.editorSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    Certificates
+                  </Text>
                   <TouchableOpacity
-                    onPress={() => removeExp(exp.id)}
-                    style={styles.deleteBtn}
+                    onPress={addCert}
+                    style={styles.addSectionBtn}
                   >
-                    <Trash2 size={16} color="#ef4444" />
+                    <Plus size={16} color={Theme.colors.primary} />
+                    <Text style={styles.addSectionText}>Add Certificate</Text>
                   </TouchableOpacity>
                 </View>
-                <Field
-                  label="Company"
-                  value={exp.company}
-                  onChange={(v: string) => setExp(exp.id, "company", v)}
-                  colors={colors}
-                  maxLength={limits.company}
-                />
-                <Field
-                  label="Role"
-                  value={exp.role}
-                  onChange={(v: string) => setExp(exp.id, "role", v)}
-                  colors={colors}
-                  maxLength={limits.role}
-                />
-                <Field
-                  label="Duration"
-                  value={exp.period}
-                  onChange={(v: string) => setExp(exp.id, "period", v)}
-                  colors={colors}
-                  maxLength={limits.period}
-                />
-                <Field
-                  label="Description"
-                  value={exp.description}
-                  onChange={(v: string) => setExp(exp.id, "description", v)}
-                  multiline
-                  colors={colors}
-                  onEnhance={() =>
-                    handleEnhance(
-                      exp.description,
-                      `exp-${exp.id}`,
-                      "job description",
-                      (v) => setExp(exp.id, "description", v),
-                    )
-                  }
-                  isEnhancing={enhancingField === `exp-${exp.id}`}
-                  maxLength={limits.description}
-                />
-              </View>
-            ))}
-          </View>
 
-          <View style={styles.editorSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Personal Projects
-              </Text>
-              <TouchableOpacity onPress={addProj} style={styles.addSectionBtn}>
-                <Plus size={16} color={Theme.colors.primary} />
-                <Text style={styles.addSectionText}>Add Project</Text>
-              </TouchableOpacity>
-            </View>
-
-            {data.projects.map((proj, idx) => (
-              <View
-                key={proj.id}
-                style={[
-                  styles.sectionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.glassBorder,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.cardTop,
-                    { borderBottomColor: colors.glassBorder },
-                  ]}
-                >
-                  <Text style={styles.cardIndex}>Project #{idx + 1}</Text>
-                  <TouchableOpacity
-                    onPress={() => removeProj(proj.id)}
-                    style={styles.deleteBtn}
+                {(data.certifications || []).map((cert, idx) => (
+                  <GlassCard
+                    key={idx}
+                    style={[
+                      styles.sectionCard,
+                      { backgroundColor: colors.surface },
+                    ]}
                   >
-                    <Trash2 size={16} color="#ef4444" />
+                    <View
+                      style={[
+                        styles.cardTop,
+                        { borderBottomColor: Theme.border.color },
+                      ]}
+                    >
+                      <Text style={[styles.cardIndex, { color: colors.text }]}>
+                        Certificate #{idx + 1}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => removeCert(idx)}
+                        style={styles.deleteBtn}
+                      >
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <Field
+                      label="Certificate Title"
+                      value={cert.title}
+                      onChange={(v: string) => setCert(idx, "title", v)}
+                      colors={colors}
+                      maxLength={150}
+                    />
+                    <Field
+                      label="Issuing Organization"
+                      value={cert.issuer}
+                      onChange={(v: string) => setCert(idx, "issuer", v)}
+                      colors={colors}
+                      maxLength={150}
+                    />
+                    <Field
+                      label="Year"
+                      value={cert.year}
+                      onChange={(v: string) => setCert(idx, "year", v)}
+                      colors={colors}
+                      maxLength={10}
+                    />
+                  </GlassCard>
+                ))}
+              </View>
+            )}
+
+            {/* ── LINKS SECTION ── */}
+            {activeEditorSection === "Links" && (
+              <View style={styles.editorSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    Links & Portfolio
+                  </Text>
+                  <TouchableOpacity
+                    onPress={addLinkVal}
+                    style={styles.addSectionBtn}
+                  >
+                    <Plus size={16} color={Theme.colors.primary} />
+                    <Text style={styles.addSectionText}>Add Link</Text>
                   </TouchableOpacity>
                 </View>
-                <Field
-                  label="Project Name"
-                  value={proj.name}
-                  onChange={(v: string) => setProj(proj.id, "name", v)}
-                  colors={colors}
-                  maxLength={limits.projectName}
-                />
-                <Field
-                  label="Link (GitHub/Live)"
-                  value={proj.link}
-                  onChange={(v: string) => setProj(proj.id, "link", v)}
-                  colors={colors}
-                  maxLength={limits.projectLink}
-                />
-                <Field
-                  label="Description"
-                  value={proj.description}
-                  onChange={(v: string) => setProj(proj.id, "description", v)}
-                  multiline
-                  colors={colors}
-                  onEnhance={() =>
-                    handleEnhance(
-                      proj.description,
-                      `proj-${proj.id}`,
-                      "project description",
-                      (v) => setProj(proj.id, "description", v),
-                    )
-                  }
-                  isEnhancing={enhancingField === `proj-${proj.id}`}
-                  maxLength={limits.projectDesc}
-                />
-              </View>
-            ))}
-          </View>
 
-          <View style={styles.editorSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Education
-              </Text>
-              <TouchableOpacity onPress={addEdu} style={styles.addSectionBtn}>
-                <Plus size={16} color={Theme.colors.primary} />
-                <Text style={styles.addSectionText}>Add Education</Text>
-              </TouchableOpacity>
-            </View>
-
-            {data.education.map((edu, idx) => (
-              <View
-                key={edu.id || idx}
-                style={[
-                  styles.sectionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.glassBorder,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.cardTop,
-                    { borderBottomColor: colors.glassBorder },
-                  ]}
-                >
-                  <Text style={styles.cardIndex}>Education #{idx + 1}</Text>
-                  <TouchableOpacity
-                    onPress={() => removeEdu(edu.id || idx.toString())}
-                    style={styles.deleteBtn}
+                {(data.links || []).map((link, idx) => (
+                  <GlassCard
+                    key={idx}
+                    style={[
+                      styles.sectionCard,
+                      { backgroundColor: colors.surface },
+                    ]}
                   >
-                    <Trash2 size={16} color="#ef4444" />
-                  </TouchableOpacity>
-                </View>
-                <Field
-                  label="School / University"
-                  value={edu.school}
-                  onChange={(v: string) => setEdu(edu.id || idx.toString(), "school", v)}
-                  colors={colors}
-                  maxLength={limits.school}
-                />
-                <Field
-                  label="Degree / Course"
-                  value={edu.degree}
-                  onChange={(v: string) => setEdu(edu.id || idx.toString(), "degree", v)}
-                  colors={colors}
-                  maxLength={limits.degree}
-                />
-                <Field
-                  label="Year / Period"
-                  value={edu.year}
-                  onChange={(v: string) => setEdu(edu.id || idx.toString(), "year", v)}
-                  colors={colors}
-                  maxLength={limits.year}
-                />
+                    <View
+                      style={[
+                        styles.cardTop,
+                        { borderBottomColor: Theme.border.color },
+                      ]}
+                    >
+                      <Text style={[styles.cardIndex, { color: colors.text }]}>
+                        Link #{idx + 1}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => removeLinkVal(idx)}
+                        style={styles.deleteBtn}
+                      >
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                    <Field
+                      label="Link Label / Title (e.g. LinkedIn)"
+                      value={link.label}
+                      onChange={(v: string) => setLinkVal(idx, "label", v)}
+                      colors={colors}
+                      maxLength={100}
+                    />
+                    <Field
+                      label="URL (e.g. linkedin.com/in/username)"
+                      value={link.url}
+                      onChange={(v: string) => setLinkVal(idx, "url", v)}
+                      colors={colors}
+                      maxLength={300}
+                      autoCapitalize="none"
+                    />
+                  </GlassCard>
+                ))}
               </View>
-            ))}
-          </View>
+            )}
 
-          <View style={styles.editorSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                References
-              </Text>
-              <TouchableOpacity onPress={addRef} style={styles.addSectionBtn}>
-                <Plus size={16} color={Theme.colors.primary} />
-                <Text style={styles.addSectionText}>Add Reference</Text>
-              </TouchableOpacity>
-            </View>
-
-            {(data.references || []).map((ref, idx) => (
-              <View
-                key={ref.id}
-                style={[
-                  styles.sectionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.glassBorder,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.cardTop,
-                    { borderBottomColor: colors.glassBorder },
-                  ]}
-                >
-                  <Text style={styles.cardIndex}>Reference #{idx + 1}</Text>
-                  <TouchableOpacity
-                    onPress={() => removeRef(ref.id)}
-                    style={styles.deleteBtn}
-                  >
-                    <Trash2 size={16} color="#ef4444" />
-                  </TouchableOpacity>
-                </View>
-                <Field
-                  label="Name"
-                  value={ref.name}
-                  onChange={(v: string) => setRef(ref.id, "name", v)}
-                  colors={colors}
-                  maxLength={limits.refName}
-                />
-                <Field
-                  label="Company / Relation"
-                  value={ref.company}
-                  onChange={(v: string) => setRef(ref.id, "company", v)}
-                  colors={colors}
-                  maxLength={limits.refCompany}
-                />
-                <Field
-                  label="Phone"
-                  value={ref.phone}
-                  onChange={(v: string) => setRef(ref.id, "phone", v)}
-                  colors={colors}
-                  maxLength={limits.refPhone}
-                />
-                <Field
-                  label="Email / Social"
-                  value={ref.email}
-                  onChange={(v: string) => setRef(ref.id, "email", v)}
-                  colors={colors}
-                  maxLength={limits.refEmail}
-                />
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.editorSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Skills & Languages
-            </Text>
-            <View
-              style={[
-                styles.sectionCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.glassBorder,
-                },
-              ]}
-            >
-              <Field
-                label="Skills"
-                value={data.skills}
-                onChange={(v: string) => set("skills", v)}
-                multiline
-                colors={colors}
-                maxLength={limits.skills}
-              />
-              <Field
-                label="Languages"
-                value={data.languages}
-                onChange={(v: string) => set("languages", v)}
-                colors={colors}
-                maxLength={limits.languages}
-              />
-            </View>
-          </View>
-
-          <View style={{ height: 100 }} />
-        </ScrollView>
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </View>
       ) : activeTab === "preview" ? (
         <View
           style={[
             styles.previewContainer,
-            { backgroundColor: isDark ? colors.background : "#fdf2f8" },
+            { backgroundColor: colors.background },
           ]}
         >
+          {customTexts.map((item) => (
+            <DraggableText
+              key={item.id}
+              item={item}
+              onDelete={(id: string) => {
+                setCustomTexts((prev) => prev.filter((t) => t.id !== id));
+              }}
+              onUpdatePosition={(id: string, x: number, y: number) => {
+                setCustomTexts((prev) =>
+                  prev.map((t) => (t.id === id ? { ...t, x, y } : t)),
+                );
+              }}
+            />
+          ))}
+
+          {/* Floating Action Bar for Preview Tools */}
+          <View
+            style={{
+              position: "absolute",
+              top: 6,
+              left: 16,
+              right: 16,
+              zIndex: 10,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <TouchableOpacity
+                onPress={handleUndo}
+                disabled={textUndoStack.current.length === 0}
+                style={{
+                  padding: 8,
+                  borderRadius: 20,
+                  backgroundColor: colors.surface,
+                  opacity: textUndoStack.current.length === 0 ? 0.3 : 1,
+                }}
+              >
+                <Undo2 size={18} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleRedo}
+                disabled={textRedoStack.current.length === 0}
+                style={{
+                  padding: 8,
+                  borderRadius: 20,
+                  backgroundColor: colors.surface,
+                  opacity: textRedoStack.current.length === 0 ? 0.3 : 1,
+                }}
+              >
+                <Redo2 size={18} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleReset}
+                style={{
+                  padding: 8,
+                  borderRadius: 20,
+                  backgroundColor: colors.surface,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 4, height: 4 },
+                  shadowOpacity: 1,
+                  shadowRadius: 0,
+                  elevation: 2,
+                }}
+              >
+                <RotateCcw size={18} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setShowOptionsMenu(!showOptionsMenu)}
+                style={{
+                  backgroundColor: colors.surface,
+                  padding: 8,
+                  borderRadius: 16,
+                  borderWidth: Theme.border.width,
+                  borderColor: Theme.border.color,
+                  ...Theme.shadow,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <MoreVertical size={18} color={colors.text} />
+              </TouchableOpacity>
+
+              {showOptionsMenu && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 45,
+                    right: 0,
+                    backgroundColor: colors.surface,
+                    borderRadius: 12,
+                    borderWidth: Theme.border.width,
+                    borderColor: Theme.border.color,
+                    ...Theme.shadow,
+                    width: 160,
+                    overflow: "hidden",
+                    zIndex: 50,
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowOptionsMenu(false);
+                      handleQuickSave();
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: 12,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.glassBorder,
+                    }}
+                  >
+                    <Save size={16} color={colors.text} />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "600",
+                        color: colors.text,
+                      }}
+                    >
+                      Save Draft
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowOptionsMenu(false);
+                      handleOptimize();
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: 12,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.glassBorder,
+                    }}
+                  >
+                    <Zap size={16} color={Theme.colors.primary} />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "600",
+                        color: colors.text,
+                      }}
+                    >
+                      Optimize
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowOptionsMenu(false);
+                      handleReset();
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: 12,
+                    }}
+                  >
+                    <RotateCcw size={16} color="#ef4444" />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "600",
+                        color: "#ef4444",
+                      }}
+                    >
+                      Reset
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
           <FlatList
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            windowSize={3}
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
             data={AVAILABLE_TEMPLATES}
             keyExtractor={(item) => item.id}
             initialScrollIndex={
@@ -1892,176 +3323,176 @@ export default function ManualBuilderScreen() {
                 <View
                   style={[
                     styles.webviewWrapper,
-                    { backgroundColor: isDark ? "#1e293b" : "#fff" },
+                    {
+                      backgroundColor: colors.background,
+                      margin: 0,
+                      marginTop: 0,
+                      borderRadius: 0,
+                      paddingBottom: 120,
+                    },
                   ]}
                 >
-                  {selectedTemplate === item.id ? (
-                    <WebView
-                      originWhitelist={["*"]}
-                      source={{
-                        html: generateResumeHtml(
-                          data,
-                          item.id,
-                          primaryColor,
-                          "Inter",
-                          false,
-                        ),
-                      }}
-                      style={styles.webview}
-                      scalesPageToFit={true}
-                      scrollEnabled={true}
-                      javaScriptEnabled={true}
-                      onMessage={async (event) => {
-                        try {
-                          const payload = JSON.parse(event.nativeEvent.data);
-                          if (payload.type === "edit:field" || payload.type === "edit:section") {
-                            // 1. Fire medium haptic feedback
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            
-                            // 2. Switch tab to editor panel
-                            setActiveTab("edit");
-                            
-                            // 3. Inform user which field was targeted
-                            const displayField = payload.field || payload.section || "selected section";
-                            const cleanName = displayField.replace(/^(exp-|edu-|proj-)/, "").toUpperCase();
-                            
-                            Alert.alert(
-                              "Focus Visual Area",
-                              `Directly editing the "${cleanName}" section. Make your changes in the editor panel!`
-                            );
-                          }
-                        } catch (err) {
-                          console.warn("Error parsing WebView interaction message:", err);
+                  <WebView
+                    originWhitelist={["*"]}
+                    source={{
+                      html: generateResumeHtml(
+                        getRenderData(),
+                        item.id,
+                        primaryColor,
+                        "Inter",
+                        false,
+                      ),
+                    }}
+                    style={styles.webview}
+                    scalesPageToFit={true}
+                    scrollEnabled={true}
+                    javaScriptEnabled={true}
+                    onMessage={async (event) => {
+                      try {
+                        const payload = JSON.parse(event.nativeEvent.data);
+                        if (
+                          payload.type === "edit:field" ||
+                          payload.type === "edit:section"
+                        ) {
+                          Haptics.impactAsync(
+                            Haptics.ImpactFeedbackStyle.Medium,
+                          );
+                          setActiveTab("edit");
+                          const displayField =
+                            payload.field ||
+                            payload.section ||
+                            "selected section";
+                          const cleanName = displayField
+                            .replace(/^(exp-|edu-|proj-)/, "")
+                            .toUpperCase();
+                          Alert.alert(
+                            "Focus Visual Area",
+                            `Directly editing the "${cleanName}" section. Make your changes in the editor panel!`,
+                          );
                         }
-                      }}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        flex: 1,
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                    >
-                      <ActivityIndicator
-                        size="large"
-                        color={Theme.colors.primary}
-                      />
-                      <Text
-                        style={{
-                          marginTop: 10,
-                          color: colors.textMuted,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {item.name}
-                      </Text>
-                    </View>
-                  )}
+                      } catch (err) {
+                        console.warn(
+                          "Error parsing WebView interaction message:",
+                          err,
+                        );
+                      }
+                    }}
+                  />
                 </View>
               </View>
             )}
           />
         </View>
       ) : (
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={{ flex: 1, backgroundColor: colors.background }}
+          contentContainerStyle={{ paddingBottom: 200 }}
+          showsVerticalScrollIndicator={false}
+        >
           {renderHistoryView()}
         </ScrollView>
       )}
 
+      {/* Floating Bottom Tab Bar */}
       <View
-        style={[
-          styles.tabBar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.glassBorder,
-          },
-        ]}
+        style={{
+          position: "absolute",
+          bottom: Math.max(insets.bottom, 15) + 10,
+          left: 30,
+          right: 30,
+        }}
       >
-        <View
-          style={[
-            styles.segmentedContainer,
-            { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#f1f5f9" },
-          ]}
-        >
-          <TouchableOpacity
-            onPress={() => setActiveTab("edit")}
-            style={[
-              styles.segment,
-              activeTab === "edit" && { backgroundColor: Theme.colors.primary },
-            ]}
+        <GlassCard style={{ padding: 6, borderRadius: 30 }}>
+          <View
+            style={{ flexDirection: "row", justifyContent: "space-between" }}
           >
-            <Edit2
-              size={16}
-              color={activeTab === "edit" ? "#fff" : colors.textMuted}
-            />
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === "edit" ? "#fff" : colors.textMuted },
-              ]}
+            <TouchableOpacity
+              onPress={() => setActiveTab("edit")}
+              style={{
+                flex: activeTab === "edit" ? 1.5 : 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 12,
+                borderRadius: 24,
+                backgroundColor:
+                  activeTab === "edit" ? Theme.colors.primary : "transparent",
+              }}
             >
-              Editor
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab("preview")}
-            style={[
-              styles.segment,
-              activeTab === "preview" && {
-                backgroundColor: Theme.colors.primary,
-              },
-            ]}
-          >
-            <Eye
-              size={16}
-              color={activeTab === "preview" ? "#fff" : colors.textMuted}
-            />
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === "preview" ? "#fff" : colors.textMuted },
-              ]}
+              <Edit2
+                size={18}
+                color={activeTab === "edit" ? "#fff" : colors.textMuted}
+              />
+              {activeTab === "edit" && (
+                <Text
+                  style={{ fontSize: 13, fontWeight: "800", color: "#fff" }}
+                >
+                  Editor
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab("preview")}
+              style={{
+                flex: activeTab === "preview" ? 1.5 : 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 12,
+                borderRadius: 24,
+                backgroundColor:
+                  activeTab === "preview"
+                    ? Theme.colors.primary
+                    : "transparent",
+              }}
             >
-              Preview
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab("history")}
-            style={[
-              styles.segment,
-              activeTab === "history" && {
-                backgroundColor: Theme.colors.primary,
-              },
-            ]}
-          >
-            <History
-              size={16}
-              color={activeTab === "history" ? "#fff" : colors.textMuted}
-            />
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === "history" ? "#fff" : colors.textMuted },
-              ]}
+              <Eye
+                size={18}
+                color={activeTab === "preview" ? "#fff" : colors.textMuted}
+              />
+              {activeTab === "preview" && (
+                <Text
+                  style={{ fontSize: 13, fontWeight: "800", color: "#fff" }}
+                >
+                  Preview
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab("history")}
+              style={{
+                flex: activeTab === "history" ? 1.5 : 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 12,
+                borderRadius: 24,
+                backgroundColor:
+                  activeTab === "history"
+                    ? Theme.colors.primary
+                    : "transparent",
+              }}
             >
-              History
-            </Text>
-          </TouchableOpacity>
-        </View>
+              <History
+                size={18}
+                color={activeTab === "history" ? "#fff" : colors.textMuted}
+              />
+              {activeTab === "history" && (
+                <Text
+                  style={{ fontSize: 13, fontWeight: "800", color: "#fff" }}
+                >
+                  History
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </GlassCard>
       </View>
-
-      <View
-        style={[styles.bannerContainer, { backgroundColor: colors.background }]}
-      >
-        <BannerAd
-          unitId={bannerId}
-          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-        />
-      </View>
-
-
 
       {/* Save Version Modal */}
       <Modal visible={showSaveModal} transparent animationType="fade">
@@ -2116,6 +3547,127 @@ export default function ManualBuilderScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Rename Modal */}
+      <Modal visible={showRenameModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.saveModal,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.glassBorder,
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Rename Entry
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowRenameModal(false);
+                  setRenameTarget(null);
+                  setRenameText("");
+                }}
+              >
+                <X size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalSub, { color: colors.textMuted }]}>
+              Enter a new name for this entry.
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  borderColor: colors.glassBorder,
+                },
+              ]}
+              value={renameText}
+              onChangeText={setRenameText}
+              placeholder="New name"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[styles.confirmSaveBtn, !renameText.trim() && { opacity: 0.5 }]}
+              onPress={handleConfirmRename}
+              disabled={!renameText.trim()}
+            >
+              <Text style={styles.confirmSaveBtnText}>Rename</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Draggable Text Modal */}
+      <Modal visible={showAddTextModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.saveModal,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.glassBorder,
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Add Draggable Text
+              </Text>
+              <TouchableOpacity onPress={() => setShowAddTextModal(false)}>
+                <X size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalSub, { color: colors.textMuted }]}>
+              Enter custom text to overlay on top of the resume. You can drag it
+              anywhere and delete it later.
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  borderColor: colors.glassBorder,
+                },
+              ]}
+              value={newCustomText}
+              onChangeText={setNewCustomText}
+              placeholder="E.g., Top Candidate! or Certified Scrum Master"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[styles.confirmSaveBtn]}
+              onPress={() => {
+                if (newCustomText.trim()) {
+                  setCustomTexts((prev) => [
+                    ...prev,
+                    {
+                      id: Math.random().toString(),
+                      text: newCustomText.trim(),
+                      x: 80,
+                      y: 180 + prev.length * 50,
+                    },
+                  ]);
+                  setNewCustomText("");
+                  setShowAddTextModal(false);
+                  Haptics.notificationAsync(
+                    Haptics.NotificationFeedbackType.Success,
+                  );
+                }
+              }}
+            >
+              <Text style={styles.confirmSaveBtnText}>Add Text</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2145,6 +3697,14 @@ function Field({
             ({charCount}
             {maxLength ? ` / ${maxLength}` : ""})
           </Text>
+          {value ? (
+            <TouchableOpacity
+              onPress={() => onChange("")}
+              style={{ padding: 4 }}
+            >
+              <Trash2 size={12} color="#ef4444" />
+            </TouchableOpacity>
+          ) : null}
         </View>
         {onEnhance && (
           <TouchableOpacity
@@ -2194,26 +3754,103 @@ function Field({
   );
 }
 
+function DraggableText({ item, onDelete, onUpdatePosition }: any) {
+  const [pos, setPos] = React.useState({ x: item.x, y: item.y });
+  const offset = React.useRef({ x: 0, y: 0 });
+  const [showRemoveMenu, setShowRemoveMenu] = React.useState(false);
+
+  return (
+    <View
+      style={{
+        position: "absolute",
+        left: pos.x,
+        top: pos.y,
+        backgroundColor: "#fef08a", // vibrant post-it yellow
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderColor: "#000",
+        zIndex: 1000,
+        shadowColor: "#000",
+        shadowOffset: { width: 3, height: 3 },
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        elevation: 5,
+      }}
+      onTouchStart={(e) => {
+        offset.current = {
+          x: e.nativeEvent.pageX - pos.x,
+          y: e.nativeEvent.pageY - pos.y,
+        };
+      }}
+      onTouchMove={(e) => {
+        const newX = e.nativeEvent.pageX - offset.current.x;
+        const newY = e.nativeEvent.pageY - offset.current.y;
+        setPos({ x: newX, y: newY });
+      }}
+      onTouchEnd={() => {
+        onUpdatePosition(item.id, pos.x, pos.y);
+      }}
+    >
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => setShowRemoveMenu(!showRemoveMenu)}
+        style={{ flexDirection: "row", alignItems: "center" }}
+      >
+        <Text style={{ fontSize: 12, fontWeight: "900", color: "#000" }}>
+          {item.text}
+        </Text>
+      </TouchableOpacity>
+
+      {showRemoveMenu && (
+        <View
+          style={{
+            position: "absolute",
+            bottom: -36,
+            left: 0,
+            backgroundColor: "#000",
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            zIndex: 1001,
+            shadowColor: "#000",
+            shadowOffset: { width: 2, height: 2 },
+            shadowOpacity: 1,
+            shadowRadius: 0,
+          }}
+        >
+          <TouchableOpacity onPress={() => onDelete(item.id)}>
+            <Text style={{ color: "#fff", fontSize: 11, fontWeight: "900" }}>
+              Remove
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  backBtn: {
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: 19,
+    backgroundColor: '#8b5cf615',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  headerTitle: { fontSize: 18, fontWeight: "800" },
+  headerTitle: { fontSize: 16, fontWeight: "800", color: '#4a3f6b' },
   headerStatusRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2226,7 +3863,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: "#10b981",
   },
-  headerSub: { fontSize: 11, fontWeight: "600" },
+  headerSub: { fontSize: 11, fontWeight: "600", color: '#9a8aaa' },
   saveBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -2272,22 +3909,35 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   segmentText: { fontSize: 13, fontWeight: "700" },
-  editorContent: { paddingHorizontal: 20, paddingTop: 20 },
-  editorSection: { marginBottom: 25 },
+  editorContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 180 },
+  editorSection: { marginBottom: 30 },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "800", marginBottom: 12 },
-  addSectionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
-  addSectionText: { fontSize: 13, fontWeight: "700" },
+  sectionTitle: { fontSize: 18, fontWeight: "900", marginBottom: 16 },
+  addSectionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Theme.colors.primary + "15",
+  },
+  addSectionText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.colors.primary,
+  },
   sectionCard: {
     borderRadius: 24,
-    padding: 20,
+    padding: 24,
     borderWidth: 1,
-    marginBottom: 15,
+    borderColor: Theme.border.color,
+    marginBottom: 16,
   },
   cardTop: {
     flexDirection: "row",
@@ -2300,33 +3950,34 @@ const styles = StyleSheet.create({
   cardIndex: { fontSize: 12, fontWeight: "700" },
   deleteBtn: { padding: 4 },
   rowFields: { flexDirection: "row" },
-  fieldContainer: { marginBottom: 16 },
+  fieldContainer: { marginBottom: 20 },
   fieldHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-  fieldLabel: { fontSize: 12, fontWeight: "700" },
+  fieldLabel: { fontSize: 13, fontWeight: "800" },
   enhanceBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     backgroundColor: Theme.colors.primary + "10",
   },
-  enhanceBtnText: { fontSize: 10, fontWeight: "800" },
+  enhanceBtnText: { fontSize: 11, fontWeight: "800" },
   input: {
-    borderWidth: 1.5,
+    borderWidth: 1,
+    borderColor: Theme.border.color,
     borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 14,
-    fontWeight: "600",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    fontSize: 15,
+    fontWeight: "500",
   },
-  inputMultiline: { height: 110, paddingTop: 14 },
+  inputMultiline: { height: 120, paddingTop: 16 },
   previewContainer: { flex: 1 },
   webviewWrapper: {
     flex: 1,
@@ -2367,7 +4018,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
   },
   dropdownBtnText: { fontSize: 13, fontWeight: "700" },
   saveVersionIconBtn: {
@@ -2379,7 +4032,9 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
     overflow: "hidden",
     marginBottom: 10,
   },
@@ -2400,7 +4055,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
-  saveModal: { width: "100%", borderRadius: 24, padding: 24, borderWidth: 1 },
+  saveModal: {
+    width: "100%",
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
+  },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2410,7 +4072,8 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: "800" },
   modalSub: { fontSize: 13, lineHeight: 18, marginBottom: 20 },
   modalInput: {
-    borderWidth: 1,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
     borderRadius: 14,
     padding: 14,
     fontSize: 15,
@@ -2421,6 +4084,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: "center",
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
   },
   confirmSaveBtnText: { color: "#fff", fontSize: 15, fontWeight: "800" },
   counter: {

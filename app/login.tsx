@@ -1,7 +1,3 @@
-import { Theme, Colors } from "@/constants/theme";
-import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
-import { LogIn, ShieldCheck, Zap, Sparkles } from "lucide-react-native";
 import React from "react";
 import {
   Dimensions,
@@ -12,19 +8,40 @@ import {
   Image,
   Alert,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import Animated, { FadeInDown, FadeInUp, SlideInDown } from "react-native-reanimated";
 import { signInWithGoogle } from "@/services/auth";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  LogIn, Sparkles, ShieldCheck, Zap, FileText, Briefcase,
+  Star, Target, Award
+} from "lucide-react-native";
 
 const { width, height } = Dimensions.get("window");
 
+const DECORATIVE_ICONS = [
+  { Icon: Star, x: 0.08, y: 0.12, size: 20, opacity: 0.15 },
+  { Icon: Award, x: 0.85, y: 0.08, size: 24, opacity: 0.12 },
+  { Icon: Target, x: 0.78, y: 0.22, size: 16, opacity: 0.1 },
+  { Icon: Briefcase, x: 0.12, y: 0.28, size: 18, opacity: 0.1 },
+  { Icon: Sparkles, x: 0.9, y: 0.38, size: 14, opacity: 0.15 },
+  { Icon: FileText, x: 0.05, y: 0.45, size: 22, opacity: 0.08 },
+];
+
+const DECORATIVE_DOTS = [
+  { x: 0.2, y: 0.05, size: 8, opacity: 0.12 },
+  { x: 0.7, y: 0.15, size: 12, opacity: 0.08 },
+  { x: 0.3, y: 0.35, size: 6, opacity: 0.15 },
+  { x: 0.88, y: 0.5, size: 10, opacity: 0.1 },
+  { x: 0.15, y: 0.55, size: 14, opacity: 0.06 },
+  { x: 0.6, y: 0.06, size: 5, opacity: 0.2 },
+];
+
 export default function LoginScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = isDark ? Colors.dark : Colors.light;
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const handleGoogleLogin = async () => {
     try {
@@ -49,118 +66,81 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar style={isDark ? "light" : "dark"} />
-      
-      {/* Dynamic Background */}
-      <View style={StyleSheet.absoluteFill}>
-        <LinearGradient
-          colors={isDark ? ["#050505", "#0a0a1a", "#101025"] : ["#ffffff", "#f5f7fa", "#e4e9f2"]}
-          style={styles.gradient}
-        />
-        
-        {/* Animated Orbs */}
-        <Animated.View
-          entering={FadeInUp.delay(200).duration(2000)}
-          style={[styles.orb, styles.orb1, { backgroundColor: Theme.colors.primary + '30' }]}
-        />
-        <Animated.View
-          entering={FadeInDown.delay(400).duration(2500)}
-          style={[styles.orb, styles.orb2, { backgroundColor: Theme.colors.secondary + '20' }]}
-        />
-      </View>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <LinearGradient
+        colors={['#fff0eb', '#fff8f5', '#fff']}
+        locations={[0, 0.35, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <StatusBar style="dark" />
 
-      <View style={styles.containerInner}>
-        {/* Hero Section */}
-        <Animated.View
-          entering={FadeInDown.delay(300).springify()}
-          style={styles.heroSection}
-        >
-          <View style={[styles.logoBadge, { shadowColor: Theme.colors.primary }]}>
-            <Image 
-              source={require("@/assets/images/icon.png")} 
-              style={styles.logoImage} 
-              defaultSource={require("@/assets/images/icon.png")}
-            />
+      {/* Decorative Elements */}
+      {DECORATIVE_ICONS.map(({ Icon: IconCmp, x, y, size, opacity }, idx) => (
+        <View key={`icon-${idx}`} style={[styles.decorIcon, { left: `${x * 100}%`, top: `${y * 100}%` }]}>
+          <IconCmp size={size} color="#8b5cf6" opacity={opacity} />
+        </View>
+      ))}
+      {DECORATIVE_DOTS.map(({ x, y, size, opacity }, idx) => (
+        <View key={`dot-${idx}`} style={[styles.decorDot, { left: `${x * 100}%`, top: `${y * 100}%`, width: size, height: size, opacity }]} />
+      ))}
+
+      {/* Top decorative curve */}
+      <View style={styles.topCurve} />
+
+      {/* Logo + Brand */}
+      <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.brandSection}>
+        <View style={styles.logoOuter}>
+          <View style={styles.logoGlow} />
+          <View style={styles.logoWrap}>
+            <Image source={require("@/assets/images/icon.png")} style={styles.logo} resizeMode="contain" />
           </View>
-          
-          <View style={styles.brandContainer}>
-            <Text style={[styles.brandTitle, { color: colors.text }]}>Resume <Text style={{ color: Theme.colors.primary }}>Elite</Text></Text>
-            <View style={[styles.taglineBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
-              <Sparkles size={12} color={Theme.colors.primary} />
-              <Text style={[styles.taglineText, { color: colors.textMuted }]}>AI-POWERED PRECISION</Text>
-            </View>
+        </View>
+        <Text style={styles.brandName}>
+          Resume <Text style={{ color: "#8b5cf6" }}>Elite</Text>
+        </Text>
+        <Text style={styles.tagline}>AI-Powered Resume Builder</Text>
+
+      </Animated.View>
+
+      {/* Feature cards */}
+      <Animated.View entering={FadeInUp.delay(350).springify()} style={styles.featureGrid}>
+        <View style={styles.featureCard}>
+          <View style={[styles.featIcon, { backgroundColor: "#8b5cf612" }]}>
+            <Zap size={20} color="#8b5cf6" />
           </View>
-
-          <Text style={[styles.mainHeadline, { color: colors.text }]}>
-            Craft Your Future with Professional Excellence
-          </Text>
-        </Animated.View>
-
-        {/* Features Minimal List */}
-        <Animated.View 
-          entering={FadeInDown.delay(500)}
-          style={styles.featuresContainer}
-        >
-          <View style={styles.featureItem}>
-            <ShieldCheck size={18} color={Theme.colors.primary} />
-            <Text style={[styles.featureText, { color: colors.textMuted }]}>Enterprise Grade Security</Text>
+          <Text style={styles.featTitle}>AI Voice</Text>
+          <Text style={styles.featDesc}>Speak your resume</Text>
+        </View>
+        <View style={styles.featureCard}>
+          <View style={[styles.featIcon, { backgroundColor: "#8b5cf612" }]}>
+            <ShieldCheck size={20} color="#8b5cf6" />
           </View>
-          <View style={styles.featureItem}>
-            <Zap size={18} color={Theme.colors.primary} />
-            <Text style={[styles.featureText, { color: colors.textMuted }]}>Instant PDF Generation</Text>
+          <Text style={styles.featTitle}>ATS Scan</Text>
+          <Text style={styles.featDesc}>Pass any filter</Text>
+        </View>
+        <View style={styles.featureCard}>
+          <View style={[styles.featIcon, { backgroundColor: "#8b5cf612" }]}>
+            <Sparkles size={20} color="#8b5cf6" />
           </View>
-        </Animated.View>
+          <Text style={styles.featTitle}>Export</Text>
+          <Text style={styles.featDesc}>PDF / DOCX</Text>
+        </View>
+      </Animated.View>
 
-        {/* Action Section */}
-        <Animated.View
-          entering={FadeInDown.delay(700)}
-          style={styles.actionSection}
-        >
-          <TouchableOpacity 
-            activeOpacity={0.8} 
-            onPress={handleGoogleLogin}
-            style={styles.primaryButtonContainer}
-          >
-            <LinearGradient
-              colors={[Theme.colors.primary, "#ffc107"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.primaryButtonGradient}
-            >
-              <LogIn color="#000" size={20} style={styles.buttonIcon} />
-              <Text style={styles.primaryButtonText}>Sign In with Google</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+      {/* Bottom CTA */}
+      <Animated.View entering={SlideInDown.delay(500).springify().damping(22)} style={styles.bottomSection}>
+        <TouchableOpacity activeOpacity={0.85} onPress={handleGoogleLogin} style={styles.googleBtn}>
+          <LogIn color="#fff" size={20} />
+          <Text style={styles.googleBtnText}>Continue with Google</Text>
+        </TouchableOpacity>
 
-          <Text style={[styles.secondaryInfo, { color: colors.textMuted }]}>
-            Available on all your devices
-          </Text>
-        </Animated.View>
-
-        {/* Footer */}
-        <Animated.View
-          entering={FadeInUp.delay(1000)}
-          style={styles.footer}
-        >
-          <Text style={[styles.footerText, { color: colors.textMuted }]}>
-            By continuing, you agree to our{"\n"}
-            <Text 
-              style={styles.linkText} 
-              onPress={() => router.push("/terms")}
-            >
-              Terms of Service
-            </Text>
-            {" "} & {" "}
-            <Text 
-              style={styles.linkText} 
-              onPress={() => router.push("/privacy")}
-            >
-              Privacy Policy
-            </Text>
-          </Text>
-        </Animated.View>
-      </View>
+        <Text style={styles.footer}>
+          By continuing, you agree to our{' '}
+          <Text style={styles.link} onPress={() => router.push("/terms")}>Terms</Text>
+          {' & '}
+          <Text style={styles.link} onPress={() => router.push("/privacy")}>Privacy</Text>
+        </Text>
+      </Animated.View>
     </View>
   );
 }
@@ -168,149 +148,146 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  gradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  orb: {
-    position: "absolute",
-    borderRadius: 1000,
-    opacity: 0.8,
-  },
-  orb1: {
-    width: width * 0.8,
-    height: width * 0.8,
-    top: -width * 0.2,
-    right: -width * 0.2,
-  },
-  orb2: {
-    width: width,
-    height: width,
-    bottom: -width * 0.3,
-    left: -width * 0.3,
-  },
-  containerInner: {
-    flex: 1,
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
     justifyContent: "space-between",
-    paddingTop: height * 0.12,
-    paddingBottom: 40,
   },
-  heroSection: {
+  decorIcon: {
+    position: "absolute",
+  },
+  decorDot: {
+    position: "absolute",
+    borderRadius: 999,
+    backgroundColor: "#8b5cf6",
+  },
+  topCurve: {
+    position: "absolute",
+    top: -height * 0.1,
+    right: -60,
+    width: width * 1.2,
+    height: height * 0.35,
+    borderRadius: 200,
+    backgroundColor: "#8b5cf606",
+  },
+  brandSection: {
     alignItems: "center",
+    paddingTop: height * 0.07,
   },
-  logoBadge: {
+  logoOuter: {
+    position: "relative",
+    marginBottom: 22,
+  },
+  logoGlow: {
+    position: "absolute",
+    top: -10,
+    left: -10,
+    right: -10,
+    bottom: -10,
+    borderRadius: 30,
+    backgroundColor: "#8b5cf615",
+  },
+  logoWrap: {
     width: 80,
     height: 80,
-    borderRadius: 28,
-    backgroundColor: Theme.colors.primary,
-    padding: 2,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    elevation: 15,
-    marginBottom: 25,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: "#f0e8ff",
+    shadowColor: "#8b5cf6",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+    padding: 14,
   },
-  logoImage: {
+  logo: {
     width: "100%",
     height: "100%",
-    borderRadius: 26,
   },
-  brandContainer: {
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  brandTitle: {
-    fontSize: 36,
+  brandName: {
+    fontSize: 38,
     fontWeight: "900",
-    letterSpacing: -0.5,
+    color: "#3d3352",
+    letterSpacing: -1,
+    marginBottom: 6,
   },
-  taglineBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    gap: 6,
-    marginTop: 8,
-  },
-  taglineText: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2,
-  },
-  mainHeadline: {
-    fontSize: 24,
-    fontWeight: "800",
-    textAlign: "center",
-    lineHeight: 34,
-    marginTop: 10,
-    paddingHorizontal: 10,
-  },
-  featuresContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 20,
-    marginTop: -20,
-  },
-  featureItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  featureText: {
-    fontSize: 13,
+  tagline: {
+    fontSize: 15,
     fontWeight: "600",
+    color: "#9a8aaa",
+    marginBottom: 14,
   },
-  actionSection: {
-    width: "100%",
+
+  featureGrid: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  featureCard: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#f0e8ff",
+    padding: 16,
     alignItems: "center",
+    shadowColor: "#8b5cf6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  primaryButtonContainer: {
-    width: "100%",
-    borderRadius: 20,
-    overflow: "hidden",
-    shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
+  featIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
   },
-  primaryButtonGradient: {
+  featTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#3d3352",
+    marginBottom: 2,
+  },
+  featDesc: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#9a8aaa",
+  },
+  bottomSection: {
+    marginBottom: 10,
+  },
+  googleBtn: {
+    backgroundColor: "#8b5cf6",
+    borderRadius: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 20,
-    paddingHorizontal: 20,
+    gap: 10,
+    paddingVertical: 17,
+    marginBottom: 16,
+    shadowColor: "#8b5cf6",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 10,
   },
-  buttonIcon: {
-    marginRight: 12,
-  },
-  primaryButtonText: {
-    color: "#000",
-    fontSize: 18,
+  googleBtnText: {
+    fontSize: 17,
     fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  secondaryInfo: {
-    fontSize: 13,
-    fontWeight: "500",
-    marginTop: 20,
-    opacity: 0.6,
+    color: "#fff",
   },
   footer: {
-    alignItems: "center",
-  },
-  footerText: {
     fontSize: 12,
+    fontWeight: "600",
+    color: "#9a8aaa",
     textAlign: "center",
-    lineHeight: 20,
-    fontWeight: "500",
+    lineHeight: 18,
   },
-  linkText: {
-    fontWeight: "700",
+  link: {
+    color: "#8b5cf6",
     textDecorationLine: "underline",
+    fontWeight: "700",
   },
 });
-
-

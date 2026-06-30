@@ -11,6 +11,7 @@ export interface SavedJob {
   url: string;
   type?: string;
   salary?: string;
+  description?: string;
   source: 'google' | 'verified';
   savedAt: number;
 }

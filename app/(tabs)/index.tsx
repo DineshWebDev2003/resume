@@ -7,35 +7,31 @@ import { getAtsHistory } from "@/services/firestore";
 import { exportToPDF } from "@/utils/resume-exporter";
 import { getResumes } from "@/utils/storage";
 import axios from "axios";
-import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import {
-  ArrowRight,
-  Bell,
-  Briefcase,
-  ChevronRight,
-  Download,
-  MapPin,
-  Plus,
-  Sparkles,
-  Zap,
+    ArrowRight,
+    Bell,
+    ChevronRight,
+    Download,
+    MapPin,
+    Plus,
+    Sparkles,
 } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  ImageBackground,
-  InteractionManager,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    InteractionManager,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeInUp, useSharedValue, useAnimatedProps, withTiming } from "react-native-reanimated";
+import Svg, { Circle } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
@@ -146,28 +142,24 @@ export default function Dashboard() {
       id: "create",
       name: "Create",
       route: "/(tabs)/builder",
-      image: require("@/assets/images/nav-icons/create.png"),
+      image: require("@/assets/document (1).png"),
     },
     {
       id: "my",
       name: "My Resumes",
       route: "/my-resumes",
-      image: require("@/assets/images/nav-icons/Builder.png"),
+      image: require("@/assets/resume (1).png"),
     },
     {
       id: "jobs",
       name: "My Jobs",
       route: "/my-jobs",
-      image: require("@/assets/images/nav-icons/jobs.png"),
+      image: require("@/assets/case.png"),
     },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <LinearGradient
-        colors={[colors.background, colors.surface]}
-        style={StyleSheet.absoluteFill}
-      />
 
       <View
         style={[
@@ -205,23 +197,20 @@ export default function Dashboard() {
               </Text>
             </View>
           </View>
-          <View style={{ flexDirection: "row", gap: 10 }}>
             <TouchableOpacity
               onPress={() => router.push("/notifications")}
-              style={[
-                styles.notificationBtn,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.glassBorder,
-                },
-              ]}
+              style={{
+                justifyContent: "center",
+                alignItems: "center",
+                position: "relative",
+                padding: 4,
+              }}
             >
               <Bell size={24} color={colors.text} />
               <View
-                style={[styles.badge, { borderColor: colors.background }]}
+                style={[styles.badge, { borderColor: colors.background, top: 4, right: 4 }]}
               />
             </TouchableOpacity>
-          </View>
         </View>
       </View>
 
@@ -232,143 +221,58 @@ export default function Dashboard() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ATS Score Hero */}
+        {/* ATS Score Card */}
         <Animated.View entering={FadeInUp.delay(200)}>
-          {!atsScore ? (
-            <LinearGradient
-              colors={isDark ? ['#6366F1', '#4F46E5', '#1E1B4B'] : ['#EEF2FF', '#C7D2FE', '#E0E7FF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[
-                {
-                  borderRadius: 28,
-                  marginBottom: 24,
-                  overflow: 'hidden',
-                  padding: 1.5,
-                },
-                isDark && { borderWidth: 1, borderColor: colors.glassBorder },
-              ]}
-            >
-              <TouchableOpacity
-                onPress={() => router.push("/builder/ats")}
-                activeOpacity={0.8}
-                style={[styles.heroCardInner, { backgroundColor: isDark ? 'rgba(30, 27, 75, 0.65)' : 'rgba(255, 255, 255, 0.65)' }]}
-              >
-                {/* Decorative halos */}
-                <View style={[styles.glowRing, { borderColor: 'rgba(99, 102, 241, 0.15)', right: -40, top: -10, width: 200, height: 200, borderRadius: 100 }]} />
-                <View style={[styles.glowRingOuter, { borderColor: 'rgba(99, 102, 241, 0.05)', right: -50, top: -20, width: 220, height: 220, borderRadius: 110 }]} />
-
-                <View style={styles.heroContent}>
-                  <View style={styles.badgeRow}>
-                    <View style={[styles.matchBadge, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
-                      <Sparkles size={10} color={Theme.colors.primary} fill={Theme.colors.primary} />
-                      <Text style={[styles.matchBadgeText, { color: colors.text }]}>
-                        ATS Scanner
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <Text style={[styles.heroPromoTitle, { color: colors.text, fontSize: 22, marginTop: 4, width: '100%' }]}>
-                    Ready to beat the ATS?
-                  </Text>
-                  
-                  <Text style={[styles.heroDescription, { color: colors.textMuted, marginTop: 4, width: '100%', marginBottom: 12 }]}>
-                    Analyze your resume against any job description using advanced neural parsing to get hired.
-                  </Text>
-
-                  <View style={[styles.improveBtn, { backgroundColor: Theme.colors.primary, paddingHorizontal: 22, paddingVertical: 10, alignSelf: 'flex-start' }]}>
-                    <Text style={[styles.improveBtnText, { color: '#000', fontWeight: '800' }]}>
-                      Scan Resume
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={[styles.scoreCircle, { right: 10, top: '50%', marginTop: -50, width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: 'rgba(99, 102, 241, 0.2)', backgroundColor: 'rgba(0,0,0,0.02)', position: 'absolute' }]}>
-                  <View style={[styles.scoreCircleInner, { width: 88, height: 88, borderRadius: 44, borderColor: 'rgba(99, 102, 241, 0.1)', position: 'absolute' }]} />
-                  <Text style={[styles.scoreNumber, { color: colors.text, fontSize: 26, fontWeight: '900' }]}>--</Text>
-                  <Text style={[styles.scoreLabel, { color: colors.textMuted, fontSize: 8 }]}>ATS MATCH</Text>
-                </View>
-              </TouchableOpacity>
-            </LinearGradient>
-          ) : (() => {
-            const getDashboardMatch = (scoreNum: number) => {
-              if (scoreNum < 50) return { label: 'Low Match', status: 'Action Required', color: '#EF4444' };
-              if (scoreNum < 80) return { label: 'Fair Match', status: 'Keep Improving', color: '#F59E0B' };
-              return { label: 'Strong Match', status: 'Highly Compatible!', color: '#10B981' };
-            };
-            const match = getDashboardMatch(atsScore);
-            return (
-              <LinearGradient
-                colors={isDark ? ['#6366F1', '#4F46E5', '#1E1B4B'] : ['#EEF2FF', '#C7D2FE', '#E0E7FF']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+          <TouchableOpacity
+            onPress={() => router.push("/builder/ats")}
+            activeOpacity={0.8}
+            style={[styles.atsCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+          >
+            <View style={styles.atsCardLeft}>
+              <View
                 style={[
+                  styles.atsBadge,
                   {
-                    borderRadius: 28,
-                    marginBottom: 24,
-                    overflow: 'hidden',
-                    padding: 1.5,
+                    backgroundColor: !atsScore
+                      ? Theme.colors.primary + "15"
+                      : atsScore < 50 ? "#ef444415" : atsScore < 80 ? "#f59e0b15" : "#10b98115",
                   },
-                  isDark && { borderWidth: 1, borderColor: colors.glassBorder },
                 ]}
               >
-                <View style={[styles.heroCardInner, { backgroundColor: isDark ? 'rgba(30, 27, 75, 0.65)' : 'rgba(255, 255, 255, 0.65)' }]}>
-                  {/* Outer decorative halos */}
-                  <View style={[styles.glowRing, { borderColor: match.color + '15', left: undefined, right: -40, top: -10, width: 200, height: 200, borderRadius: 100 }]} />
-                  <View style={[styles.glowRingOuter, { borderColor: match.color + '05', left: undefined, right: -50, top: -20, width: 220, height: 220, borderRadius: 110 }]} />
+                <Sparkles
+                  size={10}
+                  color={!atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981"}
+                  fill={!atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981"}
+                />
+                <Text
+                  style={[
+                    styles.atsBadgeText,
+                    { color: !atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981" },
+                  ]}
+                >
+                  {!atsScore ? "ATS Scanner" : atsScore < 50 ? "Low Match" : atsScore < 80 ? "Fair Match" : "Strong Match"}
+                </Text>
+              </View>
 
-                  <View style={styles.heroContent}>
-                    <View style={styles.badgeRow}>
-                      <View style={[styles.matchBadge, { backgroundColor: match.color + '15' }]}>
-                        <Zap size={10} color={match.color} fill={match.color} />
-                        <Text style={[styles.matchBadgeText, { color: match.color }]}>
-                          {match.label}
-                        </Text>
-                      </View>
-                    </View>
-                    
-                    <Text style={[styles.heroPromoTitle, { color: colors.text, fontSize: 22, marginTop: 4, width: '100%' }]}>
-                      {match.status}
-                    </Text>
-                    
-                    <Text style={[styles.heroDescription, { color: colors.textMuted, marginTop: 4, width: '100%', marginBottom: 12 }]}>
-                      Your resume is scanned. View audit details to improve it.
-                    </Text>
+              <Text style={[styles.atsCardTitle, { color: colors.text }]} numberOfLines={1}>
+                {!atsScore ? "Ready to beat the ATS?" : atsScore < 50 ? "Action Required" : atsScore < 80 ? "Keep Improving" : "Highly Compatible!"}
+              </Text>
 
-                    <View style={[styles.progressBarBg, { marginTop: 0, marginBottom: 16, width: '90%' }]}>
-                      <View 
-                        style={[
-                          styles.progressBarFill, 
-                          { 
-                             width: `${atsScore}%`, 
-                             backgroundColor: match.color 
-                          }
-                        ]} 
-                      />
-                    </View>
+              <Text style={[styles.atsCardDesc, { color: colors.textMuted }]} numberOfLines={1}>
+                {!atsScore ? "Analyze your resume against any job" : "View the full audit to improve your score."}
+              </Text>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.improveBtn,
-                        { backgroundColor: match.color, paddingHorizontal: 22, paddingVertical: 10 }
-                      ]}
-                      onPress={() => router.push("/builder/ats")}
-                    >
-                      <Text style={[styles.improveBtnText, { color: '#fff', fontWeight: '800' }]}>
-                        View Audit
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+              <View
+                style={[styles.atsActionBtn, { backgroundColor: !atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981" }]}
+              >
+                <Text style={styles.atsActionText}>{!atsScore ? "Scan Resume" : "View Audit"}</Text>
+              </View>
+            </View>
 
-                  <View style={[styles.scoreCircle, { right: 10, top: '50%', marginTop: -50, width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: match.color, backgroundColor: 'rgba(0,0,0,0.02)', position: 'absolute' }]}>
-                    <View style={[styles.scoreCircleInner, { width: 88, height: 88, borderRadius: 44, borderColor: match.color + '30', position: 'absolute' }]} />
-                    <Text style={[styles.scoreNumber, { color: match.color, fontSize: 26, fontWeight: '900' }]}>{atsScore}%</Text>
-                    <Text style={[styles.scoreLabel, { color: colors.textMuted, fontSize: 8 }]}>ATS MATCH</Text>
-                  </View>
-                </View>
-              </LinearGradient>
-            );
-          })()}
+            <View style={styles.atsCardRight}>
+              <CircularScore score={atsScore} />
+            </View>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Quick Actions Row (3 Separate Glassmorphic Boxes) */}
@@ -441,32 +345,69 @@ export default function Dashboard() {
                 <View style={styles.resumeCardLeft}>
                   <View style={styles.resumeIconBox}>
                     <Image
-                      source={require("@/assets/images/nav-icons/resume.png")}
+                      source={require("@/assets/images/cv.png")}
                       style={styles.resumeIcon}
                       resizeMode="contain"
                     />
                   </View>
                 </View>
                 <View style={styles.chatInfo}>
-                  <Text style={[styles.chatName, { color: colors.text }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.chatName, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
                     {resume.name}
                   </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      marginTop: 4,
+                    }}
+                  >
                     {resume.type === "ats" ? (
-                      <View style={[styles.badgeContainer, { backgroundColor: isDark ? 'rgba(34, 191, 192, 0.15)' : 'rgba(26, 158, 159, 0.1)' }]}>
-                        <Text style={[styles.badgeText, { color: isDark ? '#22BFC0' : '#1A9E9F' }]}>
+                      <View
+                        style={[
+                          styles.badgeContainer,
+                          {
+                            backgroundColor: isDark
+                              ? "rgba(34, 191, 192, 0.15)"
+                              : "rgba(26, 158, 159, 0.1)",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.badgeText,
+                            { color: isDark ? "#22BFC0" : "#1A9E9F" },
+                          ]}
+                        >
                           ATS {resume.score}%
                         </Text>
                       </View>
                     ) : (
-                      <View style={[styles.badgeContainer, { backgroundColor: isDark ? 'rgba(137, 196, 244, 0.15)' : 'rgba(137, 196, 244, 0.1)' }]}>
-                        <Text style={[styles.badgeText, { color: '#89C4F4' }]}>
+                      <View
+                        style={[
+                          styles.badgeContainer,
+                          {
+                            backgroundColor: isDark
+                              ? "rgba(137, 196, 244, 0.15)"
+                              : "rgba(137, 196, 244, 0.1)",
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.badgeText, { color: "#89C4F4" }]}>
                           Manual
                         </Text>
                       </View>
                     )}
-                    <Text style={[styles.chatMessage, { color: colors.textMuted }]}>
-                      {resume.type === "ats" ? "Checked" : `Modified ${resume.date}`}
+                    <Text
+                      style={[styles.chatMessage, { color: colors.textMuted }]}
+                    >
+                      {resume.type === "ats"
+                        ? "Checked"
+                        : `Modified ${resume.date}`}
                     </Text>
                   </View>
                 </View>
@@ -560,7 +501,11 @@ export default function Dashboard() {
                           style={styles.jobLogo}
                         />
                       ) : (
-                        <Briefcase size={24} color={colors.text} />
+                        <Image
+                          source={require("@/assets/case.png")}
+                          style={{ width: 24, height: 24 }}
+                          resizeMode="contain"
+                        />
                       )}
                     </View>
                     <View style={{ flex: 1 }}>
@@ -659,7 +604,8 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    borderWidth: 1,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
     overflow: "hidden",
   },
   profilePic: {
@@ -681,7 +627,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
   },
   badge: {
     position: "absolute",
@@ -700,66 +648,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     overflow: "hidden",
   },
-  heroContent: {
-    flex: 1,
-    zIndex: 1,
-    paddingRight: 100,
-  },
-  scoreHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  heroTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  heroScore: {
-    fontSize: 52,
-    fontWeight: "900",
-    marginVertical: 4,
-  },
-  heroPromoTitle: {
-    fontSize: 28,
-    fontWeight: "900",
-    marginVertical: 4,
-    width: "80%",
-  },
-  heroDescription: {
-    fontSize: 14,
-    marginBottom: 20,
-    lineHeight: 20,
-    width: "90%",
-  },
-  improveBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-  },
-  improveBtnText: {
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  scoreCircle: {
-    position: "absolute",
-    right: -30,
-    top: -10,
-    width: 180,
-    height: 180,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  innerCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 15,
-    opacity: 0.1,
-  },
   gridContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -774,11 +662,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
   },
   iconImage: {
     width: 48,
@@ -829,7 +715,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     borderRadius: 24,
-    borderWidth: 1.5,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
     overflow: "hidden",
     justifyContent: "space-between",
   },
@@ -899,11 +787,9 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 24,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
   },
   resumeCardLeft: {
     flexDirection: "row",
@@ -977,6 +863,10 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     height: 160,
     justifyContent: "space-between",
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
+    marginBottom: 10,
   },
   jobCardTop: {
     flexDirection: "row",
@@ -1105,6 +995,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
   },
   createBtnInlineText: {
     color: "#000",
@@ -1118,66 +1011,110 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     paddingBottom: 4,
   },
-  heroCardInner: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 26.5,
-    padding: 22,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  glowRing: {
-    position: 'absolute',
-    borderWidth: 1.5,
-    opacity: 0.6,
-  },
-  glowRingOuter: {
-    position: 'absolute',
+  // ─── Modern ATS Card ─────────────────────────────────────
+  atsCard: {
+    flexDirection: "row",
+    borderRadius: 20,
     borderWidth: 1,
-    opacity: 0.4,
+    padding: 14,
+    marginBottom: 20,
+    gap: 12,
   },
-  badgeRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
+  atsCardLeft: {
+    flex: 1,
+    gap: 6,
   },
-  matchBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  atsCardRight: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  atsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: 6,
+    alignSelf: "flex-start",
   },
-  matchBadgeText: {
+  atsBadgeText: {
     fontSize: 10,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: "800",
   },
-  progressBarBg: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(128,128,128,0.1)',
-    overflow: 'hidden',
+  atsCardTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 18,
   },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 3,
+  atsCardDesc: {
+    fontSize: 12,
+    lineHeight: 15,
   },
-  scoreCircleInner: {
-    position: 'absolute',
-    borderWidth: 1,
-    opacity: 0.7,
+  atsActionBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+    alignSelf: "flex-start",
+    marginTop: 2,
   },
-  scoreNumber: {
-    fontSize: 26,
-    fontWeight: '900',
-  },
-  scoreLabel: {
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginTop: -1,
+  atsActionText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
   },
 });
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+function CircularScore({ score }: { score: number | null }) {
+  const size = 64;
+  const strokeWidth = 5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (score !== null) {
+      progress.value = withTiming(score / 100, { duration: 1000 });
+    }
+  }, [score]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - progress.value),
+  }));
+
+  const scoreColor = score === null ? Theme.colors.primary
+    : score < 50 ? "#ef4444"
+    : score < 80 ? "#f59e0b"
+    : "#10b981";
+
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#f0e8ff"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <AnimatedCircle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={scoreColor}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={circumference}
+          animatedProps={animatedProps}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <Text style={{ fontSize: 16, fontWeight: '900', color: scoreColor }}>
+        {score === null ? '--' : `${score}%`}
+      </Text>
+    </View>
+  );
+}

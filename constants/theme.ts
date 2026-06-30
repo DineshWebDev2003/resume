@@ -1,45 +1,45 @@
 export const Colors = {
   light: {
-    text: '#1A202C', // Deep Charcoal
-    background: '#F0F4F8', // Soft blue-white
-    tint: '#1A9E9F', // Magic Teal
-    icon: '#718096', // Cool Gray
-    tabIconDefault: '#718096',
-    tabIconSelected: '#1A9E9F',
-    surface: '#FFFFFF', // Pure white
-    glass: 'rgba(255, 255, 255, 0.75)',
-    glassBorder: '#B9CAD6', // Muted gray-blue
-    textMuted: '#718096',
+    text: "#3d3352",
+    background: "#fff8f5",
+    tint: "#8b5cf6",
+    icon: "#9a8aaa",
+    tabIconDefault: "#c0b0d0",
+    tabIconSelected: "#8b5cf6",
+    surface: "#ffffff",
+    glass: "rgba(255, 255, 255, 0.9)",
+    glassBorder: "#f0e8ff",
+    textMuted: "#9a8aaa",
   },
   dark: {
-    text: '#F7FAFC', // Off-White
-    background: '#121824', // Deep navy charcoal
-    tint: '#22BFC0', // Brighter Teal
-    icon: '#A0AEC0', // Light Slate Gray
-    tabIconDefault: '#A0AEC0',
-    tabIconSelected: '#22BFC0',
-    surface: '#1E2638', // Elevated dark slate
-    glass: 'rgba(30, 38, 56, 0.75)',
-    glassBorder: '#2D3954', // Muted midnight blue
-    textMuted: '#A0AEC0',
+    text: "#f5f5f5",
+    background: "#171717",
+    tint: "#8b5cf6",
+    icon: "#d4d4d4",
+    tabIconDefault: "#737373",
+    tabIconSelected: "#8b5cf6",
+    surface: "#262626",
+    glass: "rgba(38, 38, 38, 0.9)",
+    glassBorder: "#404040",
+    textMuted: "#a3a3a3",
   },
 };
 
 export const Theme = {
   colors: {
-    primary: '#1A9E9F', // Magic Teal
-    secondary: '#89C4F4', // Clay Blue
-    accent: '#F3C63F', // Wand Gold
-    background: '#F0F4F8',
-    surface: '#FFFFFF',
-    text: '#1A202C',
-    textMuted: '#718096',
-    glass: 'rgba(255, 255, 255, 0.75)',
-    glassBorder: '#B9CAD6',
-    success: '#2CE3FA', // Cyan Sparkle
-    error: '#EC829A', // Coral Pink
-    coral: '#EC829A',
-    cyan: '#2CE3FA',
+    primary: "#8b5cf6",
+    secondary: "#a3e4d7",
+    accent: "#1ABC9C",
+    background: "#fff8f5",
+    surface: "#ffffff",
+    text: "#3d3352",
+    textMuted: "#9a8aaa",
+    glass: "rgba(255, 255, 255, 0.95)",
+    glassBorder: "#f0e8ff",
+    success: "#22c55e",
+    error: "#ef4444",
+    coral: "#f43f5e",
+    cyan: "#06b6d4",
   },
   spacing: {
     xs: 4,
@@ -54,5 +54,16 @@ export const Theme = {
     lg: 20,
     xl: 30,
     full: 9999,
-  }
+  },
+  border: {
+    width: 1,
+    color: "#f0e8ff",
+  },
+  shadow: {
+    shadowColor: "#8b5cf6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
 };

@@ -1,6 +1,5 @@
 import { GlassCard } from "@/components/glass-card";
 import { TemplatePreviewModal } from "@/components/TemplatePreviewModal";
-import { API_CONFIG } from "@/constants/config";
 import { Colors, Theme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { getResumes, UserResume } from "@/utils/storage";
@@ -9,38 +8,29 @@ import LottieView from "lottie-react-native";
 import {
     ChevronRight,
     FileSearch,
-    FileText,
-    Linkedin,
+    MessageCircle,
     Mic,
-    PenTool,
-    Sparkles,
+    Pen,
+    Sparkles
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
+    Image,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
-import {
-    BannerAd,
-    BannerAdSize,
-    TestIds,
-} from "react-native-google-mobile-ads";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, {
+    FadeInDown,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import {
-    CreativeTemplate,
-    ExecutiveTemplate,
-    ModernTemplate,
-    ProfessionalTemplate,
-} from "@/components/resume-templates";
-import { generateResumeHtml } from "@/components/resume-html-generator";
-import { WebView } from "react-native-webview";
-
-const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 export default function BuilderLanding() {
   const router = useRouter();
@@ -60,6 +50,52 @@ export default function BuilderLanding() {
     }, []),
   );
 
+  const pulse = useSharedValue(1);
+
+  React.useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1.08, { duration: 1200 }),
+        withTiming(1.0, { duration: 1200 }),
+      ),
+      -1,
+      true,
+    );
+  }, []);
+
+  const animatedButtonStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: pulse.value }],
+    };
+  });
+
+  const shake = useSharedValue(0);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      shake.value = withSequence(
+        withTiming(-8, { duration: 80 }),
+        withTiming(8, { duration: 80 }),
+        withTiming(-6, { duration: 80 }),
+        withTiming(6, { duration: 80 }),
+        withTiming(-4, { duration: 80 }),
+        withTiming(4, { duration: 80 }),
+        withTiming(0, { duration: 80 }),
+      );
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const animatedShakeStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: shake.value }],
+    };
+  });
+
+  const handleOptionPress = (navAction: () => void) => {
+    navAction();
+  };
+
   const smartOptions = [
     {
       title: "Voice Assistant",
@@ -67,6 +103,16 @@ export default function BuilderLanding() {
       icon: Mic,
       color: Theme.colors.secondary,
       mode: "voice",
+      image: require("../../assets/voic-chat.png"),
+    },
+    {
+      title: "Video Interview",
+      description:
+        "Human-like video conversation to build your professional profile.",
+      icon: Sparkles,
+      color: Theme.colors.primary,
+      mode: "ai-interview",
+      image: require("../../assets/chat-app.png"),
     },
     {
       title: "ATS AI Score",
@@ -75,20 +121,7 @@ export default function BuilderLanding() {
       icon: FileSearch,
       color: "#10b981",
       mode: "ats",
-    },
-    {
-      title: "AI Chat Builder",
-      description: "Human-like conversation to build our professional profile.",
-      icon: Sparkles,
-      color: Theme.colors.primary,
-      mode: "chat",
-    },
-    {
-      title: "LinkedIn Sync",
-      description: "Intelligently extract data from your LinkedIn profile.",
-      icon: Linkedin,
-      color: "#0077B5",
-      mode: "linkedin",
+      lottie: require("../../assets/Profile Scanning.json"),
     },
   ];
 
@@ -106,219 +139,210 @@ export default function BuilderLanding() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            Smart Resume Builder
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-            Select an AI-powered creation method
-          </Text>
-        </View>
-
-        <View style={styles.neoGrid}>
-          {/* Top Priority: Voice Assistant (Full Width) */}
-          <Animated.View
-            entering={FadeInDown.delay(100)}
-            style={styles.neoItemFull}
-          >
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={{ flex: 1 }}
-              onPress={() => router.push("/builder/voice")}
-            >
-              <GlassCard
-                style={[
-                  styles.neoCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: smartOptions[0].color + "40",
-                    flexDirection: 'row',
-                    paddingVertical: 20,
-                  },
-                ]}
-              >
-                <View style={[styles.neoIconBoxLarge, { backgroundColor: smartOptions[0].color + "20" }]}>
-                  {(() => {
-                    const Icon = smartOptions[0].icon;
-                    return <Icon size={32} color={smartOptions[0].color} />;
-                  })()}
-                </View>
-
-                <View style={styles.neoTextSectionLeft}>
-                  <Text style={[styles.neoTitleLarge, { color: colors.text }]}>
-                    {smartOptions[0].title}
-                  </Text>
-                  <Text style={[styles.neoDescLeft, { color: colors.textMuted }]}>
-                    {smartOptions[0].description}
-                  </Text>
-                </View>
-
-                <View style={[styles.neoArrowCircle, { backgroundColor: smartOptions[0].color }]}>
-                  <ChevronRight size={16} color="#fff" />
-                </View>
-              </GlassCard>
-            </TouchableOpacity>
-          </Animated.View>
-
-          {/* Secondary Tools: ATS & Chat (2 Columns) */}
-          <View style={styles.secondaryGrid}>
-            {[smartOptions[1], smartOptions[2]].map((option, index) => (
-              <Animated.View
-                key={option.mode}
-                entering={FadeInDown.delay(300 + index * 150)}
-                style={styles.neoItemHalf}
-              >
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  style={{ flex: 1 }}
-                  onPress={() => {
-                    if (option.mode === "ats") router.push("/builder/ats");
-                    else
-                      router.push({
-                        pathname: "/builder/chat",
-                        params: { initialMode: option.mode },
-                      });
-                  }}
-                >
-                  <GlassCard
-                    style={[
-                      styles.neoCardCompact,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: option.color + "40",
-                      },
-                    ]}
-                  >
-                    <View style={styles.cardMainCompact}>
-                       <View style={styles.neoAnimationSmall}>
-                        {option.mode === "chat" ? (
-                          <LottieView
-                            source={require("../../assets/Ai Robot Animation.json")}
-                            autoPlay
-                            loop
-                            style={styles.lottieSmall}
-                          />
-                        ) : (
-                          <LottieView
-                            source={require("../../assets/Profile Scanning.json")}
-                            autoPlay
-                            loop
-                            style={styles.lottieSmall}
-                          />
-                        )}
-                      </View>
-                      <Text style={[styles.neoTitleSmall, { color: colors.text }]}>
-                        {option.title}
-                      </Text>
-                    </View>
-                  </GlassCard>
-                </TouchableOpacity>
-              </Animated.View>
-            ))}
-          </View>
-
-          {/* LinkedIn Sync (Full Width) at the bottom of the grid */}
-          <Animated.View
-            entering={FadeInDown.delay(600)}
-            style={styles.neoItemFull}
-          >
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={{ flex: 1 }}
-              onPress={() => router.push("/builder/linkedin")}
-            >
-              <GlassCard
-                style={[
-                  styles.neoCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: smartOptions[3].color + "40",
-                    flexDirection: 'row',
-                    paddingVertical: 20,
-                  },
-                ]}
-              >
-                <View style={[styles.neoIconBoxLarge, { backgroundColor: smartOptions[3].color + "20" }]}>
-                  {(() => {
-                    const Icon = smartOptions[3].icon;
-                    return <Icon size={32} color={smartOptions[3].color} />;
-                  })()}
-                </View>
-
-                <View style={styles.neoTextSectionLeft}>
-                  <Text style={[styles.neoTitleLarge, { color: colors.text }]}>
-                    {smartOptions[3].title}
-                  </Text>
-                  <Text style={[styles.neoDescLeft, { color: colors.textMuted }]}>
-                    {smartOptions[3].description}
-                  </Text>
-                </View>
-
-                <View style={[styles.neoArrowCircle, { backgroundColor: smartOptions[3].color }]}>
-                  <ChevronRight size={16} color="#fff" />
-                </View>
-              </GlassCard>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-
-        <View style={styles.manualEntry}>
-          <TouchableOpacity
-            style={styles.manualLink}
-            onPress={() => router.push("/builder/manual")}
-          >
-            <PenTool size={16} color={colors.textMuted} />
-            <Text style={[styles.manualText, { color: colors.textMuted }]}>
-              Prefer Manual Entry?
+        <View
+          style={[
+            styles.header,
+            {
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+            },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Smart Resume Builder
             </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.recentSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            My Resumes
-          </Text>
-          <TouchableOpacity onPress={() => router.push("/(tabs)/templates")}>
-            <GlassCard
+            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+              Select an AI-powered creation method
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() =>
+              handleOptionPress(() => router.push("/builder/text-chat"))
+            }
+            activeOpacity={0.7}
+          >
+            <View
               style={[
-                styles.myResumesContainer,
+                styles.filterBtn,
                 {
                   backgroundColor: colors.surface,
                   borderColor: colors.glassBorder,
                 },
               ]}
             >
-              <View
-                style={[
-                  styles.resumeIconBox,
-                  { backgroundColor: Theme.colors.primary + "20" },
-                ]}
-              >
-                <FileText size={24} color={Theme.colors.primary} />
-              </View>
-              <View style={styles.myResumesInfo}>
-                <Text style={[styles.myResumesTitle, { color: colors.text }]}>
-                  {myResumes.length > 0
-                    ? `${myResumes.length} Professional Resume${myResumes.length > 1 ? "s" : ""}`
-                    : "Manage Saved Resumes"}
-                </Text>
-                <Text
-                  style={[
-                    styles.myResumesSubtitle,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  {myResumes.length > 0
-                    ? "Tap to view and manage your drafts"
-                    : "Access your stored resumes and drafts"}
-                </Text>
-              </View>
-              <ChevronRight size={20} color={colors.textMuted} />
-            </GlassCard>
+              <Animated.View style={animatedButtonStyle}>
+                <MessageCircle size={20} color={colors.text} />
+              </Animated.View>
+            </View>
           </TouchableOpacity>
         </View>
 
+        <View style={styles.neoGrid}>
+          {smartOptions.map((option, index) => (
+            <Animated.View
+              key={option.mode}
+              entering={FadeInDown.delay(100 + index * 150)}
+              style={styles.neoItemFull}
+            >
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={{ flex: 1 }}
+                onPress={() => {
+                  handleOptionPress(() => {
+                    if (option.mode === "ats") router.push("/builder/ats");
+                    else if (option.mode === "voice")
+                      router.push("/builder/voice");
+                    else if (option.mode === "ai-interview")
+                      router.push("/builder/ai-interview");
+                    else
+                      router.push({
+                        pathname: "/builder/chat",
+                        params: { initialMode: option.mode },
+                      });
+                  });
+                }}
+              >
+                <GlassCard
+                  style={[
+                    styles.neoCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: option.color + "40",
+                      flexDirection: "row",
+                      paddingVertical: 24,
+                      paddingHorizontal: 20,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.neoIconBoxLarge,
+                      { backgroundColor: option.color + "15" },
+                    ]}
+                  >
+                    {option.image ? (
+                      <Image
+                        source={option.image}
+                        style={{ width: 46, height: 46 }}
+                        resizeMode="contain"
+                      />
+                    ) : option.lottie ? (
+                      <LottieView
+                        source={option.lottie}
+                        autoPlay
+                        loop
+                        style={{ width: 64, height: 64 }}
+                      />
+                    ) : (
+                      <option.icon size={32} color={option.color} />
+                    )}
+                  </View>
 
+                  <View style={styles.neoTextSectionLeft}>
+                    <Text
+                      style={[styles.neoTitleLarge, { color: colors.text }]}
+                    >
+                      {option.title}
+                    </Text>
+                    <Text
+                      style={[styles.neoDescLeft, { color: colors.textMuted }]}
+                    >
+                      {option.description}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.neoArrowCircle,
+                      { backgroundColor: option.color },
+                    ]}
+                  >
+                    <ChevronRight size={16} color="#fff" />
+                  </View>
+                </GlassCard>
+              </TouchableOpacity>
+            </Animated.View>
+          ))}
+        </View>
+
+
+
+        {/* My Resumes - Home Screen Style */}
+        <View style={{ marginTop: 32 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingHorizontal: 4 }}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              My Resumes
+            </Text>
+            <TouchableOpacity onPress={() => router.push("/my-resumes")}>
+              <Text style={{ color: Theme.colors.primary, fontWeight: "700", fontSize: 14 }}>Manage All</Text>
+            </TouchableOpacity>
+          </View>
+          {myResumes.length > 0 ? (
+            myResumes.slice(0, 2).map((resume, i) => (
+              <Animated.View key={i} entering={FadeInDown.delay(100 * i)}>
+                <TouchableOpacity
+                  style={[styles.chatCard, { backgroundColor: colors.surface }]}
+                  onPress={() =>
+                    router.push(
+                      resume.type === "ats"
+                        ? "/builder/ats"
+                        : ({ pathname: "/builder/manual", params: { resumeId: resume.id } } as any),
+                    )
+                  }
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                    <View style={styles.resumeIconBox}>
+                      <Image
+                        source={require("@/assets/images/cv.png")}
+                        style={styles.resumeIcon}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.chatName, { color: colors.text }]} numberOfLines={1}>
+                        {resume.name}
+                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                        {resume.type === "ats" ? (
+                          <View style={[styles.badgeContainer, { backgroundColor: isDark ? "rgba(34, 191, 192, 0.15)" : "rgba(26, 158, 159, 0.1)" }]}>
+                            <Text style={[styles.badgeText, { color: isDark ? "#22BFC0" : "#1A9E9F" }]}>
+                              ATS {resume.score}%
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.badgeContainer, { backgroundColor: isDark ? "rgba(137, 196, 244, 0.15)" : "rgba(137, 196, 244, 0.1)" }]}>
+                            <Text style={[styles.badgeText, { color: "#89C4F4" }]}>Manual</Text>
+                          </View>
+                        )}
+                        <Text style={[styles.chatMessage, { color: colors.textMuted }]}>
+                          {resume.type === "ats" ? "Checked" : `Modified ${resume.date}`}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <ChevronRight size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              </Animated.View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>😔</Text>
+              <Text style={[styles.emptyText, { color: colors.text }]}>
+                No resumes found
+              </Text>
+              <TouchableOpacity
+                style={styles.createBtnInline}
+                onPress={() => router.push("/builder/manual")}
+              >
+                <Text style={styles.createBtnInlineText}>
+                  Create your first resume
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <TemplatePreviewModal
@@ -331,75 +355,115 @@ export default function BuilderLanding() {
         }}
       />
 
-      <View style={styles.bannerContainer}>
-        <BannerAd
-          unitId={bannerId}
-          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-          requestOptions={{
-            requestNonPersonalizedAdsOnly: true,
+      <Animated.View
+        style={[
+          {
+            position: "absolute",
+            bottom: 110,
+            right: 20,
+            zIndex: 9999,
+          },
+          animatedShakeStyle,
+        ]}
+      >
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => router.push("/builder/manual")}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            paddingVertical: 14,
+            paddingHorizontal: 20,
+            borderRadius: 30,
+            backgroundColor: Theme.colors.primary,
+            shadowColor: Theme.colors.primary,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.4,
+            shadowRadius: 8,
+            elevation: 8,
           }}
-        />
-      </View>
+        >
+          <Pen size={18} color="#fff" />
+          <Text style={{ color: "#fff", fontWeight: "900", fontSize: 14 }}>
+            Manual Entry
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }
-
-
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 140 },
   header: { marginBottom: 32 },
+  filterBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.2,
+  },
   title: { fontSize: 28, fontWeight: "900" },
   subtitle: { fontSize: 16, marginTop: 6 },
   neoGrid: { gap: 16 },
-  neoItemFull: { width: "100%", height: 110, marginBottom: 4 },
-  neoItemHalf: { width: "48%", height: 130 },
-  secondaryGrid: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  
+  neoItemFull: { width: "100%", height: 120 },
+
   neoCard: {
     flex: 1,
     padding: 20,
     borderRadius: 28,
-    borderWidth: 1.5,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
     overflow: "hidden",
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   neoCardCompact: {
     flex: 1,
     padding: 16,
     borderRadius: 24,
-    borderWidth: 1.5,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
     overflow: "hidden",
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   neoIconBoxLarge: {
-    width: 60,
-    height: 60,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 16,
   },
-  neoTextSectionLeft: { flex: 1, justifyContent: 'center' },
-  neoTitleLarge: { fontSize: 18, fontWeight: '900', marginBottom: 4 },
-  neoDescLeft: { fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  neoTextSectionLeft: { flex: 1, justifyContent: "center" },
+  neoTitleLarge: { fontSize: 18, fontWeight: "900", marginBottom: 4 },
+  neoDescLeft: { fontSize: 12, lineHeight: 18, fontWeight: "500" },
   neoArrowCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginLeft: 10,
   },
-  
-  cardMainCompact: { alignItems: 'center', justifyContent: 'center' },
-  neoAnimationSmall: { width: 50, height: 50, marginBottom: 10, justifyContent: 'center', alignItems: 'center' },
+
+  cardMainCompact: { alignItems: "center", justifyContent: "center" },
+  neoAnimationSmall: {
+    width: 50,
+    height: 50,
+    marginBottom: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   lottieSmall: { width: 80, height: 80 },
-  neoTitleSmall: { fontSize: 14, fontWeight: '800', textAlign: 'center' },
-  
+  neoTitleSmall: { fontSize: 14, fontWeight: "800", textAlign: "center" },
+
   cardIndex: {
     position: "absolute",
     right: -5,
@@ -451,17 +515,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  manualEntry: { alignItems: "center", marginTop: 20, marginBottom: 8 },
-  manualLink: {
+  manualEntry: {
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  manualButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    padding: 12,
+    width: "100%",
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    gap: 12,
   },
   manualText: {
     fontSize: 14,
-    fontWeight: "600",
-    textDecorationLine: "underline",
+    fontWeight: "800",
+    letterSpacing: -0.2,
   },
   recentSection: { marginTop: 32 },
   sectionTitle: { fontSize: 20, fontWeight: "800", marginBottom: 20 },
@@ -471,35 +542,86 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: "center",
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
   },
   templatePreview: {
     width: "100%",
     aspectRatio: 1 / 1.4142,
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
     marginBottom: 12,
     overflow: "hidden",
   },
   templateName: { fontSize: 14, fontWeight: "700" },
-  myResumesContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 24,
-    borderWidth: 1,
-  },
   resumeIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 68,
+    height: 68,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    marginRight: 14,
   },
-  myResumesInfo: { flex: 1 },
-  myResumesTitle: { fontSize: 16, fontWeight: "800", marginBottom: 4 },
-  myResumesSubtitle: { fontSize: 13, fontWeight: "500" },
+  resumeIcon: {
+    width: "100%",
+    height: "100%",
+  },
+  chatCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 24,
+    marginBottom: 16,
+    borderWidth: Theme.border.width,
+    borderColor: Theme.border.color,
+    ...Theme.shadow,
+  },
+  chatName: {
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  chatMessage: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  badgeContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  createBtnInline: {
+    backgroundColor: Theme.colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  createBtnInlineText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
   bannerContainer: {
     alignItems: "center",
     justifyContent: "center",

@@ -22,6 +22,7 @@ export interface FieldLimits {
   year: number;
   skills: number;
   languages: number;
+  tools: number;
   website: number;
   refName: number;
   refCompany: number;
@@ -48,6 +49,7 @@ export const DEFAULT_LIMITS: FieldLimits = {
   year: 40,
   skills: 500,
   languages: 200,
+  tools: 300,
   website: 150,
   refName: 60,
   refCompany: 100,
@@ -118,6 +120,22 @@ export const TEMPLATE_SPECIFIC_LIMITS: Record<string, Partial<FieldLimits>> = {
   "BlackWolf-3": { // Modern Split
     summary: 400,
     description: 400,
+  },
+  "Rich-1": { // Classic Executive
+    summary: 500,
+    description: 500,
+  },
+  "Rich-2": { // Compact Two-Column
+    summary: 350,
+    description: 400,
+  },
+  "Rich-3": { // Modern Minimal
+    summary: 500,
+    description: 500,
+  },
+  "Rich-4": { // Structured Grid
+    summary: 450,
+    description: 450,
   }
 };
 

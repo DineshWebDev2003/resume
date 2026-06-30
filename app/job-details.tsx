@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, ActivityIndicator, Alert, AppState, Modal, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Theme, Colors } from '@/constants/theme';
 import { saveJobApplication } from '@/services/firestore';
@@ -15,9 +15,16 @@ import {
   CheckCircle2, 
   Building2,
   Share2,
-  Zap
+  Zap,
+  Globe,
+  Award,
+  Sparkles,
+  Smile,
+  Frown,
+  ExternalLink
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInUp, FadeIn, Layout, BounceIn } from 'react-native-reanimated';
 
 export default function JobDetailsScreen() {
   const params = useLocalSearchParams();
@@ -27,53 +34,96 @@ export default function JobDetailsScreen() {
   const isDark = colorScheme === 'dark';
   const colors = isDark ? Colors.dark : Colors.light;
 
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const appState = useRef(AppState.currentState);
+  const [clickedApply, setClickedApply] = useState(false);
+
   const job = {
+    id: (params.id || params.jobId || `${params.title}-${params.company}`) as string,
     title: params.title || 'Job Title',
     company: params.company || 'Company Name',
     location: params.location || 'Location',
     salary: params.salary || '₹12L - ₹15L',
     logo: params.logo || null,
     description: params.description || "We are looking for a talented individual to join our growing team. You will be responsible for building innovative solutions and collaborating with cross-functional teams to deliver high-quality products.",
-    benefits: ['Health Insurance', 'Flexible Hours', 'Remote Work', 'Gym Membership'],
+    benefits: ['Health Insurance', 'Flexible Hours', 'Remote Work', 'Gym Membership', 'Learning Stipend'],
     workDays: 'Mon - Fri (9 AM - 6 PM)',
     applyLink: params.applyLink || 'https://google.com/jobs',
     isInternal: params.isInternal === 'true'
   };
 
+  useEffect(() => {
+    // If navigated with autoApply parameter, trigger handleApply automatically
+    if (params.autoApply === 'true') {
+      // Small timeout to let screen render and prevent navigation races
+      setTimeout(() => {
+        handleApply();
+      }, 500);
+    }
+  }, [params.autoApply]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      // User returns to the app from background/external browser
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active' &&
+        clickedApply
+      ) {
+        // Show confirmation popup
+        setShowApplyModal(true);
+        setClickedApply(false);
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [clickedApply]);
+
   const handleApply = async () => {
+    if (job.isInternal) {
+      if (!auth.currentUser) {
+        Alert.alert("Login Required", "Please login to apply for jobs.");
+        return;
+      }
+      router.push({
+        pathname: '/apply',
+        params: {
+          title: job.title,
+          company: job.company
+        }
+      });
+    } else {
+      setClickedApply(true);
+      await Linking.openURL(job.applyLink as string);
+    }
+  };
+
+  const handleConfirmApplication = async (didApply: boolean) => {
+    setShowApplyModal(false);
+    if (!didApply) return;
+
     if (!auth.currentUser) {
-      Alert.alert("Login Required", "Please login to apply for jobs.");
+      Alert.alert("Authentication Needed", "Please log in to save this application to your profile.");
       return;
     }
 
     try {
-      if (job.isInternal) {
-        router.push({
-            pathname: '/apply',
-            params: {
-                title: job.title,
-                company: job.company
-            }
-        });
-      } else {
-        await Linking.openURL(job.applyLink as string);
-      }
-      
-      // Track the application in Firestore
       await saveJobApplication({
-        id: params.id as string,
+        id: job.id,
         title: job.title as string,
         company: job.company as string,
         location: job.location as string,
         logo: job.logo as string
       });
-      
-      Alert.alert("Success", "Application tracked successfully!");
+      Alert.alert("Success 🎉", "Job marked as Applied! You can track this in your Profile under My Jobs.");
     } catch (error: any) {
       if (error.message?.includes('already applied')) {
-        Alert.alert("Notice", error.message);
+        Alert.alert("Already Tracked", "You have already marked this job as applied.");
       } else {
-        console.error("Apply error:", error);
+        console.error("Apply tracking error:", error);
       }
     }
   };
@@ -81,86 +131,101 @@ export default function JobDetailsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient
-        colors={[Theme.colors.primary + '10', colors.background]}
+        colors={[Theme.colors.primary + '15', Theme.colors.secondary + '05', colors.background]}
         style={StyleSheet.absoluteFill}
       />
       
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.shareBtn}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Job Detail</Text>
+        <TouchableOpacity style={[styles.shareBtn, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
           <Share2 size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Company Logo & Hero */}
-        <View style={styles.heroSection}>
-        <View style={[styles.logoBox, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.glassBorder }]}>
+        <Animated.View entering={FadeInUp.duration(400)} style={styles.heroSection}>
+          <View style={[styles.logoBox, { backgroundColor: '#fff', borderColor: colors.glassBorder }]}>
             {job.logo ? (
               <Image source={{ uri: job.logo as string }} style={styles.logo} resizeMode="contain" />
             ) : (
-              <Building2 size={40} color={Theme.colors.primary} />
+              <Building2 size={44} color={Theme.colors.primary} />
             )}
           </View>
+          
           <Text style={[styles.jobTitle, { color: colors.text }]}>{job.title}</Text>
-          <Text style={[styles.companyName, { color: colors.textMuted }]}>{job.company}</Text>
+          <Text style={[styles.companyName, { color: Theme.colors.primary }]}>{job.company}</Text>
           
           <View style={styles.metaRow}>
-            <View style={styles.metaItem}>
-              <MapPin size={14} color={Theme.colors.secondary} />
-              <Text style={[styles.metaText, { color: colors.textMuted }]}>{job.location}</Text>
+            <View style={[styles.metaBadge, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              <MapPin size={12} color={Theme.colors.secondary} />
+              <Text style={[styles.metaText, { color: colors.text }]}>{job.location}</Text>
             </View>
-            <View style={styles.metaItem}>
-              <Briefcase size={14} color={Theme.colors.primary} />
-              <Text style={[styles.metaText, { color: colors.textMuted }]}>Full-time</Text>
+            <View style={[styles.metaBadge, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              <Briefcase size={12} color={Theme.colors.primary} />
+              <Text style={[styles.metaText, { color: colors.text }]}>Full-time</Text>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Info Grid */}
-        <View style={styles.infoGrid}>
-          <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-            <IndianRupee size={20} color={Theme.colors.secondary} />
-            <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Salary</Text>
+        <Animated.View entering={FadeInUp.delay(100).duration(450)} style={styles.infoGrid}>
+          <LinearGradient
+            colors={[colors.surface, colors.surface + 'dd']}
+            style={[styles.infoCard, { borderColor: colors.glassBorder }]}
+          >
+            <IndianRupee size={22} color={Theme.colors.secondary} />
+            <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Salary Package</Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>{job.salary}</Text>
-          </View>
-          <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-            <Calendar size={20} color={Theme.colors.primary} />
-            <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Schedule</Text>
+          </LinearGradient>
+          
+          <LinearGradient
+            colors={[colors.surface, colors.surface + 'dd']}
+            style={[styles.infoCard, { borderColor: colors.glassBorder }]}
+          >
+            <Calendar size={22} color={Theme.colors.primary} />
+            <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Working Hours</Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>{job.workDays}</Text>
-          </View>
-        </View>
+          </LinearGradient>
+        </Animated.View>
 
         {/* Description */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Description</Text>
+        <Animated.View entering={FadeInUp.delay(200).duration(450)} style={[styles.section, styles.glassSection, { backgroundColor: colors.surface + '80', borderColor: colors.glassBorder }]}>
+          <View style={styles.sectionHeader}>
+            <Award size={18} color={Theme.colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Job Overview</Text>
+          </View>
           <Text style={[styles.descriptionText, { color: colors.textMuted }]}>
             {job.description}
           </Text>
-        </View>
+        </Animated.View>
 
         {/* Benefits */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Benefits</Text>
-          <View style={styles.benefitsList}>
+        <Animated.View entering={FadeInUp.delay(300).duration(450)} style={[styles.section, styles.glassSection, { backgroundColor: colors.surface + '80', borderColor: colors.glassBorder }]}>
+          <View style={styles.sectionHeader}>
+            <Sparkles size={18} color={Theme.colors.secondary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Perks & Benefits</Text>
+          </View>
+          <View style={styles.benefitsGrid}>
             {job.benefits.map((benefit, i) => (
-              <View key={i} style={styles.benefitItem}>
-                <CheckCircle2 size={16} color={Theme.colors.secondary} />
-                <Text style={[styles.benefitText, { color: colors.textMuted }]}>{benefit}</Text>
+              <View key={i} style={[styles.benefitCard, { backgroundColor: colors.background, borderColor: colors.glassBorder }]}>
+                <CheckCircle2 size={15} color="#10b981" />
+                <Text style={[styles.benefitText, { color: colors.text }]}>{benefit}</Text>
               </View>
             ))}
           </View>
-        </View>
+        </Animated.View>
       </ScrollView>
 
       {/* Footer Actions */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 20, borderTopColor: colors.glassBorder, backgroundColor: colors.background + 'f0' }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16, borderTopColor: colors.glassBorder, backgroundColor: colors.background + 'f5' }]}>
         <View style={styles.footerActionRow}>
           <TouchableOpacity 
-            style={[styles.applyBtn, { flex: 2, flexDirection: 'row', gap: 8 }]}
+            style={[styles.applyBtn, { flex: 1, flexDirection: 'row', gap: 8 }]}
             onPress={() => router.push({
               pathname: '/builder/ats',
               params: { 
@@ -171,17 +236,63 @@ export default function JobDetailsScreen() {
               }
             })}
           >
-            <Zap size={18} color="#FFF" fill="#FFF" />
-            <Text style={styles.applyBtnText}>Optimize & Apply</Text>
+            <Zap size={16} color="#000" fill="#000" />
+            <Text style={styles.applyBtnText}>ATS Optimize</Text>
           </TouchableOpacity>
+
           <TouchableOpacity 
-            style={[styles.outlineBtn, { flex: 1.2 }]}
+            style={[styles.outlineBtn, { flex: 1, flexDirection: 'row', gap: 6, backgroundColor: Theme.colors.secondary }]}
             onPress={handleApply}
           >
-            <Text style={[styles.outlineBtnText, { color: colors.text }]}>Apply Now</Text>
+            <ExternalLink size={16} color="#fff" />
+            <Text style={styles.outlineBtnText}>Apply Now</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Attractive Apply Confirmation Modal */}
+      <Modal
+        visible={showApplyModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowApplyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={BounceIn.duration(400)} style={[styles.modalContent, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+            <LinearGradient
+              colors={[Theme.colors.primary + '20', 'transparent']}
+              style={styles.modalGradient}
+            />
+            
+            <View style={styles.celebrationBadge}>
+              <Sparkles size={28} color={Theme.colors.primary} />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Did you apply?</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
+              We hope your application for <Text style={{ fontWeight: '800', color: colors.text }}>{job.title}</Text> at <Text style={{ fontWeight: '800', color: Theme.colors.primary }}>{job.company}</Text> went smoothly!
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalBtn, styles.modalNoBtn, { borderColor: colors.glassBorder }]}
+                onPress={() => handleConfirmApplication(false)}
+              >
+                <Frown size={18} color={colors.textMuted} />
+                <Text style={[styles.modalNoText, { color: colors.textMuted }]}>Not Yet</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.modalBtn, styles.modalYesBtn, { backgroundColor: Theme.colors.primary }]}
+                onPress={() => handleConfirmApplication(true)}
+              >
+                <Smile size={18} color="#000" />
+                <Text style={styles.modalYesText}>Yes, Applied!</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -192,43 +303,50 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     zIndex: 10,
+    paddingBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   shareBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContent: {
     paddingBottom: 140,
+    paddingHorizontal: 20,
   },
   heroSection: {
     alignItems: 'center',
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    marginBottom: 32,
+    paddingTop: 15,
+    marginBottom: 25,
   },
   logoBox: {
-    width: 100,
-    height: 100,
-    borderRadius: 28,
-    borderWidth: 1,
+    width: 90,
+    height: 90,
+    borderRadius: 24,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -241,40 +359,45 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   jobTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
     textAlign: 'center',
+    letterSpacing: -0.5,
+    lineHeight: 28,
   },
   companyName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     marginTop: 6,
   },
   metaRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 16,
+    gap: 10,
+    marginTop: 14,
   },
-  metaItem: {
+  metaBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   metaText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
   },
   infoGrid: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 16,
-    marginBottom: 32,
+    gap: 12,
+    marginBottom: 20,
   },
   infoCard: {
     flex: 1,
     padding: 16,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 1.2,
     alignItems: 'center',
   },
   infoLabel: {
@@ -287,31 +410,53 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 14,
     fontWeight: '800',
-    marginTop: 2,
+    marginTop: 3,
   },
   section: {
-    paddingHorizontal: 20,
-    marginBottom: 32,
+    padding: 20,
+    borderRadius: 22,
+    borderWidth: 1.2,
+    marginBottom: 16,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 12,
+  glassSection: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 10,
   },
-  descriptionText: {
-    fontSize: 15,
-    lineHeight: 24,
-  },
-  benefitsList: {
-    gap: 12,
-  },
-  benefitItem: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  descriptionText: {
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  benefitsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  benefitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   benefitText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   footer: {
@@ -319,24 +464,24 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
+    padding: 16,
     borderTopWidth: 1,
   },
   applyBtn: {
     backgroundColor: Theme.colors.primary,
-    paddingVertical: 18,
-    borderRadius: 20,
+    paddingVertical: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: Theme.colors.primary,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
   },
   applyBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
+    color: '#000000',
+    fontSize: 14,
     fontWeight: '900',
   },
   footerActionRow: {
@@ -345,15 +490,102 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   outlineBtn: {
-    paddingVertical: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Theme.colors.glassBorder,
+    paddingVertical: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: Theme.colors.secondary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
   outlineBtnText: {
-    fontSize: 15,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: 30,
+    borderWidth: 1.5,
+    padding: 24,
+    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  modalGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
+  celebrationBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Theme.colors.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+    paddingHorizontal: 10,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modalNoBtn: {
+    borderWidth: 1.2,
+  },
+  modalNoText: {
+    fontSize: 14,
     fontWeight: '700',
+  },
+  modalYesBtn: {
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  modalYesText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

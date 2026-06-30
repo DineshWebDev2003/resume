@@ -1,7 +1,6 @@
-import { StyleSheet, View, ViewStyle, StyleProp } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { Theme, Colors } from '@/constants/theme';
+import { Colors, Theme } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 interface GlassCardProps {
   children: React.ReactNode;
@@ -14,27 +13,26 @@ export const GlassCard: React.FC<GlassCardProps> = ({ children, style, intensity
   const colors = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
   return (
-    <BlurView 
-      intensity={intensity} 
+    <View
       style={[
-        styles.card, 
-        { 
-          backgroundColor: colors.glass,
+        styles.card,
+        {
+          backgroundColor: colors.surface,
           borderColor: colors.glassBorder
-        }, 
+        },
         style
       ]}
-      tint={colorScheme === 'dark' ? 'dark' : 'light'}
     >
       {children}
-    </BlurView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
     borderRadius: Theme.borderRadius.lg,
-    borderWidth: 1,
-    overflow: 'hidden',
+    borderWidth: Theme.border.width,
+    overflow: 'visible', // Visible to allow solid shadow if needed via parent, though here we apply it directly if we want
+    ...Theme.shadow,
   },
 });

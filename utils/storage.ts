@@ -1,7 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ResumeData } from "@/components/resume-templates";
+import { auth } from "@/services/firebase";
 
-const RESUMES_KEY = "user_resumes";
+const getResumesKey = () => {
+  const user = auth.currentUser;
+  return user ? `user_resumes_${user.uid}` : "user_resumes";
+};
 const MAX_RESUMES = 3;
 
 export interface UserResume {
@@ -54,7 +58,7 @@ export const saveResume = async (
       updatedResumes = [newResume, ...existingResumes];
     }
 
-    await AsyncStorage.setItem(RESUMES_KEY, JSON.stringify(updatedResumes));
+    await AsyncStorage.setItem(getResumesKey(), JSON.stringify(updatedResumes));
     return { success: true, message: "Resume saved successfully!" };
   } catch (error) {
     console.error("Error saving resume:", error);
@@ -64,7 +68,7 @@ export const saveResume = async (
 
 export const getResumes = async (): Promise<UserResume[]> => {
   try {
-    const data = await AsyncStorage.getItem(RESUMES_KEY);
+    const data = await AsyncStorage.getItem(getResumesKey());
     return data ? JSON.parse(data) : [];
   } catch (error) {
     console.error("Error getting resumes:", error);
@@ -76,7 +80,7 @@ export const deleteResume = async (id: string): Promise<boolean> => {
   try {
     const existingResumes = await getResumes();
     const filtered = existingResumes.filter((r) => r.id !== id);
-    await AsyncStorage.setItem(RESUMES_KEY, JSON.stringify(filtered));
+    await AsyncStorage.setItem(getResumesKey(), JSON.stringify(filtered));
     return true;
   } catch (error) {
     console.error("Error deleting resume:", error);

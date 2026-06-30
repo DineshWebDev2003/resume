@@ -18,7 +18,6 @@ import { db } from '@/services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useRewardedAd } from '@/hooks/use-rewarded-ad';
 import { callAI } from '@/services/ai';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { 
   ChevronLeft, 
@@ -26,14 +25,19 @@ import {
   FileText, 
   CheckCircle2, 
   AlertCircle, 
-  Target, 
-  Sparkles,
+  History, 
+  Sparkles, 
+  X,
+  Zap,
+  Check,
+  Plus,
   Search,
-  Zap
+  Target,
+  Eye,
+  RefreshCw
 } from 'lucide-react-native';
 import LottieView from 'lottie-react-native';
 import { Theme, Colors } from '@/constants/theme';
-import { API_CONFIG } from '@/constants/config';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { saveAtsHistory, getAtsHistory } from '@/services/firestore';
 import dayjs from 'dayjs';
@@ -57,7 +61,6 @@ import { WebView } from 'react-native-webview';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
-import { X, Eye } from 'lucide-react-native';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import { uploadToCloudinary } from '@/services/cloudinary';
 import { useRef, useMemo } from 'react';
@@ -65,7 +68,6 @@ import { BlurView } from 'expo-blur';
 
 
 const { width } = Dimensions.get('window');
-const bannerId = API_CONFIG.ADMOB_IDS.BANNER_AD_UNIT_ID;
 
 export default function ATSScanner() {
   const router = useRouter();
@@ -90,6 +92,8 @@ export default function ATSScanner() {
   const [score, setScore] = useState<number | null>(null);
   const [improvements, setImprovements] = useState<any[]>([]);
   const [highlights, setHighlights] = useState<any[]>([]);
+  const [missingKeywords, setMissingKeywords] = useState<string[]>([]);
+  const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [jobDescription, setJobDescription] = useState('');
   const [jobUrl, setJobUrl] = useState('');
   const [isFetchingUrl, setIsFetchingUrl] = useState(false);
@@ -104,8 +108,11 @@ export default function ATSScanner() {
   const [isPro, setIsPro] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizedData, setOptimizedData] = useState<any>(null);
+  const [showKeywordSelect, setShowKeywordSelect] = useState(false);
+  const [customKeywordInput, setCustomKeywordInput] = useState('');
+  const [customKeywords, setCustomKeywords] = useState<string[]>([]);
   const { user } = useAuth();
-  const { loaded: adLoaded, showAd } = useRewardedAd();
+  const { showAd } = useRewardedAd();
   const scrollRef = useRef<ScrollView>(null);
 
   React.useEffect(() => {
@@ -178,18 +185,6 @@ export default function ATSScanner() {
     }
   }, [extractedText, jobDescription, autoScan, autoScanTriggered, jobTitle, company]);
 
-  const headerStyle = useAnimatedStyle(() => {
-     return {
-       backgroundColor: interpolateColor(
-         scrollY.value,
-         [0, 50],
-         ['transparent', colors.background]
-       ),
-       borderBottomWidth: interpolate(scrollY.value, [0, 50], [0, 1]),
-       borderBottomColor: colors.glassBorder,
-     };
-  });
-
   const loadHistory = async () => {
     try {
       const data = await getAtsHistory();
@@ -238,22 +233,37 @@ export default function ATSScanner() {
       const html = `
         <html>
           <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+            <style>
+              body { margin: 0; padding: 10px; background: #f8fafc; }
+              canvas { width: 100%; height: auto; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-radius: 8px; }
+            </style>
           </head>
           <body>
+            <div id="pdf-container"></div>
             <script>
               const pdfData = atob("${base64}");
               const loadingTask = pdfjsLib.getDocument({data: pdfData});
               loadingTask.promise.then(pdf => {
+                const container = document.getElementById('pdf-container');
                 let fullText = "";
                 const pagePromises = [];
                 for (let i = 1; i <= pdf.numPages; i++) {
                   pagePromises.push(
-                    pdf.getPage(i).then(page => 
-                      page.getTextContent().then(content => {
+                    pdf.getPage(i).then(page => {
+                      const viewport = page.getViewport({scale: 1.5});
+                      const canvas = document.createElement('canvas');
+                      const context = canvas.getContext('2d');
+                      canvas.height = viewport.height;
+                      canvas.width = viewport.width;
+                      container.appendChild(canvas);
+                      page.render({canvasContext: context, viewport: viewport});
+                      
+                      return page.getTextContent().then(content => {
                         fullText += content.items.map(item => item.str).join(" ") + " ";
-                      })
-                    )
+                      });
+                    })
                   );
                 }
                 Promise.all(pagePromises).then(() => {
@@ -273,16 +283,19 @@ export default function ATSScanner() {
     }
   };
 
-  const stopWords = new Set(['and', 'the', 'with', 'from', 'that', 'this', 'for', 'was', 'were', 'been', 'have', 'has', 'had', 'what', 'where', 'when', 'how', 'who', 'whom']);
-
   const handleFetchJobDescription = async () => {
-    if (!jobUrl || !jobUrl.startsWith('http')) {
+    const urlMatch = jobUrl ? jobUrl.match(/https?:\/\/[^\s]+/) : null;
+    const extractedUrl = urlMatch ? urlMatch[0] : null;
+
+    if (!extractedUrl) {
       alert('Please enter a valid job URL');
       return;
     }
 
+    setJobUrl(extractedUrl);
+
     setIsFetchingUrl(true);
-    setScrapingUrl(jobUrl);
+    setScrapingUrl(extractedUrl);
     
     // Set a timeout to stop scraping if it hangs
     setTimeout(() => {
@@ -430,9 +443,10 @@ export default function ATSScanner() {
               ],
               "highlights": [
                 {"title": "string", "desc": "string"}
-              ]
+              ],
+              "missingKeywords": ["string", "string"]
             }
-            Do not add any other text. Give 3 improvements and 2 highlights.
+            Do not add any other text. Give 3 improvements, 2 highlights, and up to 8 missing role-specific keywords.
           ` 
         }
       ];
@@ -444,6 +458,8 @@ export default function ATSScanner() {
         setScore(result.score || 70);
         setImprovements(result.improvements || []);
         setHighlights(result.highlights || []);
+        setMissingKeywords(result.missingKeywords || []);
+        setSelectedKeywords([]);
       }
 
       // Storage and history
@@ -452,7 +468,7 @@ export default function ATSScanner() {
       await saveAtsHistory({
         score: result.score || 70,
         resumeName: selectedFile.name,
-        snapshotUrl: cloudinary.url,
+        cloudinaryUrl: cloudinary.url,
         cloudinaryPublicId: cloudinary.publicId,
         jobTitle: jobDescription.substring(0, 50) + "...",
         analysis: result
@@ -488,17 +504,18 @@ export default function ATSScanner() {
 
       const limits = getLimits("Elder-2"); // Default to ATS-friendly template for optimization reference
 
-      const systemPrompt = `You are a smart ATS Resume Content Generator.
-
-Your goal is to generate visually balanced resume content that completely fills the selected template professionally without empty spaces or overflow.
+      const systemPrompt = `You are an elite ATS Resume Content Generator. Your goal is to generate visually balanced, keyword-optimized resume content that scores high with Applicant Tracking Systems.
 
 IMPORTANT RULES:
+- Use strong action verbs (Led, Built, Increased, Optimized, Delivered, Architected, Streamlined)
+- Quantify achievements with metrics (%, $, time saved, team size, revenue impact)
+- Include role-specific keywords naturally throughout descriptions
 - Every template section should feel visually filled.
 - Never leave large empty areas.
 - Never overflow content.
 - Adapt content based on user experience level.
-- Use concise ATS-friendly writing.
 - Keep sentences short and impactful.
+- Write in 3rd person implied (no "I" or "me")
 
 ========================
 TEMPLATE RULES
@@ -549,6 +566,9 @@ EXPERIENCED: Experience > Achievements > Skills > Projects > Interests
 WRITING STYLE
 ========================
 GOOD: ✔ Built responsive React applications using Firebase.
+GOOD: ✔ Led cross-functional team of 5 to deliver 30% faster deployment pipeline.
+GOOD: ✔ Optimized SQL queries reducing page load time by 40%.
+GOOD: ✔ Increased customer retention by 25% through targeted email automation.
 BAD: ✘ I am a hardworking and dedicated individual...
 
 ========================
@@ -589,6 +609,7 @@ Name: ${user?.displayName || 'Candidate'}
 Role: ${jobTitle || 'Professional'}
 Experience Level: ${userProfile ? 'experienced' : 'fresher'}
 Years: ${userProfile ? 'Verified' : 'N/A'}
+${[...selectedKeywords, ...customKeywords].length > 0 ? `MUST INCLUDE SKILLS (User verified they have these missing skills): ${[...selectedKeywords, ...customKeywords].join(', ')}` : ''}
 Resume Content (contains Education, Experience, Skills, etc.):
 ${extractedText.substring(0, 3500)}
 
@@ -625,6 +646,8 @@ Generate the optimized resume content now. Make sure you extract the candidate's
     setScore(item.score);
     setImprovements(item.analysis.improvements || []);
     setHighlights(item.analysis.highlights || []);
+    setMissingKeywords(item.analysis.missingKeywords || []);
+    setSelectedKeywords([]);
     setShowResults(true);
   };
 
@@ -635,8 +658,8 @@ Generate the optimized resume content now. Make sure you extract the candidate's
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar style={isDark ? "light" : "dark"} />
+    <View style={[styles.container, { backgroundColor: '#fff8f5' }]}>
+      <StatusBar style="dark" />
       <Stack.Screen 
         options={{
           headerShown: false,
@@ -650,15 +673,15 @@ Generate the optimized resume content now. Make sure you extract the candidate's
         onRequestClose={() => setIsAnalyzing(false)}
       >
         <View style={styles.loadingOverlay}>
-          <View style={[styles.loadingPopup, { backgroundColor: colors.surface }]}>
+          <View style={[styles.loadingPopup, { backgroundColor: '#fff' }]}>
              <LottieView 
                source={require('@/assets/Profile Scanning.json')} 
                autoPlay 
                loop 
                style={styles.loadingLottie} 
              />
-             <Text style={[styles.loadingTitle, { color: colors.text }]}>AI Analyzing...</Text>
-             <Text style={[styles.loadingSub, { color: colors.textMuted }]}>Matching keywords & structure</Text>
+             <Text style={[styles.loadingTitle, { color: '#3d3352' }]}>AI Analyzing...</Text>
+             <Text style={[styles.loadingSub, { color: '#9a8aaa' }]}>Matching keywords & structure</Text>
           </View>
         </View>
       </Modal>
@@ -679,16 +702,17 @@ Generate the optimized resume content now. Make sure you extract the candidate's
           <Animated.ScrollView 
             onScroll={modalScrollHandler}
             scrollEventThrottle={16}
+            style={{ flex: 1 }}
             contentContainerStyle={{ padding: 20, paddingTop: 10, paddingBottom: insets.bottom + 40 }}
           >
-            <Animated.View entering={FadeInUp} style={styles.scoreCardContainer}>
+            <Animated.View entering={FadeInUp} style={[styles.scoreCardContainer, { width: '100%' }]}>
               <LinearGradient
                 colors={isDark ? ['#6366F1', '#4F46E5', '#1E1B4B'] : ['#EEF2FF', '#C7D2FE', '#E0E7FF']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.scoreCardGradient}
+                style={[styles.scoreCardGradient, { width: '100%', borderRadius: 24, padding: 2 }]}
               >
-                <GlassCard style={[styles.scoreCard, { backgroundColor: isDark ? 'rgba(30, 27, 75, 0.5)' : 'rgba(255, 255, 255, 0.6)' }]}>
+                <View style={[{ width: '100%', borderRadius: 22, padding: 24, alignItems: 'center', overflow: 'hidden', backgroundColor: isDark ? 'rgba(30, 27, 75, 0.95)' : 'rgba(255, 255, 255, 0.95)' }]}>
                   <View style={[styles.glowRing, { borderColor: score ? getMatchStyles(score).color + '20' : 'rgba(99, 102, 241, 0.2)' }]} />
                   <View style={[styles.glowRingOuter, { borderColor: score ? getMatchStyles(score).color + '08' : 'rgba(99, 102, 241, 0.08)' }]} />
                   
@@ -725,7 +749,7 @@ Generate the optimized resume content now. Make sure you extract the candidate's
                       />
                     </View>
                   </View>
-                </GlassCard>
+                </View>
               </LinearGradient>
             </Animated.View>
 
@@ -757,6 +781,40 @@ Generate the optimized resume content now. Make sure you extract the candidate's
                 </View>
               </Animated.View>
             ))}
+
+            {missingKeywords.length > 0 && (
+              <Animated.View entering={FadeInDown.delay(600)}>
+                <Text style={[styles.listTitle, { color: colors.text, marginTop: 10 }]}>Missing Skills & Keywords</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 16 }}>Tap to add the skills you possess to your optimized resume.</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+                  {missingKeywords.map(kw => {
+                    const isSelected = selectedKeywords.includes(kw);
+                    return (
+                      <TouchableOpacity 
+                        key={kw} 
+                        style={{
+                           paddingHorizontal: 16, paddingVertical: 10, 
+                           borderRadius: 20, 
+                           backgroundColor: isSelected ? Theme.colors.primary : colors.surface,
+                           borderWidth: 1, borderColor: isSelected ? Theme.colors.primary : colors.glassBorder,
+                           flexDirection: 'row', alignItems: 'center', gap: 6
+                        }}
+                        onPress={() => {
+                          if (isSelected) {
+                            setSelectedKeywords(prev => prev.filter(k => k !== kw));
+                          } else {
+                            setSelectedKeywords(prev => [...prev, kw]);
+                          }
+                        }}
+                      >
+                         <Text style={{ color: isSelected ? '#fff' : colors.text, fontSize: 13, fontWeight: '700' }}>{kw}</Text>
+                         {isSelected ? <Check size={14} color="#fff" /> : <Plus size={14} color={colors.textMuted} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </Animated.View>
+            )}
 
             <View style={styles.optimizeSection}>
               <View style={[styles.divider, { backgroundColor: colors.glassBorder, marginVertical: 30 }]} />
@@ -792,7 +850,12 @@ Generate the optimized resume content now. Make sure you extract the candidate's
               ) : (
                 <TouchableOpacity 
                   style={[styles.optimizeBtn, isOptimizing && { opacity: 0.7 }]}
-                  onPress={handleOptimize}
+                  onPress={() => {
+                    setSelectedKeywords([]);
+                    setCustomKeywords([]);
+                    setCustomKeywordInput('');
+                    setShowKeywordSelect(true);
+                  }}
                   disabled={isOptimizing}
                 >
                   {isOptimizing ? (
@@ -810,21 +873,191 @@ Generate the optimized resume content now. Make sure you extract the candidate's
         </View>
       </Modal>
 
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+      {/* Keyword Selection Modal */}
+      <Modal
+        visible={showKeywordSelect}
+        animationType="slide"
+        onRequestClose={() => setShowKeywordSelect(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { paddingTop: insets.top + 10, backgroundColor: colors.background, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+            <TouchableOpacity onPress={() => setShowKeywordSelect(false)} style={styles.closeBtn}>
+              <ChevronLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Select Keywords</Text>
+            <View style={{ width: 40 }} />
+          </View>
 
-      {/* Floating Header */}
-      <Animated.View style={[styles.header, { paddingTop: insets.top + 10 }, headerStyle]}>
+          <ScrollView 
+            contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 120 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 20, lineHeight: 18 }}>
+              Pick the skills and keywords you want included in your optimized resume. The AI will only use what you select.
+            </Text>
+
+            {missingKeywords.length > 0 && (
+              <>
+                <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 12 }}>
+                  Suggested by ATS Analysis
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
+                  {missingKeywords.map(kw => {
+                    const isSelected = selectedKeywords.includes(kw);
+                    return (
+                      <TouchableOpacity 
+                        key={kw} 
+                        style={{
+                          paddingHorizontal: 16, paddingVertical: 10, 
+                          borderRadius: 20, 
+                          backgroundColor: isSelected ? Theme.colors.primary : colors.surface,
+                          borderWidth: 1.5, borderColor: isSelected ? Theme.colors.primary : Theme.border.color,
+                          borderStyle: 'dashed',
+                          flexDirection: 'row', alignItems: 'center', gap: 6
+                        }}
+                        onPress={() => {
+                          if (isSelected) {
+                            setSelectedKeywords(prev => prev.filter(k => k !== kw));
+                          } else {
+                            setSelectedKeywords(prev => [...prev, kw]);
+                          }
+                        }}
+                      >
+                        <Text style={{ color: isSelected ? '#fff' : colors.text, fontSize: 13, fontWeight: '700' }}>{kw}</Text>
+                        {isSelected ? <Check size={14} color="#fff" /> : <Plus size={14} color={colors.textMuted} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {customKeywords.length > 0 && (
+              <>
+                <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 12 }}>
+                  Your Custom Skills
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
+                  {customKeywords.map(kw => (
+                    <TouchableOpacity 
+                      key={kw} 
+                      style={{
+                        paddingHorizontal: 16, paddingVertical: 10, 
+                        borderRadius: 20, 
+                        backgroundColor: Theme.colors.primary,
+                        borderWidth: 1.5, borderColor: Theme.colors.primary,
+                        flexDirection: 'row', alignItems: 'center', gap: 6
+                      }}
+                      onPress={() => {
+                        setCustomKeywords(prev => prev.filter(k => k !== kw));
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{kw}</Text>
+                      <X size={14} color="#fff" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 8 }}>
+              Add Your Own Skills
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 12 }}>
+              Don't see your skill? Add it here (e.g., React instead of Angular)
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 32 }}>
+              <TextInput
+                style={{
+                  flex: 1,
+                  borderWidth: 1.5,
+                  borderColor: Theme.border.color,
+                  borderStyle: 'dashed',
+                  borderRadius: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  color: colors.text,
+                  backgroundColor: 'transparent',
+                  fontSize: 14,
+                }}
+                placeholder="Type a skill and press Add"
+                placeholderTextColor={colors.textMuted}
+                value={customKeywordInput}
+                onChangeText={setCustomKeywordInput}
+                onSubmitEditing={() => {
+                  const trimmed = customKeywordInput.trim();
+                  if (trimmed && !customKeywords.includes(trimmed) && !selectedKeywords.includes(trimmed)) {
+                    setCustomKeywords(prev => [...prev, trimmed]);
+                    setCustomKeywordInput('');
+                  }
+                }}
+              />
+              <TouchableOpacity 
+                style={{
+                  paddingHorizontal: 20,
+                  backgroundColor: Theme.colors.primary,
+                  borderRadius: 12,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+                onPress={() => {
+                  const trimmed = customKeywordInput.trim();
+                  if (trimmed && !customKeywords.includes(trimmed) && !selectedKeywords.includes(trimmed)) {
+                    setCustomKeywords(prev => [...prev, trimmed]);
+                    setCustomKeywordInput('');
+                  }
+                }}
+              >
+                <Plus size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+
+          <View style={{ 
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            paddingHorizontal: 20, paddingBottom: insets.bottom + 20, paddingTop: 16,
+            backgroundColor: colors.background,
+            borderTopWidth: 1, borderTopColor: colors.glassBorder,
+          }}>
+            <TouchableOpacity 
+              style={{
+                backgroundColor: Theme.colors.primary,
+                borderRadius: 16,
+                paddingVertical: 16,
+                alignItems: 'center',
+                opacity: isOptimizing ? 0.6 : 1,
+              }}
+              onPress={() => {
+                setShowKeywordSelect(false);
+                setTimeout(() => handleOptimize(), 300);
+              }}
+              disabled={isOptimizing}
+            >
+              {isOptimizing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                  Generate Optimized Resume ({[...selectedKeywords, ...customKeywords].length} skills)
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: 50 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft color={colors.text} size={24} />
+          <ChevronLeft color="#8b5cf6" size={24} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Resume Optimizer</Text>
-        <View style={{ width: 44 }} />
-      </Animated.View>
+        <Text style={styles.headerTitle}>Resume Optimizer</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
       <Animated.ScrollView 
         onScroll={scrollHandler}
         scrollEventThrottle={16}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: 100 + insets.top, paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: 10, paddingBottom: 40 }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={{ height: 0, width: 0, opacity: 0 }}>
@@ -874,10 +1107,10 @@ Generate the optimized resume content now. Make sure you extract the candidate's
 
         <Animated.View entering={FadeInDown.delay(200)}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.stepBadge, { backgroundColor: Theme.colors.primary }]}>
+            <View style={[styles.stepBadge, { backgroundColor: '#8b5cf6' }]}>
               <Text style={styles.stepBadgeText}>1</Text>
             </View>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Upload Your Resume</Text>
+            <Text style={styles.sectionTitle}>Upload Your Resume</Text>
           </View>
           
           <TouchableOpacity 
@@ -886,53 +1119,58 @@ Generate the optimized resume content now. Make sure you extract the candidate's
             style={styles.uploadContainer}
           >
             <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.7 }}>
-              <GlassCard style={[styles.uploadZone, selectedFile && styles.uploadedZone, { borderColor: colors.glassBorder }]}>
+              <View style={[styles.uploadZone, selectedFile && styles.uploadedZone, { borderColor: selectedFile ? '#f0e8ff' : '#8b5cf640' }]}>
               {selectedFile ? (
                 <View style={styles.previewContent}>
-                  <LinearGradient
-                    colors={[Theme.colors.primary + '20', Theme.colors.primary + '05']}
-                    style={styles.miniDocGradient}
-                  >
-                    <View style={[styles.miniDoc, { borderColor: Theme.colors.primary + '30' }]}>
-                       <View style={[styles.miniDocLine, { width: '60%', backgroundColor: Theme.colors.primary }]} />
-                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: colors.textMuted + '40' }]} />
-                       <View style={[styles.miniDocLine, { width: '80%', backgroundColor: colors.textMuted + '40' }]} />
-                       <View style={[styles.miniDocLine, { width: '40%', marginTop: 10, backgroundColor: Theme.colors.primary }]} />
-                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: colors.textMuted + '40' }]} />
+                  <View style={styles.miniDocGradient}>
+                    <View style={[styles.miniDoc, { borderColor: '#8b5cf630' }]}>
+                       <View style={[styles.miniDocLine, { width: '60%', backgroundColor: '#8b5cf6' }]} />
+                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: '#d0c0e0' }]} />
+                       <View style={[styles.miniDocLine, { width: '80%', backgroundColor: '#d0c0e0' }]} />
+                       <View style={[styles.miniDocLine, { width: '40%', marginTop: 10, backgroundColor: '#8b5cf6' }]} />
+                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: '#d0c0e0' }]} />
                     </View>
-                  </LinearGradient>
+                  </View>
                   <View style={styles.previewInfo}>
-                    <Text style={[styles.uploadText, { color: colors.text }]} numberOfLines={1}>{selectedFile.name}</Text>
+                    <Text style={[styles.uploadText, { color: '#3d3352' }]} numberOfLines={1}>{selectedFile.name}</Text>
                     <View style={styles.statusRow}>
-                      <View style={[styles.statusDot, { backgroundColor: extractedText ? Theme.colors.success : '#fbbf24' }]} />
-                      <Text style={[styles.uploadSubtext, { color: extractedText ? Theme.colors.success : '#fbbf24' }]}>
+                      <View style={[styles.statusDot, { backgroundColor: extractedText ? '#22c55e' : '#fbbf24' }]} />
+                      <Text style={[styles.uploadSubtext, { color: extractedText ? '#22c55e' : '#fbbf24' }]}>
                         {extractedText ? 'Ready for Scanning' : 'Processing...'}
                       </Text>
                     </View>
                   </View>
-                  <TouchableOpacity 
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      setShowPreview(true);
-                    }}
-                    style={styles.eyeBtn}
-                  >
-                    <Eye size={20} color={Theme.colors.primary} />
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity 
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDocumentPick();
+                      }}
+                      style={styles.eyeBtn}
+                    >
+                      <RefreshCw size={20} color="#8b5cf6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setShowPreview(true);
+                      }}
+                      style={styles.eyeBtn}
+                    >
+                      <Eye size={20} color="#8b5cf6" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : (
                 <View style={styles.uploadPlaceholder}>
-                  <LinearGradient
-                    colors={[Theme.colors.primary + '15', 'transparent']}
-                    style={styles.uploadIconCircle}
-                  >
-                    <Upload size={32} color={Theme.colors.primary} />
-                  </LinearGradient>
-                  <Text style={[styles.uploadTitle, { color: colors.text }]}>Select PDF Resume</Text>
-                  <Text style={[styles.uploadHint, { color: colors.textMuted }]}>Tap to browse your files</Text>
+                  <View style={styles.uploadIconCircle}>
+                    <Upload size={36} color="#8b5cf6" strokeWidth={2.5} />
+                  </View>
+                  <Text style={styles.uploadTitle}>Upload PDF Resume</Text>
+                  <Text style={styles.uploadHint}>Tap to browse your files</Text>
                 </View>
               )}
-              </GlassCard>
+              </View>
             </ViewShot>
           </TouchableOpacity>
         </Animated.View>
@@ -958,40 +1196,31 @@ Generate the optimized resume content now. Make sure you extract the candidate's
             allowUniversalAccessFromFileURLs={true}
             scalesPageToFit
           />
-          <View style={[styles.adContainer, { paddingBottom: insets.bottom + 10, backgroundColor: colors.background, alignItems: 'center' }]}>
-            <BannerAd
-              unitId={bannerId}
-              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-              requestOptions={{
-                requestNonPersonalizedAdsOnly: true,
-              }}
-            />
-          </View>
         </View>
       </Modal>
 
         <Animated.View entering={FadeInDown.delay(400)} style={styles.spacing}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.stepBadge, { backgroundColor: '#8B5CF6' }]}>
+            <View style={[styles.stepBadge, { backgroundColor: '#8b5cf6' }]}>
               <Text style={styles.stepBadgeText}>2</Text>
             </View>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Target Job Details</Text>
+            <Text style={styles.sectionTitle}>Target Job Details</Text>
           </View>
 
-          <GlassCard style={[styles.inputCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+          <View style={styles.inputCard}>
             <View style={styles.inputTabs}>
                <View style={styles.activeTabIndicator} />
                <View style={styles.tabItem}>
-                  <Search size={14} color={Theme.colors.primary} />
-                  <Text style={[styles.tabText, { color: colors.text }]}>Paste Link</Text>
+                <Search size={14} color="#8b5cf6" />
+                <Text style={styles.tabText}>Paste Link</Text>
                </View>
             </View>
 
             <View style={styles.urlInputRow}>
               <TextInput
-                style={[styles.urlInput, { color: colors.text }]}
+                style={styles.urlInput}
                 placeholder="LinkedIn, Indeed, or company URL"
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor="#c0b0d0"
                 value={jobUrl}
                 onChangeText={setJobUrl}
               />
@@ -1009,21 +1238,21 @@ Generate the optimized resume content now. Make sure you extract the candidate's
             </View>
 
             <View style={styles.inputDivider}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.glassBorder }]} />
-              <Text style={[styles.dividerText, { color: colors.textMuted }]}>OR PASTE TEXT</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.glassBorder }]} />
+              <View style={[styles.dividerLine, { backgroundColor: '#f0e8ff' }]} />
+              <Text style={[styles.dividerText, { color: '#9a8aaa' }]}>OR PASTE TEXT</Text>
+              <View style={[styles.dividerLine, { backgroundColor: '#f0e8ff' }]} />
             </View>
             
             <TextInput
-              style={[styles.textInput, { color: colors.text }]}
+              style={styles.textInput}
               placeholder="Paste the full job description here for maximum accuracy..."
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor="#c0b0d0"
               multiline
               numberOfLines={6}
               value={jobDescription}
               onChangeText={setJobDescription}
             />
-          </GlassCard>
+          </View>
         </Animated.View>
 
         {!isAnalyzing && (
@@ -1033,41 +1262,46 @@ Generate the optimized resume content now. Make sure you extract the candidate's
               onPress={handleStartAnalysis}
               disabled={!selectedFile || !jobDescription}
             >
-              <LinearGradient
-                colors={['#6366F1', '#4F46E5']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.buttonGradient}
-              >
-                <Zap size={22} color="#fff" />
+              <View style={styles.buttonGradient}>
+                <Sparkles size={20} color="#fff" />
                 <Text style={styles.buttonText}>Scan ATS Compatibility</Text>
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
           </Animated.View>
         )}
 
         {history.length > 0 && (
-          <View style={styles.historySection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent History</Text>
+          <View style={[styles.historySection, { paddingBottom: 60 }]}>
+            <View style={[styles.sectionHeader, { marginBottom: 20 }]}>
+              <View style={[styles.stepBadge, { backgroundColor: '#8b5cf6' }]}>
+                <History size={14} color="#fff" />
+              </View>
+              <Text style={styles.sectionTitle}>Recent Scans</Text>
             </View>
             {history.map((item, idx) => (
               <Animated.View key={item.id} entering={FadeInDown.delay(100 * idx)}>
                 <TouchableOpacity 
                   onPress={() => openHistoryItem(item)}
-                  style={[styles.historyItem, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+                  activeOpacity={0.7}
+                  style={styles.historyItem}
                 >
-                  <View style={[styles.historyScore, { borderColor: getMatchStyles(item.score).color }]}>
-                     <Text style={[styles.historyScoreText, { color: getMatchStyles(item.score).color }]}>{item.score}%</Text>
+                  <View style={[{ width: 56, height: 56, borderRadius: 20, backgroundColor: getMatchStyles(item.score).color + '15', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={[styles.historyScoreText, { color: getMatchStyles(item.score).color, fontSize: 16 }]}>{item.score}</Text>
+                    <Text style={{ fontSize: 9, color: getMatchStyles(item.score).color, fontWeight: '900', marginTop: -2 }}>SCORE</Text>
                   </View>
                   <View style={{ flex: 1, marginLeft: 16 }}>
-                    <Text style={[styles.historyJob, { color: colors.text }]} numberOfLines={1}>{item.jobTitle}</Text>
-                    <Text style={[styles.historyDate, { color: colors.textMuted }]}>
-                      {dayjs(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt).format('MMM D, h:mm A')}
+                    <Text style={styles.historyJob} numberOfLines={1}>
+                      {item.jobTitle || 'Unknown Role'}
                     </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
+                      <History size={12} color="#9a8aaa" />
+                      <Text style={styles.historyDate}>
+                        {dayjs(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt).format('MMM D, h:mm A')}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={[styles.historyArrow, { backgroundColor: colors.glassBorder }]}>
-                    <ChevronLeft size={16} color={colors.text} style={{ transform: [{ rotate: '180deg' }] }} />
+                  <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: '#8b5cf610', justifyContent: 'center', alignItems: 'center' }}>
+                    <ChevronLeft size={18} color="#8b5cf6" style={{ transform: [{ rotate: '180deg' }] }} />
                   </View>
                 </TouchableOpacity>
               </Animated.View>
@@ -1077,8 +1311,8 @@ Generate the optimized resume content now. Make sure you extract the candidate's
 
         {isAnalyzing && (
           <View style={styles.loadingContainer}>
-            <Sparkles size={40} color={Theme.colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textMuted }]}>Analyzing keywords & formatting...</Text>
+            <Sparkles size={40} color="#8b5cf6" />
+            <Text style={styles.loadingText}>Analyzing keywords & formatting...</Text>
           </View>
         )}
       </Animated.ScrollView>
@@ -1090,52 +1324,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#4a3f6b',
   },
   backButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#8b5cf615',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    marginTop: 24,
+    gap: 10,
+    marginBottom: 14,
+    marginTop: 20,
   },
   stepBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
   },
   stepBadgeText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '900',
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '800',
+    color: '#4a3f6b',
   },
   uploadContainer: {
     borderRadius: 24,
-    overflow: 'hidden',
+    marginBottom: 10,
+    width: '100%',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#f0e8ff',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   uploadZone: {
     height: 180,
@@ -1144,30 +1387,36 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderWidth: 2,
     borderRadius: 24,
-    backgroundColor: 'rgba(99, 102, 241, 0.03)',
+    borderColor: '#8b5cf640',
+    backgroundColor: '#fff',
   },
   uploadedZone: {
     borderStyle: 'solid',
-    backgroundColor: 'transparent',
+    backgroundColor: '#fff',
   },
   uploadPlaceholder: {
     alignItems: 'center',
   },
   uploadIconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    backgroundColor: '#8b5cf615',
+    borderWidth: 1,
+    borderColor: '#8b5cf630',
   },
   uploadTitle: {
     fontSize: 17,
     fontWeight: '700',
+    color: '#3d3352',
     marginBottom: 4,
   },
   uploadHint: {
     fontSize: 13,
+    color: '#9a8aaa',
   },
   previewContent: {
     flexDirection: 'row',
@@ -1218,7 +1467,7 @@ const styles = StyleSheet.create({
   eyeBtn: {
     width: 44,
     height: 44,
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    backgroundColor: '#8b5cf615',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1245,9 +1494,6 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
   },
-  adContainer: {
-    padding: 12,
-  },
   spacing: {
     marginTop: 24,
   },
@@ -1256,8 +1502,15 @@ const styles = StyleSheet.create({
   },
   inputCard: {
     padding: 20,
-    borderRadius: 28,
+    borderRadius: 24,
     borderWidth: 1,
+    borderColor: '#f0e8ff',
+    backgroundColor: '#fff',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   inputTabs: {
     flexDirection: 'row',
@@ -1270,11 +1523,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    backgroundColor: '#8b5cf615',
   },
   tabText: {
     fontSize: 12,
     fontWeight: '800',
+    color: '#3d3352',
   },
   activeTabIndicator: {
     position: 'absolute',
@@ -1283,7 +1537,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 3,
     borderRadius: 2,
-    backgroundColor: Theme.colors.primary,
+    backgroundColor: '#8b5cf6',
   },
   urlInputRow: {
     flexDirection: 'row',
@@ -1296,14 +1550,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: 'rgba(128,128,128,0.05)',
+    backgroundColor: '#f5f0ff',
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#f0e8ff',
   },
   miniFetchBtn: {
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: Theme.colors.primary,
+    backgroundColor: '#8b5cf6',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1327,14 +1583,21 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: 'top',
     padding: 16,
-    backgroundColor: 'rgba(128,128,128,0.05)',
+    backgroundColor: '#f5f0ff',
     borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#f0e8ff',
   },
   analyzeButton: {
-    borderRadius: 20,
+    borderRadius: 26,
     overflow: 'hidden',
-    height: 64,
+    height: 56,
     marginTop: 10,
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 8,
   },
   disabledButton: {
     opacity: 0.5,
@@ -1344,13 +1607,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
+    backgroundColor: '#8b5cf6',
   },
   buttonText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 0.5,
   },
   loadingContainer: {
     marginTop: 40,
@@ -1360,6 +1623,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     fontWeight: '600',
+    color: '#9a8aaa',
   },
   resultsContainer: {
     marginTop: 32,
@@ -1570,10 +1834,17 @@ const styles = StyleSheet.create({
   historyItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 18,
-    borderRadius: 24,
+    padding: 14,
+    borderRadius: 20,
     borderWidth: 1,
-    marginBottom: 14,
+    borderColor: '#f0e8ff',
+    backgroundColor: '#fff',
+    marginBottom: 10,
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   historyScore: {
     width: 50,
@@ -1589,11 +1860,13 @@ const styles = StyleSheet.create({
   },
   historyJob: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '700',
+    color: '#3d3352',
     marginBottom: 4,
   },
   historyDate: {
     fontSize: 12,
+    color: '#9a8aaa',
   },
   optimizeSection: {
     marginTop: 30,

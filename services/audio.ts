@@ -4,7 +4,7 @@ let currentRecording: Audio.Recording | null = null;
 let isBusy = false;
 
 export const AudioService = {
-  async startRecording() {
+  async startRecording(onStatusUpdate?: (status: any) => void) {
     if (isBusy || currentRecording) {
       console.log("[AudioService] Already recording or busy.");
       return null;
@@ -17,14 +17,6 @@ export const AudioService = {
         throw new Error("Missing audio recording permissions.");
       }
 
-      // Aggressive reset
-      if (currentRecording) {
-        try {
-          await currentRecording.stopAndUnloadAsync();
-        } catch (e) {}
-        currentRecording = null;
-      }
-
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -32,9 +24,12 @@ export const AudioService = {
         interruptionModeIOS: 1, // DoNotMix
         playThroughEarpieceAndroid: false,
         interruptionModeAndroid: 1, // DoNotMix
-      });
+      } as any);
 
       const recording = new Audio.Recording();
+      if (onStatusUpdate) {
+        recording.setOnRecordingStatusUpdate(onStatusUpdate);
+      }
       await recording.prepareToRecordAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
       );
@@ -45,7 +40,7 @@ export const AudioService = {
     } catch (error) {
       console.error("[AudioService] Start Error:", error);
       try {
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false } as any);
       } catch (e) {}
       currentRecording = null;
       throw error;
@@ -68,7 +63,7 @@ export const AudioService = {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
-      });
+      } as any);
 
       return uri;
     } catch (error) {
@@ -90,7 +85,7 @@ export const AudioService = {
         } catch (e) {}
         currentRecording = null;
       }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false } as any);
     } catch (e) {
       console.error("[AudioService] Reset Error:", e);
     } finally {

@@ -20,15 +20,36 @@ import { getAtsHistory } from '@/services/firestore';
 import { exportToPDF } from '@/utils/resume-exporter';
 import { ActivityIndicator } from 'react-native';
 
-const formatDate = (timestamp: number | string | undefined) => {
+const formatDate = (timestamp: any) => {
   if (!timestamp) return "Recent";
-  const numStamp = typeof timestamp === "string" ? parseInt(timestamp, 10) : timestamp;
-  if (isNaN(numStamp)) return "Recent";
   
-  const date = new Date(numStamp);
+  let date: Date;
+  if (timestamp instanceof Date) {
+    date = timestamp;
+  } else if (typeof timestamp === 'object' && timestamp.seconds !== undefined) {
+    date = new Date(timestamp.seconds * 1000);
+  } else if (typeof timestamp === 'object' && typeof timestamp.toDate === 'function') {
+    date = timestamp.toDate();
+  } else {
+    const numStamp = typeof timestamp === "string" ? parseInt(timestamp, 10) : Number(timestamp);
+    if (isNaN(numStamp)) {
+      const parsed = Date.parse(timestamp);
+      if (isNaN(parsed)) {
+        return "Recent";
+      }
+      date = new Date(parsed);
+    } else {
+      date = new Date(numStamp);
+    }
+  }
+  
   const now = new Date();
   const diffTime = Math.abs(now.getTime() - date.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffTime < 60000) {
+    return "Just now";
+  }
   
   if (diffDays <= 1) {
     const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
@@ -68,7 +89,7 @@ export default function MyResumesScreen() {
           
           setResumes([
             ...localResumes.map((r) => ({ ...r, type: "builder" })),
-            ...atsHistory.map((a) => ({
+            ...atsHistory.map((a: any) => ({
               ...a,
               name: a.resumeName,
               date: "recent",
@@ -101,7 +122,7 @@ export default function MyResumesScreen() {
             const atsHistory = await getAtsHistory();
             setResumes([
                 ...localResumes.map((r) => ({ ...r, type: "builder" })),
-                ...atsHistory.map((a) => ({
+                ...atsHistory.map((a: any) => ({
                   ...a,
                   name: a.resumeName,
                   date: "recent",
@@ -157,7 +178,7 @@ export default function MyResumesScreen() {
                  <View style={styles.resumeCardLeft}>
                    <View style={styles.resumeIconBox}>
                      <Image
-                       source={require("@/assets/images/nav-icons/resume.png")}
+                       source={require("@/assets/images/cv.png")}
                        style={styles.resumeIcon}
                        resizeMode="contain"
                      />
@@ -183,7 +204,10 @@ export default function MyResumesScreen() {
                        </View>
                      )}
                      <Text style={[styles.chatMessage, { color: colors.textMuted }]}>
-                       {resume.type === "ats" ? "Checked" : `Modified ${formatDate(resume.lastModified)}`}
+                        {resume.type === "ats" 
+                          ? `Checked ${formatDate(resume.createdAt)}` 
+                          : `Modified ${formatDate(resume.lastModified)}`
+                        }
                      </Text>
                    </View>
                  </View>

@@ -1,4 +1,3 @@
-import { GlassCard } from "@/components/glass-card";
 import { TemplatePreviewModal } from "@/components/TemplatePreviewModal";
 import { Colors, Theme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -15,13 +14,14 @@ import {
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-    Image,
+    Dimensions,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import Animated, {
     FadeInDown,
     useAnimatedStyle,
@@ -38,6 +38,8 @@ export default function BuilderLanding() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
+  const screenWidth = Dimensions.get("window").width;
+  const railCardWidth = (screenWidth - 52) / 2;
 
   const [myResumes, setMyResumes] = useState<UserResume[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
@@ -103,16 +105,7 @@ export default function BuilderLanding() {
       icon: Mic,
       color: Theme.colors.secondary,
       mode: "voice",
-      image: require("../../assets/voic-chat.png"),
-    },
-    {
-      title: "Video Interview",
-      description:
-        "Human-like video conversation to build your professional profile.",
-      icon: Sparkles,
-      color: Theme.colors.primary,
-      mode: "ai-interview",
-      image: require("../../assets/chat-app.png"),
+      image: require("../../assets/images/quick-action/microphone.webp"),
     },
     {
       title: "ATS AI Score",
@@ -121,7 +114,7 @@ export default function BuilderLanding() {
       icon: FileSearch,
       color: "#10b981",
       mode: "ats",
-      lottie: require("../../assets/Profile Scanning.json"),
+      image: require("../../assets/images/quick-action/hiring.webp"),
     },
   ];
 
@@ -179,16 +172,28 @@ export default function BuilderLanding() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.neoGrid}>
+        <View style={styles.railWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.railPad}
+            decelerationRate="fast"
+          >
           {smartOptions.map((option, index) => (
             <Animated.View
               key={option.mode}
               entering={FadeInDown.delay(100 + index * 150)}
-              style={styles.neoItemFull}
             >
               <TouchableOpacity
-                activeOpacity={0.9}
-                style={{ flex: 1 }}
+                activeOpacity={0.85}
+                style={[
+                  styles.railCard,
+                  {
+                    width: railCardWidth,
+                    backgroundColor: colors.surface,
+                    borderColor: option.color + "45",
+                  },
+                ]}
                 onPress={() => {
                   handleOptionPress(() => {
                     if (option.mode === "ats") router.push("/builder/ats");
@@ -204,67 +209,57 @@ export default function BuilderLanding() {
                   });
                 }}
               >
-                <GlassCard
+                <View
                   style={[
-                    styles.neoCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: option.color + "40",
-                      flexDirection: "row",
-                      paddingVertical: 24,
-                      paddingHorizontal: 20,
-                    },
+                    styles.railIcon,
+                    { backgroundColor: option.color + "18" },
                   ]}
                 >
+                  {option.image ? (
+                    <ExpoImage
+                      source={option.image}
+                      style={{ width: 72, height: 72 }}
+                      contentFit="contain"
+                    />
+                  ) : (option as any).lottie ? (
+                    <LottieView
+                      source={(option as any).lottie}
+                      autoPlay
+                      loop
+                      style={{ width: 72, height: 72 }}
+                    />
+                  ) : (
+                    <option.icon size={30} color={option.color} />
+                  )}
+                </View>
+
+                <Text
+                  style={[styles.railTitle, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  {option.title}
+                </Text>
+                <Text
+                  style={[styles.railDesc, { color: colors.textMuted }]}
+                  numberOfLines={2}
+                >
+                  {option.description}
+                </Text>
+
+                <View style={styles.railFooter}>
                   <View
                     style={[
-                      styles.neoIconBoxLarge,
-                      { backgroundColor: option.color + "15" },
-                    ]}
-                  >
-                    {option.image ? (
-                      <Image
-                        source={option.image}
-                        style={{ width: 46, height: 46 }}
-                        resizeMode="contain"
-                      />
-                    ) : option.lottie ? (
-                      <LottieView
-                        source={option.lottie}
-                        autoPlay
-                        loop
-                        style={{ width: 64, height: 64 }}
-                      />
-                    ) : (
-                      <option.icon size={32} color={option.color} />
-                    )}
-                  </View>
-
-                  <View style={styles.neoTextSectionLeft}>
-                    <Text
-                      style={[styles.neoTitleLarge, { color: colors.text }]}
-                    >
-                      {option.title}
-                    </Text>
-                    <Text
-                      style={[styles.neoDescLeft, { color: colors.textMuted }]}
-                    >
-                      {option.description}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.neoArrowCircle,
+                      styles.railArrow,
                       { backgroundColor: option.color },
                     ]}
                   >
-                    <ChevronRight size={16} color="#fff" />
+                    <ChevronRight size={14} color="#fff" />
                   </View>
-                </GlassCard>
+                </View>
               </TouchableOpacity>
             </Animated.View>
           ))}
+          </ScrollView>
         </View>
 
 
@@ -294,10 +289,10 @@ export default function BuilderLanding() {
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                     <View style={styles.resumeIconBox}>
-                      <Image
-                        source={require("@/assets/images/cv.png")}
+                      <ExpoImage
+                        source={require("@/assets/images/cv.webp")}
                         style={styles.resumeIcon}
-                        resizeMode="contain"
+                        contentFit="contain"
                       />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -408,6 +403,52 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: "900" },
   subtitle: { fontSize: 16, marginTop: 6 },
+  railWrap: {
+    marginHorizontal: -20,
+    marginBottom: 8,
+  },
+  railPad: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  railCard: {
+    height: 228,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1.2,
+    ...Theme.shadow,
+  },
+  railIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  railTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    marginBottom: 3,
+  },
+  railDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    flex: 1,
+  },
+  railFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
+  railArrow: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   neoGrid: { gap: 16 },
   neoItemFull: { width: "100%", height: 120 },
 

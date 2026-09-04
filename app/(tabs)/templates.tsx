@@ -13,13 +13,14 @@ import { Plus } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
     Dimensions,
-    Image,
+    FlatList,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import Animated, {
     FadeInDown,
     useAnimatedStyle,
@@ -508,6 +509,146 @@ export default function TemplatesScreen() {
     };
   });
 
+  // Grid card — FlatList mounts only visible cells, so the heavy
+  // WebView previews don't all render at once.
+  const renderTemplateCard = ({ item: t }: any) => (
+    <Animated.View
+      entering={FadeInDown.duration(300)}
+      style={[
+        styles.miniBox,
+        {
+          backgroundColor: colors.surface,
+        },
+      ]}
+    >
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() =>
+          router.push({
+            pathname: "/builder/manual",
+            params: { templateId: t.id },
+          } as any)
+        }
+        style={{ flex: 1 }}
+      >
+        <View style={styles.miniHeader}>
+          <View style={styles.miniMockup}>
+            <TemplateMiniPreview
+              id={t.id}
+              colors={colors}
+              isDark={isDark}
+            />
+            <View
+              style={[
+                styles.proBadgeMini,
+                {
+                  backgroundColor: t.color,
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 8,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  fontSize: 8,
+                  fontWeight: "900",
+                  color: "#fff",
+                }}
+              >
+                {t.badge}
+              </Text>
+            </View>
+
+            {/* Floating Name and Description Overlay */}
+            <LinearGradient
+              colors={["transparent", Theme.colors.primary + "f2"]}
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                padding: 10,
+                paddingTop: 24,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: "900",
+                  color: "#fff",
+                }}
+                numberOfLines={1}
+              >
+                {t.name}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 9,
+                  fontWeight: "600",
+                  color: "rgba(255, 255, 255, 0.75)",
+                  marginTop: 2,
+                }}
+                numberOfLines={1}
+              >
+                {t.desc}
+              </Text>
+            </LinearGradient>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
+  const seriesTabs = (
+    <View style={{ marginBottom: 20 }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: 12,
+          gap: 10,
+          paddingVertical: 4,
+        }}
+      >
+        {TEMPLATE_SERIES.map((series) => {
+          const isActive = selectedSeries === series.id;
+          return (
+            <TouchableOpacity
+              key={series.id}
+              activeOpacity={0.8}
+              onPress={() => setSelectedSeries(series.id)}
+              style={[
+                styles.seriesTab,
+                {
+                  backgroundColor: isActive
+                    ? Theme.colors.primary
+                    : colors.surface,
+                  borderColor: Theme.border.color,
+                  borderWidth: Theme.border.width,
+                  ...Theme.shadow,
+                },
+              ]}
+            >
+              <Text style={{ fontSize: 15 }}>{series.emoji}</Text>
+              <Text
+                style={[
+                  styles.seriesTabText,
+                  { color: isActive ? "#fff" : colors.text },
+                ]}
+              >
+                {series.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Sleek solid matching header layout */}
@@ -527,10 +668,10 @@ export default function TemplatesScreen() {
                 },
               ]}
             >
-              <Image
-                source={require("@/assets/resume (1).png")}
+              <ExpoImage
+                source={require("@/assets/resume (1).webp")}
                 style={{ width: 26, height: 26 }}
-                resizeMode="contain"
+                contentFit="contain"
               />
             </View>
             <View>
@@ -562,155 +703,21 @@ export default function TemplatesScreen() {
         </View>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <FlatList
+        key={selectedSeries}
+        data={TEMPLATE_SERIES.find((s) => s.id === selectedSeries)?.templates || []}
+        keyExtractor={(t) => t.id}
+        numColumns={2}
+        renderItem={renderTemplateCard}
+        ListHeaderComponent={seriesTabs}
         contentContainerStyle={styles.scrollContent}
-      >
-        {/* Series Sub-Tabs */}
-        <View style={{ marginBottom: 20 }}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingHorizontal: 12,
-              gap: 10,
-              paddingVertical: 4,
-            }}
-          >
-            {TEMPLATE_SERIES.map((series) => {
-              const isActive = selectedSeries === series.id;
-              return (
-                <TouchableOpacity
-                  key={series.id}
-                  activeOpacity={0.8}
-                  onPress={() => setSelectedSeries(series.id)}
-                  style={[
-                    styles.seriesTab,
-                    {
-                      backgroundColor: isActive
-                        ? Theme.colors.primary
-                        : colors.surface,
-                      borderColor: Theme.border.color,
-                      borderWidth: Theme.border.width,
-                      ...Theme.shadow,
-                    },
-                  ]}
-                >
-                  <Text style={{ fontSize: 15 }}>{series.emoji}</Text>
-                  <Text
-                    style={[
-                      styles.seriesTabText,
-                      { color: isActive ? "#fff" : colors.text },
-                    ]}
-                  >
-                    {series.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* 2-Column Template Grid */}
-        <View style={{ paddingHorizontal: 12 }}>
-          <View style={styles.miniGrid}>
-            {TEMPLATE_SERIES.find(
-              (s) => s.id === selectedSeries,
-            )?.templates.map((t, idx) => (
-              <Animated.View
-                key={t.id}
-                entering={FadeInDown.delay(80 * idx)}
-                style={[
-                  styles.miniBox,
-                  {
-                    backgroundColor: colors.surface,
-                  },
-                ]}
-              >
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/builder/manual",
-                      params: { templateId: t.id },
-                    } as any)
-                  }
-                  style={{ flex: 1 }}
-                >
-                  <View style={styles.miniHeader}>
-                    <View style={styles.miniMockup}>
-                      <TemplateMiniPreview
-                        id={t.id}
-                        colors={colors}
-                        isDark={isDark}
-                      />
-                      <View
-                        style={[
-                          styles.proBadgeMini,
-                          {
-                            backgroundColor: t.color,
-                            position: "absolute",
-                            top: 8,
-                            right: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 3,
-                            borderRadius: 8,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 8,
-                            fontWeight: "900",
-                            color: "#fff",
-                          }}
-                        >
-                          {t.badge}
-                        </Text>
-                      </View>
-
-                      {/* Floating Name and Description Overlay */}
-                      <LinearGradient
-                        colors={["transparent", Theme.colors.primary + "f2"]}
-                        style={{
-                          position: "absolute",
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          padding: 10,
-                          paddingTop: 24,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            fontWeight: "900",
-                            color: "#fff",
-                          }}
-                          numberOfLines={1}
-                        >
-                          {t.name}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 9,
-                            fontWeight: "600",
-                            color: "rgba(255, 255, 255, 0.75)",
-                            marginTop: 2,
-                          }}
-                          numberOfLines={1}
-                        >
-                          {t.desc}
-                        </Text>
-                      </LinearGradient>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              </Animated.View>
-            ))}
-          </View>
-        </View>
-      </ScrollView>
+        columnWrapperStyle={{ paddingHorizontal: 6 }}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        windowSize={3}
+        removeClippedSubviews
+      />
     </View>
   );
 }

@@ -93,3 +93,72 @@ exports.getTemplates = functions.https.onCall(async (data, context) => {
   });
   return { templates };
 });
+
+/**
+ * AUTO APPLY ORCHESTRATION (extension — client remains the primary runner)
+ *
+ * Safety rules enforced here and on the client:
+ * - Only runs when users/{uid}/autoApplySettings/config has enabled=true
+ *   and paused=false (explicit opt-in; default OFF).
+ * - Never submits to external job sites. No CAPTCHA bypass, no credential
+ *   use, no bot automation. External listings resolve to
+ *   "Manual Apply Required" with the official application URL.
+ * - Only marks eligible in-app ("internal") postings as "Auto Apply Queued";
+ *   the user still submits in the official form. Nothing is ever reported
+ *   as "Applied" unless a supported submission actually happened.
+ */
+exports.processAutoApplyQueue = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated");
+  }
+
+  const uid = context.auth.uid;
+  const db = admin.firestore();
+
+  const settingsSnap = await db
+    .collection("users")
+    .doc(uid)
+    .collection("autoApplySettings")
+    .doc("config")
+    .get();
+
+  const settings = settingsSnap.exists ? settingsSnap.data() : {};
+  if (!settings.enabled || settings.paused) {
+    return { processed: 0, reason: "Auto Apply is off or paused." };
+  }
+
+  const minMatch =
+    typeof settings.minMatch === "number" ? settings.minMatch : 70;
+
+  // Promote over-threshold "Matched" docs to "Auto Apply Queued" so the
+  // client (or a future approved integration) can act on them.
+  // Cap the batch for safety.
+  const snapshot = await db
+    .collection("users")
+    .doc(uid)
+    .collection("applications")
+    .where("status", "==", "Matched")
+    .limit(20)
+    .get();
+
+  let queued = 0;
+  const batch = db.batch();
+  snapshot.forEach((docSnap) => {
+    const app = docSnap.data();
+    if ((app.matchScore || 0) >= minMatch) {
+      batch.set(
+        docSnap.ref,
+        {
+          status: "Auto Apply Queued",
+          statusColor: "#f59e0b",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      queued += 1;
+    }
+  });
+  if (queued > 0) await batch.commit();
+
+  return { processed: snapshot.size, queued };
+});

@@ -3,6 +3,11 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, A
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Theme, Colors } from '@/constants/theme';
 import { saveJobApplication } from '@/services/firestore';
+import { saveAutoApplyRecord } from '@/services/firestore';
+import { useAutoApplySettings } from '@/hooks/use-auto-apply';
+import { AutoApplyBadge } from '@/components/AutoApplyBadge';
+import { calculateMatchScore, getAutoApplyContext, processJobForAutoApply } from '@/services/autoApply';
+import type { ApplicationRecord } from '@/services/autoApply';
 import { auth } from '@/services/firebase';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +43,12 @@ export default function JobDetailsScreen() {
   const appState = useRef(AppState.currentState);
   const [clickedApply, setClickedApply] = useState(false);
 
+  // Auto Apply (extension — existing apply flow untouched).
+  const { settings: aaSettings } = useAutoApplySettings();
+  const [aaMatch, setAaMatch] = useState<number | null>(null);
+  const [aaRecord, setAaRecord] = useState<ApplicationRecord | null>(null);
+  const [aaBusy, setAaBusy] = useState(false);
+
   const job = {
     id: (params.id || params.jobId || `${params.title}-${params.company}`) as string,
     title: params.title || 'Job Title',
@@ -61,6 +72,34 @@ export default function JobDetailsScreen() {
       }, 500);
     }
   }, [params.autoApply]);
+
+  // Auto Apply: live match preview from the existing profile + resume.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      if (!auth.currentUser) return;
+      try {
+        const { profile } = await getAutoApplyContext(aaSettings);
+        const score = calculateMatchScore(
+          {
+            id: job.id as string,
+            title: job.title as string,
+            company: job.company as string,
+            location: job.location as string,
+            description: job.description as string,
+            salary: job.salary as string,
+            scheduleType: 'Full-time',
+            source: job.isInternal ? 'internal' : 'external',
+            applyUrl: job.applyLink as string,
+          },
+          profile,
+          aaSettings,
+        );
+        if (live) setAaMatch(score);
+      } catch {}
+    })();
+    return () => { live = false; };
+  }, [aaSettings]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -98,6 +137,70 @@ export default function JobDetailsScreen() {
     } else {
       setClickedApply(true);
       await Linking.openURL(job.applyLink as string);
+    }
+  };
+
+  const handleAutoApply = async () => {
+    if (!auth.currentUser) {
+      Alert.alert("Login Required", "Please login to use Auto Apply.");
+      return;
+    }
+    if (!aaSettings.enabled || aaSettings.paused) {
+      Alert.alert(
+        "Auto Apply is OFF",
+        "Enable Auto Apply in settings first — it only touches jobs matching your preferences.",
+        [
+          { text: "Open Settings", onPress: () => router.push('/auto-apply-settings' as any) },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+      return;
+    }
+    setAaBusy(true);
+    try {
+      const { profile, resume } = await getAutoApplyContext(aaSettings);
+      const normalized = {
+        id: job.id as string,
+        title: job.title as string,
+        company: job.company as string,
+        location: job.location as string,
+        description: job.description as string,
+        salary: job.salary as string,
+        scheduleType: 'Full-time',
+        source: job.isInternal ? 'internal' : 'external',
+        applyUrl: job.applyLink as string,
+        logo: (job.logo as string) || undefined,
+      };
+      let rec = await processJobForAutoApply(normalized, {
+        settings: aaSettings,
+        profile,
+        resume,
+        // No external auto-submission: only official/allowed flows.
+        submit: undefined,
+      });
+      // In-app postings: queue honestly — the user submits in the form.
+      if (job.isInternal && rec.status === 'Manual Apply Required') {
+        rec = {
+          ...rec,
+          status: 'Auto Apply Queued',
+          statusColor: '#f59e0b',
+          reason: 'Eligible — finish and submit in the official application form.',
+        };
+      }
+      const full = { ...rec, logo: (job.logo as string) || undefined };
+      await saveAutoApplyRecord(full);
+      setAaRecord(full);
+      setAaMatch(rec.matchScore);
+      if (job.isInternal && full.status === 'Auto Apply Queued') {
+        router.push({
+          pathname: '/apply',
+          params: { title: job.title, company: job.company },
+        });
+      }
+    } catch (e: any) {
+      Alert.alert("Auto Apply", e?.message || "Could not process this job.");
+    } finally {
+      setAaBusy(false);
     }
   };
 
@@ -218,6 +321,54 @@ export default function JobDetailsScreen() {
               </View>
             ))}
           </View>
+        </Animated.View>
+        {/* Auto Apply */}
+        <Animated.View entering={FadeInUp.delay(350).duration(450)} style={[styles.section, styles.glassSection, { backgroundColor: colors.surface + '80', borderColor: colors.glassBorder }]}>
+          <View style={styles.sectionHeader}>
+            <Zap size={18} color={Theme.colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Auto Apply</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/auto-apply-settings' as any)}
+              style={{ marginLeft: 'auto' }}
+            >
+              <Text style={{ color: Theme.colors.primary, fontSize: 12, fontWeight: '800' }}>Settings</Text>
+            </TouchableOpacity>
+          </View>
+          {aaMatch !== null && (
+            <Text style={[styles.aaMatchText, { color: colors.text }]}>
+              Match: {aaMatch}%{aaRecord?.atsScore ? `  •  ATS Score: ${aaRecord.atsScore}%` : ''}
+            </Text>
+          )}
+          {aaRecord ? (
+            <View style={{ gap: 8, marginTop: 8 }}>
+              <AutoApplyBadge status={aaRecord.status} />
+              {aaRecord.resumeCustomized && (
+                <Text style={[styles.aaLine, { color: colors.text }]}>Resume Customized ✓</Text>
+              )}
+              {!!aaRecord.reason && (
+                <Text style={[styles.aaLine, { color: colors.textMuted }]}>{aaRecord.reason}</Text>
+              )}
+              {aaRecord.status === 'Applied' && (
+                <Text style={[styles.aaLine, { color: '#10b981', fontWeight: '800' }]}>Application: Applied ✓</Text>
+              )}
+            </View>
+          ) : (
+            <Text style={[styles.aaLine, { color: colors.textMuted }]}>
+              {aaSettings.enabled
+                ? 'Check eligibility, customize your resume for this job, and auto-apply where supported.'
+                : 'Turn on Auto Apply to process this job automatically.'}
+            </Text>
+          )}
+          <TouchableOpacity
+            style={[styles.aaBtn, { backgroundColor: Theme.colors.primary, opacity: aaBusy ? 0.6 : 1 }]}
+            onPress={handleAutoApply}
+            disabled={aaBusy}
+          >
+            <Zap size={15} color="#000" fill="#000" />
+            <Text style={styles.aaBtnText}>
+              {aaBusy ? 'Processing…' : aaRecord ? 'Re-check Auto Apply' : 'Check & Auto Apply'}
+            </Text>
+          </TouchableOpacity>
         </Animated.View>
       </ScrollView>
 
@@ -502,6 +653,30 @@ const styles = StyleSheet.create({
   },
   outlineBtnText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  aaMatchText: {
+    fontSize: 15,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  aaLine: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+  },
+  aaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 14,
+  },
+  aaBtnText: {
+    color: '#000000',
     fontSize: 14,
     fontWeight: '900',
   },

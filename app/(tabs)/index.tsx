@@ -6,6 +6,12 @@ import { db } from "@/services/firebase";
 import { getAtsHistory } from "@/services/firestore";
 import { exportToPDF } from "@/utils/resume-exporter";
 import { getResumes } from "@/utils/storage";
+import {
+  applyOtaUpdate,
+  checkForAppUpdate,
+  openStore,
+  type UpdateInfo,
+} from "@/services/appUpdate";
 import axios from "axios";
 import { useFocusEffect, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
@@ -32,9 +38,15 @@ import {
 } from "react-native";
 import Animated, { FadeInDown, FadeInUp, useSharedValue, useAnimatedProps, withTiming } from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
+import { Image as ExpoImage } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
+
+// Dashboard jobs rail cache — avoids the SerpApi round-trip on every focus.
+let dashJobsCache: { key: string; at: number; data: any[] } | null = null;
+const DASH_JOBS_TTL = 10 * 60 * 1000;
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -45,6 +57,8 @@ export default function Dashboard() {
   const colors = isDark ? Colors.dark : Colors.light;
 
   const [atsScore, setAtsScore] = useState<number | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<(UpdateInfo & { storeUrl?: string }) | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [resumes, setResumes] = useState<any[]>([]);
   const [recommendedJobs, setRecommendedJobs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -101,17 +115,28 @@ export default function Dashboard() {
                 const location = userDocData.location || "India";
                 if (roles.length > 0) {
                   const query = `${roles[0]} jobs in ${location}`;
-                  const API_KEY =
-                    "c4ac0c4c3bf946f49c3a6b1251ebcdbe790be3978ae298102dfb6598ce9e7f2d";
-                  try {
-                    const res = await axios.get(
-                      `https://serpapi.com/search.json?engine=google_jobs&q=${encodeURIComponent(query)}&api_key=${API_KEY}`,
-                    );
-                    setRecommendedJobs(
-                      res.data.jobs_results?.slice(0, 5) || [],
-                    );
-                  } catch (e) {
-                    console.error("Job fetch API error:", e);
+                  const cacheKey = `${roles[0]}|${location}`;
+                  const cachedJobs =
+                    dashJobsCache &&
+                    dashJobsCache.key === cacheKey &&
+                    Date.now() - dashJobsCache.at < DASH_JOBS_TTL
+                      ? dashJobsCache.data
+                      : null;
+                  if (cachedJobs) {
+                    setRecommendedJobs(cachedJobs);
+                  } else {
+                    const API_KEY =
+                      "c4ac0c4c3bf946f49c3a6b1251ebcdbe790be3978ae298102dfb6598ce9e7f2d";
+                    try {
+                      const res = await axios.get(
+                        `https://serpapi.com/search.json?engine=google_jobs&q=${encodeURIComponent(query)}&api_key=${API_KEY}`,
+                      );
+                      const list = res.data.jobs_results?.slice(0, 5) || [];
+                      dashJobsCache = { key: cacheKey, at: Date.now(), data: list };
+                      setRecommendedJobs(list);
+                    } catch (e) {
+                      console.error("Job fetch API error:", e);
+                    }
                   }
                 }
               }
@@ -128,6 +153,34 @@ export default function Dashboard() {
     }, [user]),
   );
 
+  // New-version check (once per mount — OTA first, Play Store second).
+  React.useEffect(() => {
+    let live = true;
+    checkForAppUpdate()
+      .then((info) => {
+        if (live && info) setUpdateInfo(info);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const handleUpdatePress = async () => {
+    if (!updateInfo) return;
+    if (updateInfo.kind === "store" && updateInfo.storeUrl) {
+      await openStore(updateInfo.storeUrl);
+      return;
+    }
+    setUpdateBusy(true);
+    try {
+      await applyOtaUpdate();
+    } catch (e: any) {
+      console.log("Apply update failed:", e);
+      setUpdateBusy(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut();
@@ -142,19 +195,19 @@ export default function Dashboard() {
       id: "create",
       name: "Create",
       route: "/(tabs)/builder",
-      image: require("@/assets/document (1).png"),
+      image: require("@/assets/images/quick-action/create-resume.webp"),
     },
     {
       id: "my",
       name: "My Resumes",
       route: "/my-resumes",
-      image: require("@/assets/resume (1).png"),
+      image: require("@/assets/images/quick-action/my resume.webp"),
     },
     {
       id: "jobs",
       name: "My Jobs",
       route: "/my-jobs",
-      image: require("@/assets/case.png"),
+      image: require("@/assets/images/quick-action/my-jobs.webp"),
     },
   ];
 
@@ -221,59 +274,134 @@ export default function Dashboard() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ATS Score Card */}
+        {/* ATS Hero — premium glass gradient */}
         <Animated.View entering={FadeInUp.delay(200)}>
           <TouchableOpacity
             onPress={() => router.push("/builder/ats")}
-            activeOpacity={0.8}
-            style={[styles.atsCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}
+            activeOpacity={0.92}
           >
-            <View style={styles.atsCardLeft}>
-              <View
-                style={[
-                  styles.atsBadge,
-                  {
-                    backgroundColor: !atsScore
-                      ? Theme.colors.primary + "15"
-                      : atsScore < 50 ? "#ef444415" : atsScore < 80 ? "#f59e0b15" : "#10b98115",
-                  },
-                ]}
-              >
-                <Sparkles
-                  size={10}
-                  color={!atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981"}
-                  fill={!atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981"}
-                />
-                <Text
+            <LinearGradient
+              colors={["#9d6bff", Theme.colors.primary, "#5b21b6"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.atsCard}
+            >
+              {/* Decorative glow circles */}
+              <View style={styles.atsGlowBig} />
+              <View style={styles.atsGlowSmall} />
+              <View style={styles.atsGlowRing} />
+
+              <View style={styles.atsTopRow}>
+                <View style={styles.atsCardLeft}>
+                  <View style={styles.atsBadge}>
+                    <Sparkles size={11} color="#fff" />
+                    <Text style={styles.atsBadgeText}>
+                      {!atsScore
+                        ? "AI ATS SCANNER"
+                        : atsScore < 50
+                          ? "LOW MATCH"
+                          : atsScore < 80
+                            ? "FAIR MATCH"
+                            : "STRONG MATCH"}
+                    </Text>
+                  </View>
+                  <View style={styles.atsScoreRow}>
+                    <Text style={styles.atsScoreBig}>
+                      {atsScore === null ? "--" : `${atsScore}`}
+                    </Text>
+                    <Text style={styles.atsScoreUnit}>/100</Text>
+                  </View>
+                  <Text style={styles.atsCardTitle} numberOfLines={1}>
+                    {!atsScore
+                      ? "Ready to beat the ATS?"
+                      : atsScore < 50
+                        ? "Action Required"
+                        : atsScore < 80
+                          ? "Keep Improving"
+                          : "Highly Compatible!"}
+                  </Text>
+                  <Text style={styles.atsCardDesc} numberOfLines={1}>
+                    {!atsScore
+                      ? "Analyze your resume against any job posting in seconds"
+                      : "View the full audit to boost your score."}
+                  </Text>
+                </View>
+                <View style={styles.atsSideBadge}>
+                  <View style={styles.atsSideIcon}>
+                    <Sparkles size={18} color="#fff" />
+                  </View>
+                  <Text style={styles.atsSideText}>
+                    {atsScore === null ? "NOT\nSCANNED" : atsScore < 50 ? "NEEDS\nWORK" : atsScore < 80 ? "GOOD\nGOING" : "TOP\nRATED"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.atsProgressTrack}>
+                <View
                   style={[
-                    styles.atsBadgeText,
-                    { color: !atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981" },
+                    styles.atsProgressFill,
+                    { flex: (atsScore ?? 0) / 100 },
                   ]}
-                >
-                  {!atsScore ? "ATS Scanner" : atsScore < 50 ? "Low Match" : atsScore < 80 ? "Fair Match" : "Strong Match"}
+                />
+                <View style={{ flex: 1 - (atsScore ?? 0) / 100 }} />
+              </View>
+
+              <View style={styles.atsActionBtn}>
+                <Text style={styles.atsActionText}>
+                  {!atsScore ? "Scan My Resume" : "View Full Audit"}
                 </Text>
+                <View style={styles.atsArrowCircle}>
+                  <ArrowRight size={14} color="#fff" />
+                </View>
               </View>
-
-              <Text style={[styles.atsCardTitle, { color: colors.text }]} numberOfLines={1}>
-                {!atsScore ? "Ready to beat the ATS?" : atsScore < 50 ? "Action Required" : atsScore < 80 ? "Keep Improving" : "Highly Compatible!"}
-              </Text>
-
-              <Text style={[styles.atsCardDesc, { color: colors.textMuted }]} numberOfLines={1}>
-                {!atsScore ? "Analyze your resume against any job" : "View the full audit to improve your score."}
-              </Text>
-
-              <View
-                style={[styles.atsActionBtn, { backgroundColor: !atsScore ? Theme.colors.primary : atsScore < 50 ? "#ef4444" : atsScore < 80 ? "#f59e0b" : "#10b981" }]}
-              >
-                <Text style={styles.atsActionText}>{!atsScore ? "Scan Resume" : "View Audit"}</Text>
-              </View>
-            </View>
-
-            <View style={styles.atsCardRight}>
-              <CircularScore score={atsScore} />
-            </View>
+            </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
+
+        {/* New version banner */}
+        {updateInfo && (
+          <Animated.View entering={FadeInDown.delay(250)}>
+            <View
+              style={[
+                styles.updateCard,
+                { backgroundColor: colors.surface, borderColor: "#10b98155" },
+              ]}
+            >
+              <View style={styles.updateIconBox}>
+                <Download size={20} color="#10b981" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.updateTitle, { color: colors.text }]}>
+                  {updateInfo.kind === "ota"
+                    ? "Update ready to apply"
+                    : `New version ${updateInfo.version} available`}
+                </Text>
+                <Text
+                  style={[styles.updateDesc, { color: colors.textMuted }]}
+                  numberOfLines={1}
+                >
+                  {updateInfo.kind === "ota"
+                    ? "Tap apply — restarts in seconds"
+                    : "Tap update to get it from Play Store"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.updateBtn, { opacity: updateBusy ? 0.6 : 1 }]}
+                onPress={handleUpdatePress}
+                disabled={updateBusy}
+                activeOpacity={0.8}
+              >
+                {updateBusy ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.updateBtnText}>
+                    {updateInfo.kind === "ota" ? "Apply" : "Update"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        )}
 
         {/* Quick Actions Row (3 Separate Glassmorphic Boxes) */}
         <View style={styles.gridContainer}>
@@ -288,16 +416,14 @@ export default function Dashboard() {
                   activeOpacity={0.7}
                   style={[
                     styles.iconButton,
-                    {
-                      backgroundColor: colors.surface,
-                    },
+                    { backgroundColor: colors.surface },
                   ]}
                   onPress={() => router.push(action.route as any)}
                 >
-                  <Image
+                  <ExpoImage
                     source={action.image}
                     style={styles.iconImage}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                   <Text
                     style={[styles.iconLabel, { color: colors.text }]}
@@ -320,112 +446,96 @@ export default function Dashboard() {
             <Text style={styles.seeAll}>Manage All</Text>
           </TouchableOpacity>
         </View>
-        <Animated.View entering={FadeInDown.delay(700)}>
+        <View style={styles.horizontalJobsContainer}>
           {resumes.length > 0 ? (
-            resumes.slice(0, 2).map((resume, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[
-                  styles.chatCard,
-                  {
-                    backgroundColor: colors.surface,
-                  },
-                ]}
-                onPress={() =>
-                  router.push(
-                    resume.type === "ats"
-                      ? "/builder/ats"
-                      : ({
-                          pathname: "/builder/manual",
-                          params: { resumeId: resume.id },
-                        } as any),
-                  )
-                }
-              >
-                <View style={styles.resumeCardLeft}>
-                  <View style={styles.resumeIconBox}>
-                    <Image
-                      source={require("@/assets/images/cv.png")}
-                      style={styles.resumeIcon}
-                      resizeMode="contain"
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalScrollPadding}
+              decelerationRate="fast"
+            >
+              {resumes.slice(0, 6).map((resume, i) => (
+                <TouchableOpacity
+                  key={i}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.jobSmallCard,
+                    { backgroundColor: colors.surface },
+                  ]}
+                  onPress={() =>
+                    router.push(
+                      resume.type === "ats"
+                        ? "/builder/ats"
+                        : ({
+                            pathname: "/builder/manual",
+                            params: { resumeId: resume.id },
+                          } as any),
+                    )
+                  }
+                >
+                  <View style={styles.jobSmallLogoWrap}>
+                    <ExpoImage
+                      source={require("@/assets/images/cv.webp")}
+                      style={{ width: 24, height: 24 }}
+                      contentFit="contain"
                     />
                   </View>
-                </View>
-                <View style={styles.chatInfo}>
                   <Text
-                    style={[styles.chatName, { color: colors.text }]}
-                    numberOfLines={1}
+                    style={[styles.jobSmallTitle, { color: colors.text }]}
+                    numberOfLines={2}
                   >
                     {resume.name}
                   </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginTop: 4,
-                    }}
+                  <Text
+                    style={[
+                      styles.jobSmallCompany,
+                      { color: colors.textMuted },
+                    ]}
+                    numberOfLines={1}
                   >
-                    {resume.type === "ats" ? (
-                      <View
-                        style={[
-                          styles.badgeContainer,
-                          {
-                            backgroundColor: isDark
-                              ? "rgba(34, 191, 192, 0.15)"
-                              : "rgba(26, 158, 159, 0.1)",
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.badgeText,
-                            { color: isDark ? "#22BFC0" : "#1A9E9F" },
-                          ]}
-                        >
-                          ATS {resume.score}%
-                        </Text>
-                      </View>
-                    ) : (
-                      <View
-                        style={[
-                          styles.badgeContainer,
-                          {
-                            backgroundColor: isDark
-                              ? "rgba(137, 196, 244, 0.15)"
-                              : "rgba(137, 196, 244, 0.1)",
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.badgeText, { color: "#89C4F4" }]}>
-                          Manual
-                        </Text>
-                      </View>
-                    )}
+                    {resume.type === "ats"
+                      ? `ATS ${resume.score}%`
+                      : "Manual"}
+                  </Text>
+                  <View style={styles.jobSmallFooter}>
                     <Text
-                      style={[styles.chatMessage, { color: colors.textMuted }]}
+                      style={[styles.jobTagText, { color: colors.textMuted }]}
+                      numberOfLines={1}
                     >
                       {resume.type === "ats"
                         ? "Checked"
                         : `Modified ${resume.date}`}
                     </Text>
+                    {resume.type === "builder" ? (
+                      <TouchableOpacity
+                        onPress={async () =>
+                          await exportToPDF(resume.data, resume.template)
+                        }
+                        style={styles.applyBtnSmall}
+                      >
+                        <Download size={14} color="#fff" />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.applyBtnSmall}>
+                        <ChevronRight size={14} color="#fff" />
+                      </View>
+                    )}
                   </View>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.viewMoreCardSmall}
+                activeOpacity={0.8}
+                onPress={() => router.push("/my-resumes")}
+              >
+                <View style={styles.viewMoreIcon}>
+                  <ArrowRight size={22} color={Theme.colors.primary} />
                 </View>
-                <View style={styles.chatMeta}>
-                  {resume.type === "builder" && (
-                    <TouchableOpacity
-                      onPress={async () =>
-                        await exportToPDF(resume.data, resume.template)
-                      }
-                      style={styles.downloadIconBtn}
-                    >
-                      <Download size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                  <ChevronRight size={18} color={colors.textMuted} />
-                </View>
+                <Text style={[styles.viewMoreText, { color: colors.text }]}>
+                  Manage All
+                </Text>
               </TouchableOpacity>
-            ))
+            </ScrollView>
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>😔</Text>
@@ -442,7 +552,7 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
           )}
-        </Animated.View>
+        </View>
 
         {/* Career & Jobs Section */}
         <View style={styles.sectionHeader}>
@@ -465,14 +575,14 @@ export default function Dashboard() {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalScrollPadding}
-              snapToInterval={width * 0.85 + 16}
               decelerationRate="fast"
             >
-              {recommendedJobs.slice(0, 2).map((job, i) => (
+              {recommendedJobs.slice(0, 6).map((job, i) => (
                 <TouchableOpacity
                   key={i}
+                  activeOpacity={0.8}
                   style={[
-                    styles.jobCardHorizontal,
+                    styles.jobSmallCard,
                     {
                       backgroundColor: colors.surface,
                     },
@@ -493,59 +603,55 @@ export default function Dashboard() {
                     })
                   }
                 >
-                  <View style={styles.jobCardTop}>
-                    <View style={styles.jobLogoContainer}>
-                      {job.thumbnail ? (
-                        <Image
-                          source={{ uri: job.thumbnail }}
-                          style={styles.jobLogo}
-                        />
-                      ) : (
-                        <Image
-                          source={require("@/assets/case.png")}
-                          style={{ width: 24, height: 24 }}
-                          resizeMode="contain"
-                        />
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.jobCardTitle, { color: colors.text }]}
-                        numberOfLines={1}
-                      >
-                        {job.title}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.jobCardCompany,
-                          { color: colors.textMuted },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {job.company_name}
-                      </Text>
-                    </View>
+                  <View style={styles.jobSmallLogoWrap}>
+                    {job.thumbnail ? (
+                      <Image
+                        source={{ uri: job.thumbnail }}
+                        style={styles.jobLogo}
+                      />
+                    ) : (
+                      <ExpoImage
+                        source={require("@/assets/case.webp")}
+                        style={{ width: 22, height: 22 }}
+                        contentFit="contain"
+                      />
+                    )}
                   </View>
-
-                  <View style={styles.jobCardBottom}>
+                  <Text
+                    style={[styles.jobSmallTitle, { color: colors.text }]}
+                    numberOfLines={2}
+                  >
+                    {job.title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.jobSmallCompany,
+                      { color: colors.textMuted },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {job.company_name}
+                  </Text>
+                  <View style={styles.jobSmallFooter}>
                     <View style={styles.jobTag}>
-                      <MapPin size={12} color={Theme.colors.secondary} />
-                      <Text style={styles.jobTagText}>
-                        {job.location || "Anywhere"}
+                      <MapPin size={10} color={Theme.colors.secondary} />
+                      <Text style={styles.jobTagText} numberOfLines={1}>
+                        {(job.location || "Anywhere").split(",")[0]}
                       </Text>
                     </View>
                     <View style={styles.applyBtnSmall}>
-                      <ArrowRight size={16} color="#fff" />
+                      <ArrowRight size={14} color="#fff" />
                     </View>
                   </View>
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
-                style={styles.viewMoreCard}
+                style={styles.viewMoreCardSmall}
+                activeOpacity={0.8}
                 onPress={() => router.push("/(tabs)/jobs")}
               >
                 <View style={styles.viewMoreIcon}>
-                  <ArrowRight size={24} color={Theme.colors.primary} />
+                  <ArrowRight size={22} color={Theme.colors.primary} />
                 </View>
                 <Text style={[styles.viewMoreText, { color: colors.text }]}>
                   View All Jobs
@@ -657,24 +763,22 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     flex: 1,
-    aspectRatio: 1,
-    borderRadius: 24,
-    justifyContent: "center",
     alignItems: "center",
-    padding: 12,
-    borderWidth: Theme.border.width,
-    borderColor: Theme.border.color,
+    justifyContent: "center",
+    paddingVertical: 8,
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 0,
     ...Theme.shadow,
   },
   iconImage: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
   },
   iconLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     textAlign: "center",
-    marginTop: 4,
   },
   actionCard: {
     height: 115,
@@ -855,34 +959,30 @@ const styles = StyleSheet.create({
   },
   horizontalScrollPadding: {
     paddingHorizontal: 20,
-    gap: 16,
+    gap: 12,
   },
-  jobCardHorizontal: {
-    width: width * 0.85,
-    padding: 20,
-    borderRadius: 28,
-    height: 160,
-    justifyContent: "space-between",
+  jobSmallCard: {
+    width: (width - 52) / 2,
+    height: 182,
+    padding: 14,
+    borderRadius: 20,
+    justifyContent: "flex-start",
     borderWidth: Theme.border.width,
     borderColor: Theme.border.color,
     ...Theme.shadow,
     marginBottom: 10,
   },
-  jobCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  jobLogoContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+  jobSmallLogoWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
     backgroundColor: "rgba(128,128,128,0.05)",
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(128,128,128,0.1)",
+    marginBottom: 10,
   },
   jobCardRight: {
     flex: 1,
@@ -894,52 +994,62 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  jobCardTitle: {
-    fontSize: 18,
+  jobSmallTitle: {
+    fontSize: 13,
     fontWeight: "800",
-    marginBottom: 6,
+    lineHeight: 17,
+    minHeight: 34,
+    marginBottom: 3,
   },
-  jobCardCompany: {
-    fontSize: 14,
+  jobSmallCompany: {
+    fontSize: 11,
     fontWeight: "600",
+    marginBottom: 10,
   },
-  jobCardBottom: {
+  jobSmallFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: "auto",
   },
   jobTag: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     backgroundColor: "rgba(0,0,0,0.03)",
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    flex: 1,
+    marginRight: 8,
+    maxWidth: "75%",
   },
   jobTagText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.colors.secondary,
+    flexShrink: 1,
   },
   applyBtnSmall: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     backgroundColor: Theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
+    flexShrink: 0,
   },
-  viewMoreCard: {
-    width: 140,
-    height: 160,
+  viewMoreCardSmall: {
+    width: (width - 52) / 2,
+    height: 182,
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 28,
+    borderRadius: 20,
     backgroundColor: "rgba(128,128,128,0.05)",
     borderWidth: 1,
     borderStyle: "dashed",
     borderColor: "rgba(128,128,128,0.2)",
+    marginBottom: 10,
   },
   viewMoreIcon: {
     width: 50,
@@ -1011,62 +1121,208 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     paddingBottom: 4,
   },
-  // ─── Modern ATS Card ─────────────────────────────────────
-  atsCard: {
+  // ─── New version banner ───
+  updateCard: {
     flexDirection: "row",
-    borderRadius: 20,
-    borderWidth: 1,
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 18,
+    borderWidth: 1.2,
     padding: 14,
-    marginBottom: 20,
+    marginBottom: 16,
+    ...Theme.shadow,
+  },
+  updateIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#10b98118",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  updateTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  updateDesc: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  updateBtn: {
+    backgroundColor: "#10b981",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  updateBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  atsCard: {
+    borderRadius: 20,
+    padding: 10,
+    marginBottom: 16,
+    overflow: "hidden",
+    width: "100%",
+    backgroundColor: Theme.colors.primary,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  atsGlowBig: {
+    position: "absolute",
+    top: -70,
+    right: -50,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  atsGlowSmall: {
+    position: "absolute",
+    top: 40,
+    right: 90,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  atsGlowRing: {
+    position: "absolute",
+    bottom: -60,
+    left: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 14,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  atsTopRow: {
+    flexDirection: "row",
     gap: 12,
   },
   atsCardLeft: {
     flex: 1,
-    gap: 6,
-  },
-  atsCardRight: {
-    justifyContent: "center",
-    alignItems: "center",
+    gap: 3,
   },
   atsBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 20,
     alignSelf: "flex-start",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
   },
   atsBadgeText: {
     fontSize: 10,
-    fontWeight: "800",
-  },
-  atsCardTitle: {
-    fontSize: 15,
     fontWeight: "900",
-    lineHeight: 18,
+    letterSpacing: 1,
+    color: "#fff",
   },
-  atsCardDesc: {
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  atsActionBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 10,
-    alignSelf: "flex-start",
+  atsScoreRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
     marginTop: 2,
   },
-  atsActionText: {
+  atsScoreBig: {
+    fontSize: 28,
+    fontWeight: "900",
     color: "#fff",
-    fontSize: 12,
+    letterSpacing: -1,
+    lineHeight: 30,
+  },
+  atsScoreUnit: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.65)",
+    marginBottom: 5,
+    marginLeft: 2,
+  },
+  atsCardTitle: {
+    fontSize: 14,
     fontWeight: "800",
+    color: "#fff",
+  },
+  atsCardDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: "rgba(255,255,255,0.82)",
+  },
+  atsSideBadge: {
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 2,
+    gap: 6,
+  },
+  atsSideIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  atsSideText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.9)",
+    lineHeight: 13,
+  },
+  atsProgressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    marginTop: 8,
+    overflow: "hidden",
+    flexDirection: "row",
+    width: "100%",
+  },
+  atsProgressFill: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: "#fff",
+  },
+  atsActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    paddingVertical: 5,
+    paddingLeft: 14,
+    paddingRight: 5,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  atsActionText: {
+    color: "#1e1b4b",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  atsArrowCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: Theme.colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-function CircularScore({ score }: { score: number | null }) {
+function CircularScore({ score, onDark }: { score: number | null; onDark?: boolean }) {
   const size = 64;
   const strokeWidth = 5;
   const radius = (size - strokeWidth) / 2;
@@ -1083,7 +1339,9 @@ function CircularScore({ score }: { score: number | null }) {
     strokeDashoffset: circumference * (1 - progress.value),
   }));
 
-  const scoreColor = score === null ? Theme.colors.primary
+  const scoreColor = onDark
+    ? "#fff"
+    : score === null ? Theme.colors.primary
     : score < 50 ? "#ef4444"
     : score < 80 ? "#f59e0b"
     : "#10b981";
@@ -1095,7 +1353,7 @@ function CircularScore({ score }: { score: number | null }) {
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#f0e8ff"
+          stroke={onDark ? "rgba(255,255,255,0.3)" : "#f0e8ff"}
           strokeWidth={strokeWidth}
           fill="none"
         />

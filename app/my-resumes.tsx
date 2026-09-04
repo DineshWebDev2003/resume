@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Theme, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -177,11 +178,11 @@ export default function MyResumesScreen() {
                >
                  <View style={styles.resumeCardLeft}>
                    <View style={styles.resumeIconBox}>
-                     <Image
-                       source={require("@/assets/images/cv.png")}
-                       style={styles.resumeIcon}
-                       resizeMode="contain"
-                     />
+                      <ExpoImage
+                        source={require("@/assets/images/cv.webp")}
+                        style={styles.resumeIcon}
+                        contentFit="contain"
+                      />
                    </View>
                  </View>
 

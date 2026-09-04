@@ -1598,15 +1598,10 @@ export default function AIInterviewScreen() {
     }
   };
 
+  // Interview clips removed with the Video Interview entry point.
+  // Keeping the player guarded so the route never crashes if deep-linked.
   const videoSource = (() => {
-    const sources: Record<number, any> = {
-      0: require("../../assets/videos/interview/step1_basic_details.mp4"),
-      1: require("../../assets/videos/interview/step2_education.mp4"),
-      2: require("../../assets/videos/interview/step3_skills.mp4"),
-      3: require("../../assets/videos/interview/step4_experience.mp4"),
-      4: require("../../assets/videos/interview/step5_projects.mp4"),
-      5: require("../../assets/videos/interview/step6_final_details.mp4"),
-    };
+    const sources: Record<number, any> = {};
     return sources[currentStep];
   })();
 
@@ -1706,6 +1701,7 @@ export default function AIInterviewScreen() {
             elevation: 8,
           }}
         >
+          {videoSource ? (
           <Video
             ref={videoRef}
             source={videoSource}
@@ -1721,6 +1717,20 @@ export default function AIInterviewScreen() {
               }
             }}
           />
+          ) : (
+            <View
+              style={{
+                width: "100%",
+                height: "100%",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: colors.textMuted, fontWeight: "700" }}>
+                Video interview is unavailable
+              </Text>
+            </View>
+          )}
 
           {/* During play overlay */}
           {!videoFinished && (

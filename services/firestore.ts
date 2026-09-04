@@ -1,4 +1,7 @@
 import { db, auth } from './firebase';
+import { DEFAULT_AUTO_APPLY_SETTINGS } from '@/constants/autoApply';
+import type { AutoApplySettings, AutoApplyStatus } from '@/constants/autoApply';
+import type { ApplicationRecord } from './autoApply';
 import { 
   collection, 
   addDoc, 
@@ -31,6 +34,9 @@ export interface UserProfile {
   referralCount: number;
   groqKey?: string;
   geminiKey?: string;
+  pollinationsKey?: string;
+  llamaKey?: string;
+  preferredProvider?: string;
   onboardingCompleted?: boolean;
   isIT?: boolean;
   primaryRole?: string;
@@ -216,13 +222,229 @@ export const getMyApplications = async () => {
     collection(db, 'job_applications'),
     where('userId', '==', user.uid)
   );
-  
+
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({
+  const legacy = snapshot.docs.map(doc => ({
     id: doc.id,
     ...doc.data(),
     appliedAt: doc.data().appliedAt?.toDate() || new Date()
-  })).sort((a, b) => b.appliedAt.getTime() - a.appliedAt.getTime());
+  }));
+
+  // Merge Auto Apply records stored under users/{uid}/applications.
+  // ONLY truly Applied ones — Matched/Skipped/Manual live in the AI Apply tab.
+  // (Deduped by jobId; same tracker, no duplicate feature.)
+  let auto: any[] = [];
+  try {
+    auto = (await getAutoApplyRecords()).filter((a: any) => a.status === 'Applied');
+  } catch (e) {
+    console.warn('[Applications] Auto Apply subcollection read failed:', e);
+  }
+
+  const seen = new Set(legacy.map((a: any) => a.jobId));
+  const merged = [
+    ...legacy,
+    ...auto
+      .filter((a: any) => !seen.has(a.jobId))
+      .map((a: any) => ({
+        id: `auto_${a.jobId}`,
+        ...a,
+        appliedAt: a.appliedAt instanceof Date ? a.appliedAt : new Date(),
+      })),
+  ];
+
+  return merged.sort((a, b) => b.appliedAt.getTime() - a.appliedAt.getTime());
+};
+
+// --- Auto Apply (extension of the existing application tracker) ---
+
+const safeDocId = (s: string) =>
+  (s || '').replace(/[/\\#?[\]]/g, '_').slice(0, 200) || Date.now().toString();
+
+/** Firestore rejects `undefined` field values — drop them before any write. */
+const stripUndefined = <T extends Record<string, any>>(obj: T): T => {
+  const out: Record<string, any> = {};
+  Object.keys(obj).forEach((k) => {
+    if (obj[k] !== undefined) out[k] = obj[k];
+  });
+  return out as T;
+};
+
+/** Load Auto Apply settings; roles/location fall back to the user profile. */
+export const getAutoApplySettings = async (): Promise<AutoApplySettings> => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const cfgRef = doc(db, 'users', user.uid, 'autoApplySettings', 'config');
+  const cfgSnap = await getDoc(cfgRef);
+  const saved = cfgSnap.exists() ? (cfgSnap.data() as Partial<AutoApplySettings>) : {};
+
+  // Mirror 1–3 roles + location from the existing profile when unset.
+  let profileRoles: string[] = [];
+  let profileLocation = '';
+  try {
+    const userSnap = await getDoc(doc(db, 'users', user.uid));
+    if (userSnap.exists()) {
+      const d = userSnap.data() as any;
+      profileRoles = (d.jobRoles || []).filter(Boolean).slice(0, 3);
+      profileLocation = d.location || '';
+    }
+  } catch (e) {
+    console.warn('[AutoApply] Profile fallback read failed:', e);
+  }
+
+  return {
+    ...DEFAULT_AUTO_APPLY_SETTINGS,
+    ...saved,
+    roles: (saved.roles?.length ? saved.roles : profileRoles).slice(0, 3),
+    locations:
+      saved.locations?.length
+        ? saved.locations
+        : profileLocation
+          ? [profileLocation]
+          : [],
+    enabled: saved.enabled === true, // Explicit opt-in only.
+  };
+};
+
+export const saveAutoApplySettings = async (
+  patch: Partial<AutoApplySettings>,
+): Promise<AutoApplySettings> => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const cfgRef = doc(db, 'users', user.uid, 'autoApplySettings', 'config');
+  const next = {
+    ...patch,
+    roles: patch.roles ? patch.roles.filter(Boolean).slice(0, 3) : undefined,
+    updatedAt: serverTimestamp(),
+  };
+  // Strip undefined so merge never deletes existing keys.
+  Object.keys(next).forEach(
+    (k) => (next as any)[k] === undefined && delete (next as any)[k],
+  );
+  await setDoc(cfgRef, next, { merge: true });
+  return getAutoApplySettings();
+};
+
+/**
+ * Persist an Auto Apply result. Writes to users/{uid}/applications/{jobId}
+ * and mirrors into the existing top-level job_applications collection so
+ * the current tracker UI shows it with zero redesign.
+ */
+export const saveAutoApplyRecord = async (
+  record: ApplicationRecord,
+): Promise<string> => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const id = safeDocId(record.jobId);
+  const payload = stripUndefined({
+    ...record,
+    userId: user.uid,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await setDoc(doc(db, 'users', user.uid, 'applications', id), payload, {
+    merge: true,
+  });
+
+  // Mirror into the existing top-level tracker ONLY when actually applied.
+  // Anything else (Matched/Skipped/Manual) lives in the AI Apply tab.
+  if (record.status === 'Applied') {
+    await setDoc(
+      doc(db, 'job_applications', `${user.uid}_${id}`),
+      stripUndefined({
+        userId: user.uid,
+        jobId: record.jobId,
+        title: record.title,
+        company: record.company,
+        location: record.location,
+        logo: record.logo || null,
+        applyLink: record.applyUrl || null,
+        source: record.source,
+        matchScore: record.matchScore,
+        atsScore: record.atsScore,
+        resumeCustomized: record.resumeCustomized,
+        status: record.status,
+        statusColor: record.statusColor,
+        autoApplied: record.autoApplied,
+        appliedAt: serverTimestamp(),
+      }),
+      { merge: true },
+    );
+  }
+
+  return id;
+};
+
+export const updateAutoApplyStatus = async (
+  jobId: string,
+  status: AutoApplyStatus,
+  extra: Record<string, any> = {},
+): Promise<void> => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const id = safeDocId(jobId);
+  const patch = stripUndefined({ status, ...extra, updatedAt: serverTimestamp() });
+  await setDoc(doc(db, 'users', user.uid, 'applications', id), patch, {
+    merge: true,
+  });
+  if (status === 'Applied') {
+    await setDoc(doc(db, 'job_applications', `${user.uid}_${id}`), patch, {
+      merge: true,
+    });
+  } else {
+    // Never let non-applied records linger in the Applied tracker.
+    await deleteDoc(doc(db, 'job_applications', `${user.uid}_${id}`)).catch(() => {});
+  }
+};
+
+/**
+ * One-time self-healing: removes non-applied auto mirrors that an earlier
+ * build wrote into the top-level tracker (the "34 phantom applications").
+ * Only touches docs explicitly marked autoApplied === false.
+ */
+export const cleanupStaleAutoMirrors = async (): Promise<number> => {
+  const user = auth.currentUser;
+  if (!user) return 0;
+  try {
+    const q = query(
+      collection(db, 'job_applications'),
+      where('userId', '==', user.uid),
+    );
+    const snap = await getDocs(q);
+    let removed = 0;
+    for (const d of snap.docs) {
+      const data = d.data() as any;
+      if (data.autoApplied === false && data.status !== 'Applied') {
+        await deleteDoc(d.ref).catch(() => {});
+        removed += 1;
+      }
+    }
+    if (removed > 0) console.log(`[Applications] Cleaned ${removed} stale auto mirrors.`);
+    return removed;
+  } catch (e) {
+    console.warn('[Applications] Mirror cleanup failed:', e);
+    return 0;
+  }
+};
+
+export const getAutoApplyRecords = async (): Promise<any[]> => {  const user = auth.currentUser;
+  if (!user) return [];
+
+  const snapshot = await getDocs(
+    collection(db, 'users', user.uid, 'applications'),
+  );
+  return snapshot.docs.map((d) => ({
+    id: d.id,
+    ...d.data(),
+    appliedAt:
+      (d.data() as any).updatedAt?.toDate?.() ||
+      (d.data() as any).createdAt?.toDate?.() ||
+      new Date(),
+  }));
 };
 
 // --- Resume Storage (Optional Mirror in Firestore) ---

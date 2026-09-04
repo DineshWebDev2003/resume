@@ -1,152 +1,155 @@
-import { Theme } from "@/constants/theme";
+import { Colors, Theme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Image, StyleSheet } from "react-native";
-import Animated, {
-  interpolate,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { StyleSheet, View } from "react-native";
+import {
+  BriefcaseBusiness,
+  FileText,
+  House,
+  SlidersHorizontal,
+  User,
+} from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const TabIcon = React.memo(
-  ({ focused, source }: { focused: boolean; source: any }) => {
-    const activeVal = useSharedValue(focused ? 1 : 0);
+const BAR_HEIGHT = 76;
 
-    React.useEffect(() => {
-      activeVal.value = withSpring(focused ? 1 : 0, {
-        damping: 15,
-        stiffness: 120,
-      });
-    }, [focused]);
+function TabBarBackground() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const colors = isDark ? Colors.dark : Colors.light;
 
-    const animatedStyle = useAnimatedStyle(() => {
-      const backgroundColor = interpolateColor(
-        activeVal.value,
-        [0, 1],
-        ["transparent", Theme.colors.primary],
-      );
-      const scale = interpolate(activeVal.value, [0, 1], [0.95, 1.05]);
-
-      return {
-        backgroundColor,
-        transform: [{ scale }],
-      };
-    });
-
-    return (
-      <Animated.View style={[styles.iconPill, animatedStyle]}>
-        <Image
-          source={source}
-          style={{ width: 28, height: 28 }}
-          resizeMode="contain"
-        />
-      </Animated.View>
-    );
-  },
-);
+  return (
+    <View style={styles.backgroundContainer}>
+      <View
+        style={[
+          styles.bar,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+          },
+        ]}
+      />
+    </View>
+  );
+}
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const colors = isDark ? Colors.dark : Colors.light;
 
-  const activeColor = isDark ? "#171717" : "#171717"; // Tab active icon color
+  const bottomInset = Math.max(insets.bottom, 8);
+  const activeColor = Theme.colors.primary;
+  const inactiveColor = colors.textMuted;
 
-  const barHeight = 76;
+  const renderIcon =
+    (Icon: any) =>
+    ({
+      focused,
+    }: {
+      focused: boolean;
+    }) => {
+      return (
+        <View style={styles.iconWrapper}>
+          <Icon
+            size={24}
+            color={focused ? activeColor : inactiveColor}
+            strokeWidth={focused ? 2.5 : 2}
+          />
+        </View>
+      );
+    };
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: activeColor,
-        tabBarInactiveTintColor: isDark ? "#A0AEC0" : "#718096",
         headerShown: false,
-        tabBarShowLabel: false,
+
+        tabBarShowLabel: true,
+
+        tabBarActiveTintColor: activeColor,
+        tabBarInactiveTintColor: inactiveColor,
+
         tabBarStyle: {
-          height: barHeight,
-          backgroundColor: "#FFFFFF", // White background as requested
-          borderWidth: Theme.border.width,
-          borderColor: Theme.border.color,
-          borderRadius: 18, // Boxed edge, little curve enough
           position: "absolute",
-          bottom: insets.bottom > 0 ? insets.bottom + 10 : 20,
-          left: 12, // Position from left
-          right: 12, // Position from right
-          marginHorizontal: 12, // Force margin to prevent touching the screen edges
-          paddingBottom: 0, // Reset default padding
-          ...Theme.shadow,
+
+          left: 12,
+          right: 12,
+          bottom: 0,
+
+          height: BAR_HEIGHT,
+
+          backgroundColor: "transparent",
+
+          borderTopWidth: 0,
+          borderWidth: 0,
+
+          elevation: 0,
+          shadowOpacity: 0,
+
+          paddingTop: 8,
+          paddingBottom: bottomInset,
         },
+
+        tabBarBackground: () => <TabBarBackground />,
+
         tabBarItemStyle: {
-          height: barHeight,
+          flex: 1,
           justifyContent: "center",
           alignItems: "center",
         },
-        tabBarIconStyle: {
-          width: "100%",
-          height: "100%",
-          justifyContent: "center",
-          alignItems: "center",
+
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: "600",
+          marginTop: 2,
         },
       }}
     >
+      {/* HOME */}
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon
-              focused={focused}
-              source={require("@/assets/images/nav-icons/house.png")}
-            />
-          ),
+          tabBarIcon: renderIcon(House),
         }}
       />
+
+      {/* RESUMES */}
       <Tabs.Screen
         name="templates"
         options={{
-          title: "Templates",
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon
-              focused={focused}
-              source={require("@/assets/images/nav-icons/templates.png")}
-            />
-          ),
+          title: "Resumes",
+          tabBarIcon: renderIcon(FileText),
         }}
       />
+
+      {/* TOOLKIT */}
       <Tabs.Screen
         name="builder"
         options={{
-          title: "Create",
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon
-              focused={focused}
-              source={require("@/assets/images/nav-icons/edit.png")}
-            />
-          ),
+          title: "Toolkit",
+          tabBarIcon: renderIcon(SlidersHorizontal),
         }}
       />
+
+      {/* JOBS */}
       <Tabs.Screen
         name="jobs"
         options={{
           title: "Jobs",
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon focused={focused} source={require("@/assets/case.png")} />
-          ),
+          tabBarIcon: renderIcon(BriefcaseBusiness),
         }}
       />
+
+      {/* PROFILE */}
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ focused, color }) => (
-            <TabIcon
-              focused={focused}
-              source={require("@/assets/images/nav-icons/panda.png")}
-            />
-          ),
+          tabBarIcon: renderIcon(User),
         }}
       />
     </Tabs>
@@ -154,11 +157,32 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  iconPill: {
-    width: 52,
-    height: 52,
-    borderRadius: 12, // Matching boxed curve aesthetic
-    justifyContent: "center",
+  backgroundContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+
+    overflow: "hidden",
+  },
+
+  bar: {
+    flex: 1,
+
+    borderWidth: 1,
+
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+
+    overflow: "hidden",
+  },
+
+  iconWrapper: {
     alignItems: "center",
+    justifyContent: "center",
   },
 });

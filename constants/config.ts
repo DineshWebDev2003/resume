@@ -10,6 +10,17 @@ export const API_CONFIG = {
   GEMINI_MODEL: "gemini-1.5-flash",
   GEMINI_ENDPOINT: "https://generativelanguage.googleapis.com/v1/models/",
 
+  // Pollinations (free tier, OpenAI-compatible — last-resort fallback).
+  // Anonymous access is currently rate-limited upstream (HTTP 402), so an
+  // optional free key from https://enter.pollinations.ai makes it reliable.
+  POLLINATIONS_ENDPOINT: "https://text.pollinations.ai/openai",
+  POLLINATIONS_MODEL: "openai",
+
+  // Meta Llama API (OpenAI-compatible, preview — optional user key).
+  // Get a key at https://llama.developer.meta.com/ (waitlist/preview).
+  LLAMA_ENDPOINT: "https://api.llama.com/compat/v1/chat/completions",
+  LLAMA_MODEL: "Llama-3.3-70B-Instruct",
+
   IS_PRODUCTION: isProd,
 
   // ── Free Job APIs ─────────────────────────────────────────────────────────

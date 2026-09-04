@@ -61,7 +61,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/services/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "expo-router";
-import { UserStorage } from "@/services/storage";
+import { UserStorage, type PreferredProvider } from "@/services/storage";
+import { getAIProviderStatus, type ProviderLinkStatus } from "@/services/ai";
 import { getResumes } from "@/utils/storage";
 
 const { width } = Dimensions.get("window");
@@ -171,6 +172,11 @@ export default function ProfileScreen() {
   // API Key States
   const [userGroqKey, setUserGroqKey] = useState("");
   const [userGeminiKey, setUserGeminiKey] = useState("");
+  const [userPollinationsKey, setUserPollinationsKey] = useState("");
+  const [userLlamaKey, setUserLlamaKey] = useState("");
+  const [userPreferredProvider, setUserPreferredProvider] = useState<PreferredProvider>("auto");
+  const [aiChainStatus, setAiChainStatus] = useState<ProviderLinkStatus[] | null>(null);
+  const [aiChainLoading, setAiChainLoading] = useState(false);
 
   // Referral States
   const [referredUsers, setReferredUsers] = useState<any[]>([]);
@@ -197,6 +203,13 @@ export default function ProfileScreen() {
         }
       };
       fetchReferrals();
+    }
+    if (activeModal === "API Configuration") {
+      setAiChainLoading(true);
+      getAIProviderStatus()
+        .then(setAiChainStatus)
+        .catch(() => setAiChainStatus(null))
+        .finally(() => setAiChainLoading(false));
     }
   }, [activeModal]);
 
@@ -263,6 +276,19 @@ export default function ProfileScreen() {
               setUserGeminiKey(data.geminiKey);
               await UserStorage.saveGeminiKey(data.geminiKey);
             }
+            if ((data as any).pollinationsKey !== undefined) {
+              setUserPollinationsKey((data as any).pollinationsKey);
+              await UserStorage.savePollinationsKey((data as any).pollinationsKey);
+            }
+            if ((data as any).llamaKey !== undefined) {
+              setUserLlamaKey((data as any).llamaKey);
+              await UserStorage.saveLlamaKey((data as any).llamaKey);
+            }
+            if ((data as any).preferredProvider) {
+              const p = (data as any).preferredProvider as PreferredProvider;
+              setUserPreferredProvider(p);
+              await UserStorage.savePreferredProvider(p);
+            }
           }
         } catch (error) {
           console.log("Firestore Fetch error:", error);
@@ -286,8 +312,14 @@ export default function ProfileScreen() {
     const fetchKeys = async () => {
       const groq = await UserStorage.getGroqKey();
       const gemini = await UserStorage.getGeminiKey();
+      const polli = await UserStorage.getPollinationsKey();
+      const llama = await UserStorage.getLlamaKey();
+      const pref = await UserStorage.getPreferredProvider();
       if (groq) setUserGroqKey(groq);
       if (gemini) setUserGeminiKey(gemini);
+      if (polli) setUserPollinationsKey(polli);
+      if (llama) setUserLlamaKey(llama);
+      setUserPreferredProvider(pref);
     };
     fetchKeys();
   }, [user]);
@@ -930,6 +962,89 @@ export default function ProfileScreen() {
                   <Text style={[styles.modalHint, { color: colors.textMuted }]}>
                     Enter your own API keys to bypass app limits. You can enter multiple keys separated by commas to enable automatic rotation.
                   </Text>
+
+                  <View style={styles.instructionsBox}>
+                    <Text style={[styles.instructionsTitle, { color: colors.text }]}>
+                      Fallback chain{aiChainLoading ? " (checking…)" : ""}
+                    </Text>
+                    {(aiChainStatus || []).map((link, i) => {
+                      const dot =
+                        link.state === "active"
+                          ? "#10b981"
+                          : link.state === "ready"
+                            ? Theme.colors.primary
+                            : link.state === "error"
+                              ? "#ef4444"
+                              : colors.textMuted;
+                      return (
+                        <View key={link.id} style={styles.instructionStep}>
+                          <View style={[styles.stepDot, { backgroundColor: dot }]} />
+                          <Text style={[styles.stepText, { color: colors.textMuted }]}>
+                            {i + 1}. {link.label} — {link.detail}
+                            {userPreferredProvider !== "auto" && link.id === userPreferredProvider ? " ★" : ""}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                    <View style={styles.instructionStep}>
+                      <View style={[styles.stepDot, { backgroundColor: Theme.colors.primary }]} />
+                      <Text style={[styles.stepText, { color: colors.textMuted }]}>
+                        Your own keys are always tried first (primary), then shared app keys.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.instructionsBox}>
+                    <Text style={[styles.instructionsTitle, { color: colors.text }]}>Use this model</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                      {(
+                        [
+                          { id: "auto", label: "Auto" },
+                          { id: "groq", label: "Groq" },
+                          { id: "gemini", label: "Gemini" },
+                          { id: "pollinations", label: "Pollinations" },
+                          { id: "meta-llama", label: "Meta Llama" },
+                        ] as { id: PreferredProvider; label: string }[]
+                      ).map((opt) => {
+                        const selected = userPreferredProvider === opt.id;
+                        return (
+                          <TouchableOpacity
+                            key={opt.id}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 9,
+                              borderRadius: 12,
+                              borderWidth: 1.2,
+                              borderColor: selected ? Theme.colors.primary : colors.glassBorder,
+                              backgroundColor: selected ? Theme.colors.primary : "transparent",
+                            }}
+                            onPress={async () => {
+                              setUserPreferredProvider(opt.id);
+                              try {
+                                await UserStorage.savePreferredProvider(opt.id);
+                                await updateUserProfile({ preferredProvider: opt.id });
+                              } catch {
+                                Alert.alert("Error", "Could not save model choice.");
+                              }
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: "800",
+                                color: selected ? "#000" : colors.text,
+                              }}
+                            >
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text style={[styles.stepText, { color: colors.textMuted, marginTop: 8 }]}>
+                      Auto runs the full chain. A selected model is tried first — e.g. pick Meta Llama to use that model — with the rest as backup.
+                    </Text>
+                  </View>
                   
                   <View style={styles.instructionsBox}>
                     <Text style={[styles.instructionsTitle, { color: colors.text }]}>How to get your keys:</Text>
@@ -1005,6 +1120,64 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                   </View>
 
+                  <View style={styles.apiKeySection}>
+                    <View style={styles.apiHeaderRow}>
+                      <Text style={[styles.fieldLabel, { color: colors.text }]}>Pollinations Key (free fallback)</Text>
+                      {userPollinationsKey ? (
+                        <View style={styles.activeKeyBadge}>
+                          <CheckCircle2 size={10} color="#fff" />
+                          <Text style={styles.activeKeyText}>PASTED</Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.statusText, { color: colors.textMuted }]}>Optional</Text>
+                      )}
+                    </View>
+                    <TextInput 
+                      style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.glassBorder }]}
+                      value={userPollinationsKey}
+                      onChangeText={setUserPollinationsKey}
+                      placeholder="pk_... (optional, no card needed)"
+                      placeholderTextColor={colors.textMuted}
+                      secureTextEntry
+                    />
+                    <TouchableOpacity 
+                      style={[styles.bigGetKeyBtn, { backgroundColor: Theme.colors.primary + '15' }]}
+                      onPress={() => require('react-native').Linking.openURL('https://enter.pollinations.ai')}
+                    >
+                      <Sparkles size={14} color={Theme.colors.primary} />
+                      <Text style={[styles.bigGetKeyText, { color: Theme.colors.primary }]}>Get Free Pollinations Key</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.apiKeySection}>
+                    <View style={styles.apiHeaderRow}>
+                      <Text style={[styles.fieldLabel, { color: colors.text }]}>Meta Llama API Key</Text>
+                      {userLlamaKey ? (
+                        <View style={styles.activeKeyBadge}>
+                          <CheckCircle2 size={10} color="#fff" />
+                          <Text style={styles.activeKeyText}>PASTED</Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.statusText, { color: colors.textMuted }]}>Optional</Text>
+                      )}
+                    </View>
+                    <TextInput 
+                      style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.glassBorder }]}
+                      value={userLlamaKey}
+                      onChangeText={setUserLlamaKey}
+                      placeholder="Paste Llama API key (preview)"
+                      placeholderTextColor={colors.textMuted}
+                      secureTextEntry
+                    />
+                    <TouchableOpacity 
+                      style={[styles.bigGetKeyBtn, { backgroundColor: Theme.colors.primary + '15' }]}
+                      onPress={() => require('react-native').Linking.openURL('https://llama.developer.meta.com/')}
+                    >
+                      <Sparkles size={14} color={Theme.colors.primary} />
+                      <Text style={[styles.bigGetKeyText, { color: Theme.colors.primary }]}>Get Meta Llama Key</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <TouchableOpacity 
                     style={styles.saveBtn} 
                     onPress={async () => {
@@ -1012,11 +1185,16 @@ export default function ProfileScreen() {
                         // Save locally (supports empty/cleared values)
                         await UserStorage.saveGroqKey(userGroqKey);
                         await UserStorage.saveGeminiKey(userGeminiKey);
+                        await UserStorage.savePollinationsKey(userPollinationsKey);
+                        await UserStorage.saveLlamaKey(userLlamaKey);
                         
                         // Save to Firestore for cross-device sync
                         await updateUserProfile({
                           groqKey: userGroqKey,
-                          geminiKey: userGeminiKey
+                          geminiKey: userGeminiKey,
+                          pollinationsKey: userPollinationsKey,
+                          llamaKey: userLlamaKey,
+                          preferredProvider: userPreferredProvider
                         });
                         
                         Alert.alert("Saved", "Your API keys have been updated and synced to your account.");
@@ -1035,11 +1213,18 @@ export default function ProfileScreen() {
                     onPress={async () => {
                       try {
                         await UserStorage.clearKeys();
+                        await UserStorage.savePreferredProvider("auto");
                         setUserGroqKey("");
                         setUserGeminiKey("");
+                        setUserPollinationsKey("");
+                        setUserLlamaKey("");
+                        setUserPreferredProvider("auto");
                         await updateUserProfile({
                           groqKey: "",
-                          geminiKey: ""
+                          geminiKey: "",
+                          pollinationsKey: "",
+                          llamaKey: "",
+                          preferredProvider: "auto"
                         });
                         Alert.alert("Cleared", "Personal API keys removed. App will now use default keys.");
                       } catch (e) {

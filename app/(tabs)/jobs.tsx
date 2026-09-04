@@ -3,7 +3,14 @@ import { API_CONFIG } from "@/constants/config";
 import { Colors, Theme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useJobStore } from "@/hooks/use-job-store";
-import { getGlobalJobs, saveGlobalJobs, canUserFetchJobs } from "@/services/firestore";
+import { useAutoApplySettings } from "@/hooks/use-auto-apply";
+import { AutoApplyBadge } from "@/components/AutoApplyBadge";
+import { processAutoApplyBatch, getAutoApplyContext } from "@/services/autoApply";
+import type { AutoApplyJob } from "@/services/autoApply";
+import type { AutoApplyStatus } from "@/constants/autoApply";
+import { getCached, setCached, getMem, setMem } from "@/services/jobCache";
+import { auth } from "@/services/firebase";
+import { getGlobalJobs, saveGlobalJobs, canUserFetchJobs, saveAutoApplyRecord, getAutoApplyRecords } from "@/services/firestore";
 import { useRouter } from "expo-router";
 import {
   Briefcase,
@@ -23,6 +30,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  FlatList,
   Image,
   InteractionManager,
   Linking,
@@ -207,15 +215,29 @@ export default function JobsScreen() {
   // Remote tab state
   const [selectedRemoteCat, setSelectedRemoteCat] = useState(0);
 
-  // ── Fetch India jobs (Adzuna) ───────────────────────────────────────────────
-  const fetchIndiaJobs = useCallback(async (keywords: string, city: string) => {
-    setLoading(true);
-    setError(null);
+  // ── Fetch India jobs (Adzuna) — memory-cache-first, silent refresh ─────────
+  const fetchIndiaJobs = useCallback(async (keywords: string, city: string, opts?: { background?: boolean }) => {
+    const memKey = `india:${keywords}:${city}`;
+    if (!opts?.background) {
+      const fast = getMem<any[]>(memKey);
+      if (fast && fast.length > 0) {
+        setJobs(fast);
+        setError(null);
+        setLoading(false);
+        // Refresh silently underneath for next visit.
+        fetchIndiaJobs(keywords, city, { background: true });
+        return;
+      }
+      setLoading(true);
+      setError(null);
+    }
     try {
       if (!hasAdzuna) {
         // No Adzuna key — show placeholder message
-        setJobs([]);
-        setError("adzuna_setup");
+        if (!opts?.background) {
+          setJobs([]);
+          setError("adzuna_setup");
+        }
         return;
       }
 
@@ -224,33 +246,48 @@ export default function JobsScreen() {
       const cached = await getGlobalJobs(cacheKey, city).catch(() => null);
       if (cached && cached.length > 0) {
         setJobs(cached);
+        setMem(memKey, cached);
         return;
       }
 
       // Check daily limit
       const canFetch = await canUserFetchJobs().catch(() => true);
       if (!canFetch) {
-        Alert.alert("Daily Limit Reached", "Try again tomorrow or switch to Remote Jobs tab!");
+        if (!opts?.background) {
+          Alert.alert("Daily Limit Reached", "Try again tomorrow or switch to Remote Jobs tab!");
+        }
         return;
       }
 
       const results = await fetchAdzunaJobs(keywords, INDIA_CITIES_ADZUNA[city] || city);
       setJobs(results);
+      setMem(memKey, results);
 
       if (results.length > 0) {
         await saveGlobalJobs(cacheKey, city, results).catch(() => {});
       }
     } catch (e: any) {
-      setError(e.message || "Failed to load jobs");
+      if (!opts?.background) setError(e.message || "Failed to load jobs");
     } finally {
-      setLoading(false);
+      if (!opts?.background) setLoading(false);
     }
   }, [hasAdzuna]);
 
-  // ── Fetch Remote jobs (Jobicy → fallback Remotive) ─────────────────────────
-  const fetchRemoteJobs = useCallback(async (catIndex: number) => {
-    setLoading(true);
-    setError(null);
+  // ── Fetch Remote jobs (Jobicy → fallback Remotive) — cache-first ──────────
+  const fetchRemoteJobs = useCallback(async (catIndex: number, opts?: { background?: boolean }) => {
+    const cacheId = `remote:${REMOTE_CATEGORIES[catIndex].jobicyTag}`;
+    if (!opts?.background) {
+      const fast = getMem<any[]>(cacheId) || (await getCached<any[]>(cacheId, 30 * 60 * 1000).catch(() => null));
+      if (fast && fast.length > 0) {
+        setJobs(fast);
+        setError(null);
+        setLoading(false);
+        fetchRemoteJobs(catIndex, { background: true });
+        return;
+      }
+      setLoading(true);
+      setError(null);
+    }
     const cat = REMOTE_CATEGORIES[catIndex];
     try {
       let results: any[] = [];
@@ -261,12 +298,68 @@ export default function JobsScreen() {
         results = await fetchRemotiveJobs(cat.remotiveCat);
       }
       setJobs(results);
+      setMem(cacheId, results);
+      if (results.length > 0) await setCached(cacheId, results);
     } catch (e: any) {
-      setError(e.message || "Failed to load remote jobs");
+      if (!opts?.background) setError(e.message || "Failed to load remote jobs");
     } finally {
-      setLoading(false);
+      if (!opts?.background) setLoading(false);
     }
   }, []);
+
+  // ── Auto Apply: background per-job processing (existing flow hook) ──────
+  const { settings: aaSettings } = useAutoApplySettings();
+  const [aaStatus, setAaStatus] = useState<Record<string, AutoApplyStatus>>({});
+  const aaRunning = useRef(false);
+  const aaSettingsRef = useRef(aaSettings);
+  aaSettingsRef.current = aaSettings;
+
+  const runAutoApply = useCallback(async (list: any[], fallbackSource: string) => {
+      const settings = aaSettingsRef.current;
+      if (!settings.enabled || settings.paused || aaRunning.current) return;
+      if (!auth.currentUser) return;
+      aaRunning.current = true;
+      try {
+        // Roles/location/resume from the existing profile + storage.
+        const { profile, resume } = await getAutoApplyContext(settings);
+
+        const existing = new Set<string>();
+        try {
+          (await getAutoApplyRecords()).forEach((a: any) => existing.add(a.jobId));
+        } catch {}
+
+        const normalized: AutoApplyJob[] = list.map((j: any, i: number) => ({
+          id: j.job_id || `${j.title}-${j.company_name}-${i}`,
+          title: j.title,
+          company: j.company_name,
+          location: j.location,
+          description: j.description || '',
+          salary: j.salary,
+          scheduleType: j.schedule_type,
+          source: j.source || fallbackSource,
+          applyUrl: j.apply_link,
+          logo: j.thumbnail || undefined,
+        }));
+
+        const records = await processAutoApplyBatch(normalized, {
+          settings,
+          profile,
+          resume,
+          existingIds: existing,
+        });
+
+        for (const rec of records) {
+          try {
+            await saveAutoApplyRecord(rec);
+          } catch {}
+          setAaStatus((prev) => ({ ...prev, [rec.jobId]: rec.status }));
+        }
+      } finally {
+        aaRunning.current = false;
+      }
+    },
+    [],
+  );
 
   // ── Initial load and tab switch ────────────────────────────────────────────
   useEffect(() => {
@@ -278,6 +371,14 @@ export default function JobsScreen() {
       }
     });
   }, [activeTab]);
+
+  // ── Auto Apply pass over freshly loaded jobs (fire-and-forget) ────────────
+  useEffect(() => {
+    if ((activeTab === 'india' || activeTab === 'remote') && jobs.length > 0) {
+      runAutoApply(jobs, activeTab === 'india' ? 'adzuna' : 'remote');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, activeTab]);
 
   // ── Job Card ───────────────────────────────────────────────────────────────
   const renderJobCard = (job: any, idx: number) => {
@@ -370,6 +471,15 @@ export default function JobsScreen() {
                   </View>
                 )}
               </View>
+
+              {/* Auto Apply status (only when this job was processed) */}
+              {aaStatus[job.job_id || `${job.title}-${job.company_name}-${idx}`] && (
+                <View style={{ marginBottom: 12 }}>
+                  <AutoApplyBadge
+                    status={aaStatus[job.job_id || `${job.title}-${job.company_name}-${idx}`]}
+                  />
+                </View>
+              )}
             </TouchableOpacity>
 
             {/* Action Buttons */}
@@ -531,6 +641,133 @@ export default function JobsScreen() {
     </GlassCard>
   );
 
+  // ── Virtualized list: header (filters) + empty states ─────────────────────
+  const verifiedList =
+    VERIFIED_COMPANIES[selectedCity] || VERIFIED_COMPANIES["Chennai"];
+
+  const renderListHeader = () => (
+    <View style={{ gap: 12, marginBottom: 4 }}>
+      {activeTab === "india" && (
+        <>
+          {showSearch && (
+            <GlassCard style={[styles.searchCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              <View style={styles.searchField}>
+                <Search size={17} color={Theme.colors.primary} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.text }]}
+                  value={indiaQuery}
+                  onChangeText={setIndiaQuery}
+                  placeholder="e.g. React Native, DevOps..."
+                  placeholderTextColor={colors.textMuted}
+                  returnKeyType="search"
+                  onSubmitEditing={() => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); }}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.searchGoBtn, { backgroundColor: Theme.colors.primary }]}
+                onPress={() => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); }}
+              >
+                <Text style={styles.searchGoBtnText}>Search</Text>
+              </TouchableOpacity>
+            </GlassCard>
+          )}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={styles.pillRow}>
+            {INDIA_LOCATIONS.map(city => (
+              <TouchableOpacity
+                key={city}
+                style={[styles.pill, { backgroundColor: selectedCity === city ? Theme.colors.primary : colors.surface, borderColor: selectedCity === city ? Theme.colors.primary : colors.glassBorder }]}
+                onPress={() => {
+                  setSelectedCity(city);
+                  fetchIndiaJobs(indiaQuery, city).catch(() => {});
+                }}
+              >
+                <Text style={[styles.pillText, { color: selectedCity === city ? "#000" : colors.text }]}>{city}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {activeTab === "remote" && (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={styles.pillRow}>
+            {REMOTE_CATEGORIES.map((cat, i) => (
+              <TouchableOpacity
+                key={cat.label}
+                style={[styles.pill, { backgroundColor: selectedRemoteCat === i ? Theme.colors.primary : colors.surface, borderColor: selectedRemoteCat === i ? Theme.colors.primary : colors.glassBorder }]}
+                onPress={() => {
+                  setSelectedRemoteCat(i);
+                  fetchRemoteJobs(i);
+                }}
+              >
+                <Text style={[styles.pillText, { color: selectedRemoteCat === i ? "#000" : colors.text }]}>{cat.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <View style={[styles.freeBadgeRow, { backgroundColor: "#10b98112", borderColor: "#10b98130" }]}>
+            <Wifi size={14} color="#10b981" />
+            <Text style={styles.freeBadgeText}>
+              Live remote jobs • No API key • Powered by Jobicy + Remotive
+            </Text>
+          </View>
+        </>
+      )}
+
+      {activeTab === "verified" && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={styles.pillRow}>
+          {Object.keys(VERIFIED_COMPANIES).map(city => (
+            <TouchableOpacity
+              key={city}
+              style={[styles.pill, { backgroundColor: selectedCity === city ? Theme.colors.primary : colors.surface, borderColor: selectedCity === city ? Theme.colors.primary : colors.glassBorder }]}
+              onPress={() => setSelectedCity(city)}
+            >
+              <Text style={[styles.pillText, { color: selectedCity === city ? "#000" : colors.text }]}>{city}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+
+  const renderRetry = (msg: string, onRetry: () => void) => (
+    <View style={styles.centered}>
+      <WifiOff size={40} color={colors.textMuted} />
+      <Text style={[styles.errorText, { color: colors.textMuted }]}>{msg}</Text>
+      <TouchableOpacity style={[styles.retryBtn, { backgroundColor: Theme.colors.primary }]} onPress={onRetry}>
+        <RefreshCw size={14} color="#000" />
+        <Text style={styles.retryText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderListEmpty = () => {
+    if (loading) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textMuted }]}>
+            {activeTab === "india" ? `Finding jobs in ${selectedCity}...` : "Loading remote jobs..."}
+          </Text>
+        </View>
+      );
+    }
+    if (activeTab === "india") {
+      if (error === "adzuna_setup" || (!error && jobs.length === 0)) return renderAdzunaSetup();
+      if (error) return renderRetry(error, () => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); });
+      return renderAdzunaSetup();
+    }
+    if (activeTab === "remote") {
+      if (error) return renderRetry(error, () => fetchRemoteJobs(selectedRemoteCat));
+      return (
+        <View style={styles.centered}>
+          <WifiOff size={40} color={colors.textMuted} />
+          <Text style={[styles.errorText, { color: colors.textMuted }]}>No jobs found. Try another category.</Text>
+        </View>
+      );
+    }
+    return null;
+  };
+
   // ─── Main Render ────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -547,14 +784,44 @@ export default function JobsScreen() {
                 : "Official Verified Company Portals"}
             </Text>
           </View>
-          {activeTab !== "verified" && (
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
             <TouchableOpacity
-              style={[styles.searchToggleBtn, { backgroundColor: showSearch ? Theme.colors.primary : colors.surface, borderColor: showSearch ? Theme.colors.primary : colors.glassBorder }]}
-              onPress={() => setShowSearch(p => !p)}
+              style={[
+                styles.autoPill,
+                {
+                  backgroundColor: aaSettings.enabled && !aaSettings.paused
+                    ? Theme.colors.primary
+                    : colors.surface,
+                  borderColor: aaSettings.enabled && !aaSettings.paused
+                    ? Theme.colors.primary
+                    : colors.glassBorder,
+                },
+              ]}
+              onPress={() => router.push("/auto-apply-settings" as any)}
             >
-              <Search size={19} color={showSearch ? "#000" : colors.text} />
+              <Zap
+                size={14}
+                color={aaSettings.enabled && !aaSettings.paused ? "#000" : colors.textMuted}
+                fill={aaSettings.enabled && !aaSettings.paused ? "#000" : "transparent"}
+              />
+              <Text
+                style={[
+                  styles.autoPillText,
+                  { color: aaSettings.enabled && !aaSettings.paused ? "#000" : colors.textMuted },
+                ]}
+              >
+                Auto {aaSettings.enabled ? (aaSettings.paused ? "Paused" : "ON") : "OFF"}
+              </Text>
             </TouchableOpacity>
-          )}
+            {activeTab !== "verified" && (
+              <TouchableOpacity
+                style={[styles.searchToggleBtn, { backgroundColor: showSearch ? Theme.colors.primary : colors.surface, borderColor: showSearch ? Theme.colors.primary : colors.glassBorder }]}
+                onPress={() => setShowSearch(p => !p)}
+              >
+                <Search size={19} color={showSearch ? "#000" : colors.text} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* ── 3-Tab Switcher ────────────────────────────────────────── */}
@@ -582,153 +849,25 @@ export default function JobsScreen() {
         </View>
       </View>
 
-      {/* ── Scroll Content ─────────────────────────────────────────── */}
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* ── INDIA JOBS TAB ────────────────────────────────────────── */}
-        {activeTab === "india" && (
-          <View style={{ gap: 12 }}>
-            {/* Search Card */}
-            {showSearch && (
-              <GlassCard style={[styles.searchCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-                <View style={styles.searchField}>
-                  <Search size={17} color={Theme.colors.primary} />
-                  <TextInput
-                    style={[styles.searchInput, { color: colors.text }]}
-                    value={indiaQuery}
-                    onChangeText={setIndiaQuery}
-                    placeholder="e.g. React Native, DevOps..."
-                    placeholderTextColor={colors.textMuted}
-                    returnKeyType="search"
-                    onSubmitEditing={() => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); }}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={[styles.searchGoBtn, { backgroundColor: Theme.colors.primary }]}
-                  onPress={() => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); }}
-                >
-                  <Text style={styles.searchGoBtnText}>Search</Text>
-                </TouchableOpacity>
-              </GlassCard>
-            )}
-
-            {/* City Pill Filters */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-              {INDIA_LOCATIONS.map(city => (
-                <TouchableOpacity
-                  key={city}
-                  style={[styles.pill, { backgroundColor: selectedCity === city ? Theme.colors.primary : colors.surface, borderColor: selectedCity === city ? Theme.colors.primary : colors.glassBorder }]}
-                  onPress={() => {
-                    setSelectedCity(city);
-                    fetchIndiaJobs(indiaQuery, city).catch(() => {});
-                  }}
-                >
-                  <Text style={[styles.pillText, { color: selectedCity === city ? "#000" : colors.text }]}>{city}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Content */}
-            {loading ? (
-              <View style={styles.centered}>
-                <ActivityIndicator size="large" color={Theme.colors.primary} />
-                <Text style={[styles.loadingText, { color: colors.textMuted }]}>Finding jobs in {selectedCity}...</Text>
-              </View>
-            ) : error === "adzuna_setup" ? (
-              renderAdzunaSetup()
-            ) : error ? (
-              <View style={styles.centered}>
-                <WifiOff size={40} color={colors.textMuted} />
-                <Text style={[styles.errorText, { color: colors.textMuted }]}>{error}</Text>
-                <TouchableOpacity style={[styles.retryBtn, { backgroundColor: Theme.colors.primary }]} onPress={() => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); }}>
-                  <RefreshCw size={14} color="#000" />
-                  <Text style={styles.retryText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
-            ) : jobs.length === 0 ? (
-              renderAdzunaSetup()
-            ) : (
-              jobs.map((job, idx) => renderJobCard(job, idx))
-            )}
-          </View>
-        )}
-
-        {/* ── REMOTE JOBS TAB ───────────────────────────────────────── */}
-        {activeTab === "remote" && (
-          <View style={{ gap: 12 }}>
-            {/* Category Pill Filter */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-              {REMOTE_CATEGORIES.map((cat, i) => (
-                <TouchableOpacity
-                  key={cat.label}
-                  style={[styles.pill, { backgroundColor: selectedRemoteCat === i ? Theme.colors.primary : colors.surface, borderColor: selectedRemoteCat === i ? Theme.colors.primary : colors.glassBorder }]}
-                  onPress={() => {
-                    setSelectedRemoteCat(i);
-                    fetchRemoteJobs(i);
-                  }}
-                >
-                  <Text style={[styles.pillText, { color: selectedRemoteCat === i ? "#000" : colors.text }]}>{cat.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Free Badge */}
-            <View style={[styles.freeBadgeRow, { backgroundColor: "#10b98112", borderColor: "#10b98130" }]}>
-              <Wifi size={14} color="#10b981" />
-              <Text style={styles.freeBadgeText}>
-                Live remote jobs • No API key • Powered by Jobicy + Remotive
-              </Text>
-            </View>
-
-            {loading ? (
-              <View style={styles.centered}>
-                <ActivityIndicator size="large" color={Theme.colors.primary} />
-                <Text style={[styles.loadingText, { color: colors.textMuted }]}>Loading remote jobs...</Text>
-              </View>
-            ) : error ? (
-              <View style={styles.centered}>
-                <WifiOff size={40} color={colors.textMuted} />
-                <Text style={[styles.errorText, { color: colors.textMuted }]}>{error}</Text>
-                <TouchableOpacity style={[styles.retryBtn, { backgroundColor: Theme.colors.primary }]} onPress={() => fetchRemoteJobs(selectedRemoteCat)}>
-                  <RefreshCw size={14} color="#000" />
-                  <Text style={styles.retryText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
-            ) : jobs.length === 0 ? (
-              <View style={styles.centered}>
-                <WifiOff size={40} color={colors.textMuted} />
-                <Text style={[styles.errorText, { color: colors.textMuted }]}>No jobs found. Try another category.</Text>
-              </View>
-            ) : (
-              jobs.map((job, idx) => renderJobCard(job, idx))
-            )}
-          </View>
-        )}
-
-        {/* ── VERIFIED PORTALS TAB ─────────────────────────────────── */}
-        {activeTab === "verified" && (
-          <View style={{ gap: 12 }}>
-            {/* City Filter */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-              {Object.keys(VERIFIED_COMPANIES).map(city => (
-                <TouchableOpacity
-                  key={city}
-                  style={[styles.pill, { backgroundColor: selectedCity === city ? Theme.colors.primary : colors.surface, borderColor: selectedCity === city ? Theme.colors.primary : colors.glassBorder }]}
-                  onPress={() => setSelectedCity(city)}
-                >
-                  <Text style={[styles.pillText, { color: selectedCity === city ? "#000" : colors.text }]}>{city}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {(VERIFIED_COMPANIES[selectedCity] || VERIFIED_COMPANIES["Chennai"]).map((job, idx) =>
-              renderVerifiedCard(job, idx)
-            )}
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
+      {/* ── Virtualized list (mounts only visible cards) ───────────────────── */}
+      <FlatList
+        key={activeTab}
+        data={activeTab === "verified" ? verifiedList : jobs}
+        keyExtractor={(item: any, i: number) => item.job_id || item.id || `${activeTab}-${i}`}
+        renderItem={({ item, index }: any) =>
+          activeTab === "verified" ? renderVerifiedCard(item, index) : renderJobCard(item, index)
+        }
+        ListHeaderComponent={renderListHeader}
+        ListEmptyComponent={renderListEmpty}
+        ListFooterComponent={<View style={{ height: 100 }} />}
+        contentContainerStyle={[styles.scroll, { flexGrow: 1 }]}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        removeClippedSubviews
+        updateCellsBatchingPeriod={50}
+      />
     </View>
   );
 }
@@ -741,6 +880,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
   subtitle: { fontSize: 12, fontWeight: "600", marginTop: 2 },
   searchToggleBtn: { width: 42, height: 42, borderRadius: 14, justifyContent: "center", alignItems: "center", borderWidth: 1.2 },
+  autoPill: { flexDirection: "row", alignItems: "center", gap: 5, height: 42, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1.2 },
+  autoPillText: { fontSize: 11, fontWeight: "800" },
 
   tabBar: { flexDirection: "row", padding: 5, borderRadius: 18, borderWidth: 1.2, marginBottom: 14, gap: 4 },
   tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 13, alignItems: "center", justifyContent: "center" },

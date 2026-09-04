@@ -6,12 +6,12 @@ import { Trash2 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
-  Image,
   PanResponder,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -126,10 +126,10 @@ export default function FloatingVoiceAssistant() {
         </Animated.View>
 
         <Animated.View style={styles.bubble}>
-          <Image
-            source={require('@/assets/voic-chat.png')}
+          <ExpoImage
+            source={require('@/assets/voic-chat.webp')}
             style={styles.bubbleImage}
-            resizeMode="cover"
+            contentFit="cover"
           />
         </Animated.View>
 

@@ -10,8 +10,8 @@ import {
   Platform,
   Alert,
   Dimensions,
-  Image,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import Animated, { FadeInUp, FadeInDown, SlideInRight, SlideOutLeft } from "react-native-reanimated";
@@ -130,7 +130,7 @@ export default function OnboardingScreen() {
                 <Text style={styles.questionTitle}>What's your field?</Text>
                 <Text style={styles.questionDesc}>We tailor your resume optimization based on your professional background.</Text>
 
-                <Image source={require('@/assets/step-1.png')} style={styles.stepImage} resizeMode="contain" />
+                <ExpoImage source={require('@/assets/step-1.webp')} style={styles.stepImage} contentFit="contain" />
 
                 <TouchableOpacity
                   activeOpacity={0.8}
@@ -184,7 +184,7 @@ export default function OnboardingScreen() {
               <Text style={styles.questionTitle}>Your roles</Text>
               <Text style={styles.questionDesc}>Add up to 3 roles you're targeting. Tap a role to set it as Primary.</Text>
 
-              <Image source={require('@/assets/step-2.png')} style={styles.stepImage} resizeMode="contain" />
+              <ExpoImage source={require('@/assets/step-2.webp')} style={styles.stepImage} contentFit="contain" />
 
               <View style={styles.selectedRolesContainer}>
                 {roles.map((role, idx) => {
@@ -272,7 +272,7 @@ export default function OnboardingScreen() {
               <Text style={styles.questionTitle}>Supercharge AI</Text>
               <Text style={styles.questionDesc}>Paste your API keys for advanced resume generation and interview prep.</Text>
 
-              <Image source={require('@/assets/step3.png')} style={styles.stepImage} resizeMode="contain" />
+              <ExpoImage source={require('@/assets/step3.webp')} style={styles.stepImage} contentFit="contain" />
 
               <View style={styles.apiCard}>
                 <View style={styles.apiHeader}>

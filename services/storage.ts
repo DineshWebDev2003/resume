@@ -3,9 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEYS = {
   GROQ_API_KEY: 'user_groq_api_key',
   GEMINI_API_KEY: 'user_gemini_api_key',
+  POLLINATIONS_API_KEY: 'user_pollinations_api_key',
+  LLAMA_API_KEY: 'user_llama_api_key',
+  PREFERRED_PROVIDER: 'user_preferred_provider',
   RESUME_VERSIONS: 'resume_versions',
   IMPORT_HISTORY: 'resume_import_history',
 };
+
+/** 'auto' = full fallback chain. A specific id = try it first, chain as backup. */
+export type PreferredProvider = 'auto' | 'groq' | 'gemini' | 'pollinations' | 'meta-llama';
 
 export const UserStorage = {
   saveGroqKey: async (key: string) => {
@@ -20,9 +26,32 @@ export const UserStorage = {
   getGeminiKey: async () => {
     return await AsyncStorage.getItem(KEYS.GEMINI_API_KEY);
   },
+  savePollinationsKey: async (key: string) => {
+    await AsyncStorage.setItem(KEYS.POLLINATIONS_API_KEY, key);
+  },
+  getPollinationsKey: async () => {
+    return await AsyncStorage.getItem(KEYS.POLLINATIONS_API_KEY);
+  },
+  saveLlamaKey: async (key: string) => {
+    await AsyncStorage.setItem(KEYS.LLAMA_API_KEY, key);
+  },
+  getLlamaKey: async () => {
+    return await AsyncStorage.getItem(KEYS.LLAMA_API_KEY);
+  },
+  savePreferredProvider: async (p: PreferredProvider) => {
+    await AsyncStorage.setItem(KEYS.PREFERRED_PROVIDER, p);
+  },
+  getPreferredProvider: async (): Promise<PreferredProvider> => {
+    const v = await AsyncStorage.getItem(KEYS.PREFERRED_PROVIDER);
+    return v === 'groq' || v === 'gemini' || v === 'pollinations' || v === 'meta-llama'
+      ? v
+      : 'auto';
+  },
   clearKeys: async () => {
     await AsyncStorage.removeItem(KEYS.GROQ_API_KEY);
     await AsyncStorage.removeItem(KEYS.GEMINI_API_KEY);
+    await AsyncStorage.removeItem(KEYS.POLLINATIONS_API_KEY);
+    await AsyncStorage.removeItem(KEYS.LLAMA_API_KEY);
   },
   
   saveResumeVersion: async (name: string, data: any) => {

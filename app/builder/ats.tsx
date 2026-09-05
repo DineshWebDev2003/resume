@@ -62,7 +62,6 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import ViewShot, { captureRef } from 'react-native-view-shot';
-import { uploadToCloudinary } from '@/services/cloudinary';
 import { useRef, useMemo } from 'react';
 import { BlurView } from 'expo-blur';
 
@@ -462,14 +461,31 @@ export default function ATSScanner() {
         setSelectedKeywords([]);
       }
 
-      // Storage and history
-      const uri = await captureRef(viewShotRef, { format: "png", quality: 0.7 });
-      const cloudinary = await uploadToCloudinary(uri);
+      // Storage and history — fully offline: the result snapshot stays
+      // on-device (no Cloudinary upload). Field name kept for compatibility.
+      let localSnapshot: string | undefined;
+      try {
+        const uri = await captureRef(viewShotRef, { format: "png", quality: 0.7 });
+        const dir = `${FileSystem.documentDirectory}ats-snapshots/`;
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => {});
+        const dest = `${dir}ats_${Date.now()}.png`;
+        await FileSystem.copyAsync({ from: uri, to: dest });
+        localSnapshot = dest;
+        // Prune old snapshots, keep newest 5.
+        try {
+          const files = await FileSystem.readDirectoryAsync(dir);
+          const sorted = files.filter((f) => f.startsWith("ats_")).sort();
+          for (const f of sorted.slice(0, Math.max(0, sorted.length - 5))) {
+            await FileSystem.deleteAsync(dir + f, { idempotent: true }).catch(() => {});
+          }
+        } catch {}
+      } catch (e) {
+        console.log("Local snapshot skipped:", e);
+      }
       await saveAtsHistory({
         score: result.score || 70,
         resumeName: selectedFile.name,
-        cloudinaryUrl: cloudinary.url,
-        cloudinaryPublicId: cloudinary.publicId,
+        cloudinaryUrl: localSnapshot,
         jobTitle: jobDescription.substring(0, 50) + "...",
         analysis: result
       });

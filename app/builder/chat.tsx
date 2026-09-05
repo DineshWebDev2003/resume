@@ -66,42 +66,36 @@ const QUESTIONS = [
     question:
       "Welcome! First, what is your full name and target job role? And are you a fresher or experienced?",
     key: "experience_level",
-    videoUri: require("@/assets/Untitled video (1).mp4"),
   },
   {
     id: "education",
     question:
       "Got it. Now, tell me about your education: What is your college name, degree, and year of completion?",
     key: "education",
-    videoUri: require("@/assets/Untitled video (2).mp4"),
   },
   {
     id: "skills",
     question:
       "Excellent. Now, tell me about your technical and soft skills (e.g., Java, Python, Teamwork)?",
     key: "skills",
-    videoUri: require("@/assets/Untitled video (3).mp4"),
   },
   {
     id: "experience",
     question:
       "Now, tell me about your work experience: What is your company name, job title, and duration?",
     key: "experience",
-    videoUri: require("@/assets/Untitled video (4).mp4"),
   },
   {
     id: "projects_certs",
     question:
       "Almost there! Tell me about your key projects and any certifications you've earned.",
     key: "projects_certs",
-    videoUri: require("@/assets/Untitled video (5).mp4"),
   },
   {
     id: "generate",
     question:
       "All set! I have everything I need. Ready to see your elite resume?",
     key: "generate",
-    videoUri: require("@/assets/Untitled video (6).mp4"),
   },
 ];
 

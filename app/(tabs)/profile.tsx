@@ -979,7 +979,22 @@ export default function ProfileScreen() {
                                 }
                               } catch (e: any) {
                                 console.log("[IAP] Purchase error:", e);
-                                Alert.alert("Purchase Failed", e.message || "Failed to complete purchase. Please try again.");
+                                // Retry without subscriptionOffers to isolate offer token issue
+                                try {
+                                  console.log("[IAP] Retry: basic subscription purchase without offers");
+                                  await IAP.requestPurchase({
+                                    request: {
+                                      google: {
+                                        skus: ['pro_plan'],
+                                      },
+                                    },
+                                    type: 'subs',
+                                  });
+                                  console.log("[IAP] Basic purchase sheet launched, awaiting event...");
+                                } catch (e2: any) {
+                                  console.log("[IAP] Basic purchase also failed:", e2);
+                                  Alert.alert("Purchase Failed", e.message || e2.message || "Failed to complete purchase.");
+                                }
                               } finally {
                                 setSimulatedPaying(false);
                               }

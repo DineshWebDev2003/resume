@@ -90,7 +90,7 @@ export default function CategoryTemplatesScreen() {
         <View style={styles.imageContainer}>
             <TemplateThumbnail templateId={item.id} />
             <View style={[styles.badgeContainer, { backgroundColor: Theme.colors.primary }]}>
-                <Sparkles size={8} color="#000" />
+                <Sparkles size={8} color="#fff" />
                 <Text style={styles.badgeText}>ELITE</Text>
             </View>
         </View>
@@ -127,8 +127,8 @@ export default function CategoryTemplatesScreen() {
                 { backgroundColor: activeField === cat.id ? Theme.colors.primary : colors.surface },
               ]}
             >
-              <cat.icon size={16} color={activeField === cat.id ? "#000" : colors.textMuted} />
-              <Text style={[styles.filterTabText, { color: activeField === cat.id ? "#000" : colors.textMuted }]}>
+              <cat.icon size={16} color={activeField === cat.id ? "#fff" : colors.textMuted} />
+              <Text style={[styles.filterTabText, { color: activeField === cat.id ? "#fff" : colors.textMuted }]}>
                 {cat.name}
               </Text>
             </TouchableOpacity>
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   thumbnailOuter: { flex: 1, backgroundColor: '#fff' }, // Resume itself stays white
   thumbnailWebView: { flex: 1, backgroundColor: 'transparent', opacity: 0.9 },
   badgeContainer: { position: "absolute", top: 10, right: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, zIndex: 10 },
-  badgeText: { color: "#000", fontSize: 9, fontWeight: "900" },
+  badgeText: { color: "#fff", fontSize: 9, fontWeight: "900" },
   infoContainer: { padding: 14 },
   templateName: { fontSize: 13, fontWeight: "800" },
   tagRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },

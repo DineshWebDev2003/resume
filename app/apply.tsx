@@ -187,10 +187,10 @@ export default function ApplyScreen() {
           disabled={!selectedResumeId || !availability || applying}
           onPress={handleApply}
         >
-          {applying ? <ActivityIndicator color="#000" /> : (
+          {applying ? <ActivityIndicator color="#fff" /> : (
             <>
               <Text style={styles.submitBtnText}>Confirm & Submit Application</Text>
-              <ArrowRight size={20} color="#000" />
+              <ArrowRight size={20} color="#fff" />
             </>
           )}
         </TouchableOpacity>
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#000',
+    color: '#fff',
   },
   successBox: {
     alignItems: 'center',

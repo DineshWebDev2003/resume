@@ -640,6 +640,15 @@ export default function ManualBuilderScreen() {
               ...resumeData,
               location: resumeData.location || "",
               languages: resumeData.languages || "",
+              tools: resumeData.tools || "",
+              skills: resumeData.skills || "",
+              summary: resumeData.summary || "",
+              experience: Array.isArray(resumeData.experience) ? resumeData.experience : [],
+              education: Array.isArray(resumeData.education) ? resumeData.education : [],
+              projects: Array.isArray(resumeData.projects) ? resumeData.projects : [],
+              links: Array.isArray(resumeData.links) ? resumeData.links : [],
+              certifications: Array.isArray(resumeData.certifications) ? resumeData.certifications : [],
+              references: Array.isArray(resumeData.references) ? resumeData.references : [],
             });
             if (found.color) setPrimaryColor(found.color);
             if (found.template)
@@ -2624,7 +2633,7 @@ export default function ManualBuilderScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {data.experience.map((exp, idx) => (
+                {(data.experience || []).map((exp, idx) => (
                   <GlassCard
                     key={exp.id}
                     style={[
@@ -2707,7 +2716,7 @@ export default function ManualBuilderScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {data.projects.map((proj, idx) => (
+                {(data.projects || []).map((proj, idx) => (
                   <GlassCard
                     key={proj.id}
                     style={[
@@ -2778,7 +2787,7 @@ export default function ManualBuilderScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {data.education.map((edu, idx) => (
+                {(Array.isArray(data.education) ? data.education : []).map((edu, idx) => (
                   <GlassCard
                     key={edu.id || idx}
                     style={[

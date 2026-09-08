@@ -12,7 +12,8 @@ import {
 import { Colors, Theme } from '@/constants/theme';
 import { useAutoApplySettings } from '@/hooks/use-auto-apply';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { getAutoApplyRecords } from '@/services/firestore';
 import {
   BellRing,
   Briefcase,
@@ -51,6 +52,25 @@ export default function AutoApplySettingsScreen() {
   const { settings, loading, saving, update, toggleEnabled } =
     useAutoApplySettings();
   const [locationDraft, setLocationDraft] = useState('');
+  const [matchedCount, setMatchedCount] = useState(0);
+  const [appliedCount, setAppliedCount] = useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!settings.enabled) return;
+      let live = true;
+      getAutoApplyRecords()
+        .then((records: any[]) => {
+          if (!live) return;
+          setMatchedCount(records.filter((r) => r.status === 'Matched').length);
+          setAppliedCount(records.filter((r) => r.status === 'Applied').length);
+        })
+        .catch(() => {});
+      return () => {
+        live = false;
+      };
+    }, [settings.enabled]),
+  );
 
   const save = async (patch: Parameters<typeof update>[0], onError?: () => void) => {
     try {
@@ -148,14 +168,14 @@ export default function AutoApplySettingsScreen() {
                   onPress={() => save({ paused: !settings.paused })}
                 >
                   {settings.paused ? (
-                    <Play size={14} color="#000" />
+                    <Play size={14} color="#fff" />
                   ) : (
                     <Pause size={14} color={colors.text} />
                   )}
                   <Text
                     style={[
                       styles.pauseText,
-                      { color: settings.paused ? '#000' : colors.text },
+                      { color: settings.paused ? '#fff' : colors.text },
                     ]}
                   >
                     {settings.paused ? 'Resume Auto Apply' : 'Pause Auto Apply'}
@@ -171,6 +191,38 @@ export default function AutoApplySettingsScreen() {
               </View>
             )}
           </GlassCard>
+
+          {/* Small horizontal stats popup — visible when Auto Apply is ON */}
+          {settings.enabled && (
+            <View style={styles.statsRow}>
+              <View
+                style={[
+                  styles.statBox,
+                  { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+                ]}
+              >
+                <Text style={[styles.statNum, { color: Theme.colors.primary }]}>
+                  {matchedCount}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>
+                  Matched
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.statBox,
+                  { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+                ]}
+              >
+                <Text style={[styles.statNum, { color: '#10b981' }]}>
+                  {appliedCount}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>
+                  Applied
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Roles (mirrored from profile) */}
           <GlassCard
@@ -230,7 +282,7 @@ export default function AutoApplySettingsScreen() {
                   <Text
                     style={[
                       styles.stepText,
-                      { color: settings.minMatch === m ? '#000' : colors.text },
+                      { color: settings.minMatch === m ? '#fff' : colors.text },
                     ]}
                   >
                     {m}%
@@ -307,7 +359,7 @@ export default function AutoApplySettingsScreen() {
                     ]}
                     onPress={() => toggleMode(m)}
                   >
-                    <Text style={[styles.stepText, { color: on ? '#000' : colors.text }]}>
+                    <Text style={[styles.stepText, { color: on ? '#fff' : colors.text }]}>
                       {m}
                     </Text>
                   </TouchableOpacity>
@@ -349,7 +401,7 @@ export default function AutoApplySettingsScreen() {
                     ]}
                     onPress={() => save({ experienceLevel: level })}
                   >
-                    <Text style={[styles.stepText, { color: on ? '#000' : colors.text }]}>
+                    <Text style={[styles.stepText, { color: on ? '#fff' : colors.text }]}>
                       {level}
                     </Text>
                   </TouchableOpacity>
@@ -409,6 +461,19 @@ const styles = StyleSheet.create({
   },
   disableBtn: { backgroundColor: '#ef4444', borderColor: '#ef4444', flex: 0.7 },
   pauseText: { fontSize: 12, fontWeight: '800' },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  statBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    paddingVertical: 12,
+  },
+  statNum: { fontSize: 20, fontWeight: '900' },
+  statLabel: { fontSize: 12, fontWeight: '700' },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   sectionTitle: { fontSize: 14, fontWeight: '800' },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
@@ -434,7 +499,7 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 14, fontWeight: '600' },
   addBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10 },
-  addBtnText: { color: '#000', fontWeight: '800', fontSize: 13 },
+  addBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   salaryInput: {
     borderWidth: 1.2,
     borderRadius: 14,

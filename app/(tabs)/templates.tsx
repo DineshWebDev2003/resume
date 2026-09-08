@@ -875,7 +875,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 10,
   },
   seriesTabText: {
     fontSize: 14,

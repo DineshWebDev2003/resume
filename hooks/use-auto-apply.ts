@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/services/firebase';
 import {
   getAutoApplySettings,
@@ -33,6 +34,11 @@ export function useAutoApplySettings() {
         setLoading(false);
       }
     } catch {}
+    // Skip remote load when logged out (cold start before auth restores).
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
     try {
       const remote = await getAutoApplySettings();
       setSettings(remote);
@@ -48,6 +54,18 @@ export function useAutoApplySettings() {
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // Re-load once auth resolves — fixes cold-start race where settings
+  // loaded pre-login and stayed OFF forever.
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth as any, (user) => {
+      if (user) {
+        console.log('[AutoApply] Auth resolved, reloading settings.');
+        refresh();
+      }
+    });
+    return unsub;
   }, [refresh]);
 
   const update = useCallback(

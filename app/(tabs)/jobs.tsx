@@ -82,7 +82,9 @@ async function fetchAdzunaJobs(keywords: string, location: string): Promise<any[
 
 // ─── Jobicy remote jobs fetcher (no API key needed) ───────────────────────────
 async function fetchJobicyJobs(tag: string): Promise<any[]> {
-  const tagParam = encodeURIComponent(tag || "developer");
+  // Jobicy expects a single slug tag — multi-word roles 400, so use first token.
+  const slug = (tag || "developer").toLowerCase().trim().split(/[^a-z]+/).filter(Boolean)[0] || "developer";
+  const tagParam = encodeURIComponent(slug);
   const url = `${API_CONFIG.JOBICY_ENDPOINT}?count=20&geo=india&industry=engineering&tag=${tagParam}`;
   const res = await fetch(url, { headers: { "Accept": "application/json" } });
   if (!res.ok) throw new Error(`Jobicy error: ${res.status}`);
@@ -319,6 +321,7 @@ export default function JobsScreen() {
       if (!settings.enabled || settings.paused || aaRunning.current) return;
       if (!auth.currentUser) return;
       aaRunning.current = true;
+      console.log(`[AutoApply] Jobs feed pass: ${list.length} jobs (${fallbackSource}).`);
       try {
         // Roles/location/resume from the existing profile + storage.
         const { profile, resume } = await getAutoApplyContext(settings);
@@ -351,9 +354,18 @@ export default function JobsScreen() {
         for (const rec of records) {
           try {
             await saveAutoApplyRecord(rec);
-          } catch {}
+            console.log(`[AutoApply] Tracked ${rec.jobId} as ${rec.status}.`);
+          } catch (e: any) {
+            console.log(`[AutoApply] Track failed for ${rec.jobId}:`, e?.message);
+            if (/not authenticated/i.test(e?.message || '')) break;
+          }
           setAaStatus((prev) => ({ ...prev, [rec.jobId]: rec.status }));
         }
+        console.log(`[AutoApply] Feed pass saved ${records.length} records.`);
+        try {
+          const { refreshAutoApplyNotification } = await import('@/services/autoApplyNotifier');
+          await refreshAutoApplyNotification('done');
+        } catch {}
       } finally {
         aaRunning.current = false;
       }
@@ -498,7 +510,7 @@ export default function JobsScreen() {
                   })
                 }
               >
-                <Zap size={13} color="#000" fill="#000" />
+                <Zap size={13} color="#fff" fill="#fff" />
                 <Text style={styles.atsBtnText}>ATS Match</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -550,7 +562,7 @@ export default function JobsScreen() {
           activeOpacity={0.8}
         >
           <View style={[styles.officialBadge, { backgroundColor: Theme.colors.primary }]}>
-            <ShieldCheck size={11} color="#000" fill="#000" />
+            <ShieldCheck size={11} color="#fff" fill="#fff" />
             <Text style={styles.officialText}>OFFICIAL CAREER PORTAL</Text>
           </View>
 
@@ -629,7 +641,7 @@ export default function JobsScreen() {
         style={[styles.setupBtn, { backgroundColor: Theme.colors.primary }]}
         onPress={() => Linking.openURL("https://developer.adzuna.com")}
       >
-        <Globe size={16} color="#000" />
+        <Globe size={16} color="#fff" />
         <Text style={styles.setupBtnText}>Get Free Adzuna Key</Text>
       </TouchableOpacity>
 
@@ -681,7 +693,7 @@ export default function JobsScreen() {
                   fetchIndiaJobs(indiaQuery, city).catch(() => {});
                 }}
               >
-                <Text style={[styles.pillText, { color: selectedCity === city ? "#000" : colors.text }]}>{city}</Text>
+                <Text style={[styles.pillText, { color: selectedCity === city ? "#fff" : colors.text }]}>{city}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -700,7 +712,7 @@ export default function JobsScreen() {
                   fetchRemoteJobs(i);
                 }}
               >
-                <Text style={[styles.pillText, { color: selectedRemoteCat === i ? "#000" : colors.text }]}>{cat.label}</Text>
+                <Text style={[styles.pillText, { color: selectedRemoteCat === i ? "#fff" : colors.text }]}>{cat.label}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -721,7 +733,7 @@ export default function JobsScreen() {
               style={[styles.pill, { backgroundColor: selectedCity === city ? Theme.colors.primary : colors.surface, borderColor: selectedCity === city ? Theme.colors.primary : colors.glassBorder }]}
               onPress={() => setSelectedCity(city)}
             >
-              <Text style={[styles.pillText, { color: selectedCity === city ? "#000" : colors.text }]}>{city}</Text>
+              <Text style={[styles.pillText, { color: selectedCity === city ? "#fff" : colors.text }]}>{city}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -734,7 +746,7 @@ export default function JobsScreen() {
       <WifiOff size={40} color={colors.textMuted} />
       <Text style={[styles.errorText, { color: colors.textMuted }]}>{msg}</Text>
       <TouchableOpacity style={[styles.retryBtn, { backgroundColor: Theme.colors.primary }]} onPress={onRetry}>
-        <RefreshCw size={14} color="#000" />
+        <RefreshCw size={14} color="#fff" />
         <Text style={styles.retryText}>Retry</Text>
       </TouchableOpacity>
     </View>
@@ -801,13 +813,13 @@ export default function JobsScreen() {
             >
               <Zap
                 size={14}
-                color={aaSettings.enabled && !aaSettings.paused ? "#000" : colors.textMuted}
-                fill={aaSettings.enabled && !aaSettings.paused ? "#000" : "transparent"}
+                color={aaSettings.enabled && !aaSettings.paused ? "#fff" : colors.textMuted}
+                fill={aaSettings.enabled && !aaSettings.paused ? "#fff" : "transparent"}
               />
               <Text
                 style={[
                   styles.autoPillText,
-                  { color: aaSettings.enabled && !aaSettings.paused ? "#000" : colors.textMuted },
+                  { color: aaSettings.enabled && !aaSettings.paused ? "#fff" : colors.textMuted },
                 ]}
               >
                 Auto {aaSettings.enabled ? (aaSettings.paused ? "Paused" : "ON") : "OFF"}
@@ -818,7 +830,7 @@ export default function JobsScreen() {
                 style={[styles.searchToggleBtn, { backgroundColor: showSearch ? Theme.colors.primary : colors.surface, borderColor: showSearch ? Theme.colors.primary : colors.glassBorder }]}
                 onPress={() => setShowSearch(p => !p)}
               >
-                <Search size={19} color={showSearch ? "#000" : colors.text} />
+                <Search size={19} color={showSearch ? "#fff" : colors.text} />
               </TouchableOpacity>
             )}
           </View>
@@ -841,7 +853,7 @@ export default function JobsScreen() {
                 setShowSearch(false);
               }}
             >
-              <Text style={[styles.tabBtnText, { color: activeTab === id ? "#000" : colors.textMuted }]}>
+              <Text style={[styles.tabBtnText, { color: activeTab === id ? "#fff" : colors.textMuted }]}>
                 {label}
               </Text>
             </TouchableOpacity>
@@ -893,7 +905,7 @@ const styles = StyleSheet.create({
   searchField: { flexDirection: "row", alignItems: "center", gap: 10 },
   searchInput: { flex: 1, fontSize: 15, fontWeight: "600" },
   searchGoBtn: { paddingVertical: 12, borderRadius: 14, alignItems: "center" },
-  searchGoBtnText: { color: "#000", fontWeight: "800", fontSize: 14, paddingHorizontal: 20 },
+  searchGoBtnText: { color: "#fff", fontWeight: "800", fontSize: 14, paddingHorizontal: 20 },
 
   pillRow: { gap: 10, paddingVertical: 4 },
   pill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 14, borderWidth: 1.2 },
@@ -916,14 +928,14 @@ const styles = StyleSheet.create({
 
   actionRow: { flexDirection: "row", gap: 10 },
   atsBtn: { flex: 1.6, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 13 },
-  atsBtnText: { fontSize: 12, fontWeight: "900", color: "#000" },
+  atsBtnText: { fontSize: 12, fontWeight: "900", color: "#fff" },
   applyBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 13, borderWidth: 1.2 },
   applyBtnText: { fontSize: 12, fontWeight: "800" },
 
   // Verified Card
   verifiedCard: { borderRadius: 20, borderWidth: 1.2, overflow: "hidden", marginBottom: 10 },
   officialBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 6 },
-  officialText: { fontSize: 10, fontWeight: "900", color: "#000", letterSpacing: 0.5 },
+  officialText: { fontSize: 10, fontWeight: "900", color: "#fff", letterSpacing: 0.5 },
   verifiedTop: { flexDirection: "row", alignItems: "center", padding: 14, gap: 12 },
   verifiedLogo: { width: 46, height: 46, borderRadius: 14, justifyContent: "center", alignItems: "center" },
   verifiedTitle: { fontSize: 14, fontWeight: "800" },
@@ -944,10 +956,10 @@ const styles = StyleSheet.create({
   setupSteps: { width: "100%", gap: 10 },
   setupStep: { flexDirection: "row", alignItems: "center", gap: 12 },
   stepNum: { width: 26, height: 26, borderRadius: 13, justifyContent: "center", alignItems: "center" },
-  stepNumText: { color: "#000", fontSize: 12, fontWeight: "900" },
+  stepNumText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   stepText: { fontSize: 13, fontWeight: "600", flex: 1 },
   setupBtn: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, marginTop: 4 },
-  setupBtnText: { color: "#000", fontSize: 14, fontWeight: "900" },
+  setupBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
   orDivider: { width: "100%", borderTopWidth: 1, paddingTop: 12, alignItems: "center" },
 
   // States
@@ -955,5 +967,5 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 13, fontWeight: "600" },
   errorText: { fontSize: 13, fontWeight: "600", textAlign: "center" },
   retryBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
-  retryText: { color: "#000", fontSize: 13, fontWeight: "800" },
+  retryText: { color: "#fff", fontSize: 13, fontWeight: "800" },
 });

@@ -102,6 +102,7 @@ export default function MyJobsScreen() {
       return;
     }
     setScanning(true);
+    console.log(`[AutoApply] Manual scan: ${savedJobs.length} saved jobs.`);
     try {
       const { profile, resume } = await getAutoApplyContext(aaSettings);
       if (profile.roles.length === 0) {
@@ -147,10 +148,17 @@ export default function MyJobsScreen() {
       for (const rec of out) {
         try {
           await saveAutoApplyRecord(rec);
-        } catch {}
+          console.log(`[AutoApply] Scan tracked ${rec.jobId} as ${rec.status}.`);
+        } catch (e: any) {
+          console.log(`[AutoApply] Scan track failed for ${rec.jobId}:`, e?.message);
+        }
       }
       try {
         setAaRecords(await getAutoApplyRecords());
+      } catch {}
+      try {
+        const { refreshAutoApplyNotification } = await import('@/services/autoApplyNotifier');
+        await refreshAutoApplyNotification('done');
       } catch {}
       const m = out.filter((r) => r.status !== 'Skipped' && r.status !== 'Failed').length;
       Alert.alert('Scan done', `${m} matched out of ${out.length} saved jobs.`);
@@ -238,20 +246,20 @@ export default function MyJobsScreen() {
             onPress={() => setActiveTab('applied')}
             style={[styles.tab, activeTab === 'applied' && { backgroundColor: Theme.colors.primary }]}
           >
-            <Text style={[styles.tabText, { color: activeTab === 'applied' ? '#000' : colors.textMuted }]}>Applied</Text>
+            <Text style={[styles.tabText, { color: activeTab === 'applied' ? '#fff' : colors.textMuted }]}>Applied</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setActiveTab('saved')}
             style={[styles.tab, activeTab === 'saved' && { backgroundColor: Theme.colors.primary }]}
           >
-            <Text style={[styles.tabText, { color: activeTab === 'saved' ? '#000' : colors.textMuted }]}>Saved</Text>
+            <Text style={[styles.tabText, { color: activeTab === 'saved' ? '#fff' : colors.textMuted }]}>Saved</Text>
           </TouchableOpacity>
           {aaSettings.enabled && (
             <TouchableOpacity
               onPress={() => setActiveTab('auto')}
               style={[styles.tab, activeTab === 'auto' && { backgroundColor: Theme.colors.primary }]}
             >
-              <Text style={[styles.tabText, { color: activeTab === 'auto' ? '#000' : colors.textMuted }]}>AI Apply</Text>
+              <Text style={[styles.tabText, { color: activeTab === 'auto' ? '#fff' : colors.textMuted }]}>AI Apply</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -482,9 +490,9 @@ export default function MyJobsScreen() {
               disabled={scanning}
             >
               {scanning ? (
-                <ActivityIndicator color="#000" size="small" />
+                <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Zap size={15} color="#000" fill="#000" />
+                <Zap size={15} color="#fff" fill="#fff" />
               )}
               <Text style={styles.scanBtnText}>{scanning ? 'Scanning…' : 'Test match on saved jobs'}</Text>
             </TouchableOpacity>
@@ -695,7 +703,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   startBtnText: {
-    color: '#000',
+    color: '#fff',
     fontWeight: '900',
     fontSize: 16,
   },
@@ -715,7 +723,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionBtnText: {
-    color: '#000',
+    color: '#fff',
     fontWeight: '800',
     fontSize: 13,
   },
@@ -755,6 +763,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
   },
-  scanBtnText: { color: '#000', fontWeight: '900', fontSize: 14 },
+  scanBtnText: { color: '#fff', fontWeight: '900', fontSize: 14 },
   scanHint: { fontSize: 11, lineHeight: 16, marginTop: 8, textAlign: 'center' },
 });

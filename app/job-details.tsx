@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, ActivityIndicator, Alert, AppState, Modal, Platform } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Theme, Colors } from '@/constants/theme';
 import { saveJobApplication } from '@/services/firestore';
@@ -135,9 +136,40 @@ export default function JobDetailsScreen() {
         }
       });
     } else {
-      setClickedApply(true);
-      await Linking.openURL(job.applyLink as string);
+      // In-app Chromium (Chrome Custom Tab): keeps session + password manager,
+      // no laptop / app-switch needed. Dismiss -> ask to track.
+      try {
+        setClickedApply(true);
+        const result = await WebBrowser.openBrowserAsync(job.applyLink as string, {
+          toolbarColor: Theme.colors.primary,
+          controlsColor: '#000000',
+          enableBarCollapsing: true,
+          showTitle: true,
+        });
+        if (result.type === 'dismiss' || result.type === 'cancel') {
+          setShowApplyModal(true);
+        }
+        setClickedApply(false);
+      } catch {
+        setClickedApply(true);
+        await Linking.openURL(job.applyLink as string);
+      }
     }
+  };
+
+  const handleAutofillApply = () => {
+    // WebView apply browser with resume autofill injection.
+    router.push({
+      pathname: '/apply-browser',
+      params: {
+        applyLink: job.applyLink as string,
+        id: job.id as string,
+        title: job.title as string,
+        company: job.company as string,
+        location: job.location as string,
+        logo: (job.logo as string) || '',
+      },
+    });
   };
 
   const handleAutoApply = async () => {
@@ -364,7 +396,7 @@ export default function JobDetailsScreen() {
             onPress={handleAutoApply}
             disabled={aaBusy}
           >
-            <Zap size={15} color="#000" fill="#000" />
+            <Zap size={15} color="#fff" fill="#fff" />
             <Text style={styles.aaBtnText}>
               {aaBusy ? 'Processing…' : aaRecord ? 'Re-check Auto Apply' : 'Check & Auto Apply'}
             </Text>
@@ -387,7 +419,7 @@ export default function JobDetailsScreen() {
               }
             })}
           >
-            <Zap size={16} color="#000" fill="#000" />
+            <Zap size={16} color="#fff" fill="#fff" />
             <Text style={styles.applyBtnText}>ATS Optimize</Text>
           </TouchableOpacity>
 
@@ -399,6 +431,13 @@ export default function JobDetailsScreen() {
             <Text style={styles.outlineBtnText}>Apply Now</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={[styles.outlineBtn, { flexDirection: 'row', gap: 6, backgroundColor: Theme.colors.primary, marginTop: 10 }]}
+          onPress={handleAutofillApply}
+        >
+          <ExternalLink size={15} color="#fff" />
+          <Text style={[styles.outlineBtnText, { color: '#fff' }]}>Quick Apply — Autofill in App</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Attractive Apply Confirmation Modal */}
@@ -437,7 +476,7 @@ export default function JobDetailsScreen() {
                 style={[styles.modalBtn, styles.modalYesBtn, { backgroundColor: Theme.colors.primary }]}
                 onPress={() => handleConfirmApplication(true)}
               >
-                <Smile size={18} color="#000" />
+                <Smile size={18} color="#fff" />
                 <Text style={styles.modalYesText}>Yes, Applied!</Text>
               </TouchableOpacity>
             </View>
@@ -631,7 +670,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   applyBtnText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -676,7 +715,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   aaBtnText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -759,7 +798,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   modalYesText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
   },

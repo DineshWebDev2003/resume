@@ -3,7 +3,10 @@ const isProd = !__DEV__;
 export const API_CONFIG = {
   ATS_ENGINE_ENDPOINT: "https://api.groq.com/openai/v1/chat/completions",
   GROQ_API_KEY: "YOUR_REMOTE_KEY",
-  GROQ_MODEL: "llama-3.3-70b-versatile",
+  // Groq retired all Llama IDs on 2026-08-16 (llama-3.3-70b-versatile = 404).
+  // Live free-tier replacements per Groq's migration guide, in order.
+  GROQ_MODEL: "openai/gpt-oss-120b",
+  GROQ_FALLBACK_MODELS: ["openai/gpt-oss-20b", "qwen/qwen3.6-27b"],
 
   // Google Gemini (Free Tier)
   GEMINI_API_KEY: "YOUR_REMOTE_KEY",

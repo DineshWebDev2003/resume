@@ -63,7 +63,8 @@ export interface ApplicationRecord {
   logo?: string;
   applyUrl?: string;
   source: string;
-  matchScore: number;
+  /** First 500 chars of the JD — lets later rescore without refetching. */
+  jobDescription?: string;  matchScore: number;
   atsScore: number | null;
   resumeId: string | null;
   resumeCustomized: boolean;
@@ -104,15 +105,20 @@ export function calculateMatchScore(
   const jobTokens = new Set(
     tokenize(`${job.title} ${job.description || ''}`),
   );
-  const roleTokens = unique(profile.roles.flatMap(tokenize));
   const skillTokens = new Set(tokenize(profile.skillsText || ''));
 
   let score = 0;
 
-  // 1. Role/title overlap (50)
-  if (roleTokens.length > 0) {
-    const hits = roleTokens.filter((t) => jobTokens.has(t)).length;
-    score += Math.round((hits / roleTokens.length) * 50);
+  // 1. Role/title overlap (50) — best matching role wins, so configuring
+  // 3 roles never dilutes the score.
+  const perRole = profile.roles.map((r) => {
+    const rt = tokenize(r);
+    if (rt.length === 0) return 0;
+    const hits = rt.filter((t) => jobTokens.has(t)).length;
+    return hits / rt.length;
+  });
+  if (perRole.length > 0) {
+    score += Math.round(Math.max(0, ...perRole) * 50);
   } else {
     score += 20; // No roles configured — neutral, eligibility still requires roles.
   }
@@ -319,6 +325,7 @@ export async function processJobForAutoApply(
     logo: job.logo,
     applyUrl: job.applyUrl,
     source: job.source,
+    jobDescription: (job.description || '').slice(0, 500),
   };
 
   try {
@@ -410,11 +417,35 @@ export async function processAutoApplyBatch(
     submit?: (job: AutoApplyJob, customization: ResumeCustomization) => Promise<void>;
   },
 ): Promise<ApplicationRecord[]> {
-  if (!deps.settings.enabled || deps.settings.paused) return [];
+  if (!deps.settings.enabled || deps.settings.paused) {
+    console.log('[AutoApply] Batch skipped: disabled or paused.');
+    return [];
+  }
   const fresh = jobs.filter((j) => j.id && !deps.existingIds.has(j.id)).slice(0, MAX_AUTO_APPLY_PER_DAY);
+  console.log(
+    `[AutoApply] Batch start: ${jobs.length} in, ${fresh.length} fresh ` +
+      `(${jobs.length - fresh.length} duplicates/cap-skipped).`,
+  );
   const out: ApplicationRecord[] = [];
   for (const job of fresh) {
-    out.push(await processJobForAutoApply(job, deps));
+    const rec = await processJobForAutoApply(job, deps);
+    console.log(
+      `[AutoApply] ${rec.status}: "${rec.title}" @ ${rec.company} ` +
+        `(match ${rec.matchScore}%) — ${rec.reason || 'no reason'}`,
+    );
+    out.push(rec);
+  }
+  const byStatus = out.reduce<Record<string, number>>((m, r) => {
+    m[r.status] = (m[r.status] || 0) + 1;
+    return m;
+  }, {});
+  console.log(`[AutoApply] Batch done: ${out.length} processed.`, byStatus);
+  const hits = (byStatus['Matched'] || 0) + (byStatus['Applied'] || 0);
+  if (out.length > 0 && hits === 0) {
+    console.log(
+      `[AutoApply] Hint: 0 matched at min ${deps.settings.minMatch}%. ` +
+        `Lower the minimum in Auto Apply settings or add a resume (skills = 30pts) to raise scores.`,
+    );
   }
   return out;
 }
@@ -456,6 +487,12 @@ export async function getAutoApplyContext(settings: AutoApplySettings): Promise<
           .join(' '),
       ].filter(Boolean);
       resume = { id: r.id, skillsText: parts.join(' ') };
+      console.log(
+        `[AutoApply] Using resume "${r.name || r.id}" ` +
+          `(${resume.skillsText.length} chars from skills/tools/languages/experience).`,
+      );
+    } else {
+      console.log('[AutoApply] No resume in storage — matching on titles only.');
     }
   } catch {}
 

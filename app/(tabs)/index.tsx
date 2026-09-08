@@ -22,7 +22,6 @@ import {
     Download,
     MapPin,
     Plus,
-    Sparkles,
 } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import {
@@ -294,7 +293,21 @@ export default function Dashboard() {
               <View style={styles.atsTopRow}>
                 <View style={styles.atsCardLeft}>
                   <View style={styles.atsBadge}>
-                    <Sparkles size={11} color="#fff" />
+                    <View
+                      style={[
+                        styles.atsDot,
+                        {
+                          backgroundColor:
+                            atsScore == null
+                              ? "#fff"
+                              : atsScore < 50
+                                ? "#ef4444"
+                                : atsScore < 80
+                                  ? "#f59e0b"
+                                  : "#10b981",
+                        },
+                      ]}
+                    />
                     <Text style={styles.atsBadgeText}>
                       {!atsScore
                         ? "AI ATS SCANNER"
@@ -327,9 +340,11 @@ export default function Dashboard() {
                   </Text>
                 </View>
                 <View style={styles.atsSideBadge}>
-                  <View style={styles.atsSideIcon}>
-                    <Sparkles size={18} color="#fff" />
-                  </View>
+                  <ExpoImage
+                    source={require("@/assets/images/cv.webp")}
+                    style={styles.atsSideImage}
+                    contentFit="contain"
+                  />
                   <Text style={styles.atsSideText}>
                     {atsScore === null ? "NOT\nSCANNED" : atsScore < 50 ? "NEEDS\nWORK" : atsScore < 80 ? "GOOD\nGOING" : "TOP\nRATED"}
                   </Text>
@@ -340,7 +355,17 @@ export default function Dashboard() {
                 <View
                   style={[
                     styles.atsProgressFill,
-                    { flex: (atsScore ?? 0) / 100 },
+                    {
+                      flex: (atsScore ?? 0) / 100,
+                      backgroundColor:
+                        atsScore == null
+                          ? "#fff"
+                          : atsScore < 50
+                            ? "#ef4444"
+                            : atsScore < 80
+                              ? "#f59e0b"
+                              : "#10b981",
+                    },
                   ]}
                 />
                 <View style={{ flex: 1 - (atsScore ?? 0) / 100 }} />
@@ -466,10 +491,12 @@ export default function Dashboard() {
                     router.push(
                       resume.type === "ats"
                         ? "/builder/ats"
-                        : ({
-                            pathname: "/builder/manual",
-                            params: { resumeId: resume.id },
-                          } as any),
+                        : resume.source === "upload"
+                          ? ({ pathname: "/resume-pdf-viewer", params: { resumeId: resume.id } } as any)
+                          : ({
+                              pathname: "/builder/manual",
+                              params: { resumeId: resume.id },
+                            } as any),
                     )
                   }
                 >
@@ -1110,7 +1137,7 @@ const styles = StyleSheet.create({
     ...Theme.shadow,
   },
   createBtnInlineText: {
-    color: "#000",
+    color: "#fff",
     fontWeight: "700",
     fontSize: 14,
   },
@@ -1227,6 +1254,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: "#fff",
   },
+  atsDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   atsScoreRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -1271,6 +1303,11 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.35)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  atsSideImage: {
+    width: 84,
+    height: 84,
+    borderRadius: 16,
   },
   atsSideText: {
     fontSize: 9,

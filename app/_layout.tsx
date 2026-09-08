@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { VoiceAssistantProvider } from "@/hooks/use-voice-assistant";
 import FloatingVoiceAssistant from "@/components/FloatingVoiceAssistant";
+import FloatingAutoApply from "@/components/FloatingAutoApply";
+import AutoApplyBackgroundRunner from "@/components/AutoApplyBackgroundRunner";
 import { Lato_400Regular, Lato_700Bold } from "@expo-google-fonts/lato";
 import {
     Montserrat_400Regular,
@@ -110,6 +112,8 @@ function RootLayoutNav() {
           </Stack>
 
           <FloatingVoiceAssistant />
+          <FloatingAutoApply />
+          <AutoApplyBackgroundRunner />
 
           {isSplashVisible && (
             <CustomSplashScreen

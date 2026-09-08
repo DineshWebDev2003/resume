@@ -11,6 +11,8 @@ export type AIProvider = 'groq' | 'gemini' | 'pollinations' | 'meta-llama';
  */
 type ProviderId = 'groq' | 'gemini' | 'pollinations' | 'meta-llama';
 let lastUsedProvider: ProviderId | null = null;
+/** Index into [GROQ_MODEL, ...GROQ_FALLBACK_MODELS] — advances permanently on 404. */
+let groqModelIdx = 0;
 const providerErrors: Partial<Record<ProviderId, string>> = {};
 
 export function getLastUsedProvider(): ProviderId | null {
@@ -174,45 +176,59 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
   }
 
   let lastError = null;
+  const MODELS = [API_CONFIG.GROQ_MODEL, ...(API_CONFIG.GROQ_FALLBACK_MODELS || [])];
   for (const apiKey of keysToTry) {
-    try {
-      const response = await fetch(API_CONFIG.ATS_ENGINE_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: API_CONFIG.GROQ_MODEL,
-          messages: messages,
-          temperature: 0.2,
-          response_format: jsonMode ? { type: "json_object" } : undefined
-        })
-      });
+    for (let m = groqModelIdx; m < MODELS.length; m++) {
+      try {
+        const response = await fetch(API_CONFIG.ATS_ENGINE_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: MODELS[m],
+            messages: messages,
+            temperature: 0.2,
+            response_format: jsonMode ? { type: "json_object" } : undefined
+          })
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        markSuccess('groq');
-        return data.choices[0].message.content;
+        if (response.ok) {
+          const data = await response.json();
+          groqModelIdx = m; // stick with the working model
+          markSuccess('groq');
+          return data.choices[0].message.content;
+        }
+
+        const errorData = await response.text();
+        console.log(`Groq ${MODELS[m]} key ${apiKey.substring(0, 8)}...: ${response.status} - ${errorData}`);
+
+        if (response.status === 404) {
+          // Model retired — advance permanently and try the next one.
+          console.log(`Groq model ${MODELS[m]} retired, switching to next...`);
+          groqModelIdx = m + 1;
+          lastError = new Error(`Groq model ${MODELS[m]} retired (404), trying next...`);
+          continue;
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          lastError = new Error("API Key credits exhausted or invalid. Please check your Groq console.");
+          break; // key dead — next key
+        }
+
+        if (response.status === 429) {
+          lastError = new Error("Groq Rate Limit (Credits) reached. Please try adding another key in Profile.");
+          break; // rate-limited — next key
+        }
+
+        lastError = new Error(`Groq Error ${response.status}: ${errorData.substring(0, 50)}`);
+        break; // unknown error — next key
+      } catch (e) {
+        console.log(`Groq Connection Failed for key ${apiKey.substring(0, 8)}...`, e);
+        lastError = e;
+        break; // connection failed — next key
       }
-      
-      const errorData = await response.text();
-      console.log(`Groq Key Failed (${apiKey.substring(0, 8)}...): ${response.status} - ${errorData}`);
-      
-      if (response.status === 401 || response.status === 403) {
-        lastError = new Error("API Key credits exhausted or invalid. Please check your Groq console.");
-        continue;
-      }
-      
-      if (response.status === 429) {
-        lastError = new Error("Groq Rate Limit (Credits) reached. Please try adding another key in Profile.");
-        continue;
-      }
-      
-      lastError = new Error(`Groq Error ${response.status}: ${errorData.substring(0, 50)}`);
-    } catch (e) {
-      console.log(`Groq Connection Failed for key ${apiKey.substring(0, 8)}...`, e);
-      lastError = e;
     }
   }
   

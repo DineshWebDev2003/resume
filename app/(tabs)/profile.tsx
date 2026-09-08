@@ -188,6 +188,8 @@ export default function ProfileScreen() {
   const [loadingIap, setLoadingIap] = useState(false);
   const [subBillingPeriod, setSubBillingPeriod] = useState<"monthly" | "weekly">("monthly");
   const [simulatedPaying, setSimulatedPaying] = useState(false);
+  const periodRef = React.useRef<"monthly" | "weekly">(subBillingPeriod);
+  periodRef.current = subBillingPeriod;
 
   useEffect(() => {
     if (activeModal === "My Referrals") {
@@ -214,25 +216,65 @@ export default function ProfileScreen() {
   }, [activeModal]);
 
   useEffect(() => {
+    let purchaseUpdate: any = null;
+    let purchaseError: any = null;
+    let IAPRef: any = null;
     const initIap = async () => {
       try {
         setLoadingIap(true);
         // Dynamically require react-native-iap to prevent any runtime compile-time errors in Expo Go
+        // v15 API: initConnection + fetchProducts({skus, type:'subs'})
         const IAP = require('react-native-iap');
-        if (!IAP || typeof IAP.initConnection !== 'function' || typeof IAP.getSubscriptions !== 'function') {
+        IAPRef = IAP;
+        if (!IAP || typeof IAP.initConnection !== 'function' || typeof IAP.fetchProducts !== 'function') {
           console.log("[IAP] Native billing module not available in this host (e.g. Expo Go). Falling back to sandbox.");
           return;
         }
-        
+
         const connected = await IAP.initConnection();
-        setIapConnected(connected);
+        setIapConnected(!!connected);
         if (connected) {
           try {
-            const products = await IAP.getSubscriptions({ skus: ['pro_plan'] });
+            const products = await IAP.fetchProducts({ skus: ['pro_plan'], type: 'subs' });
             setIapProducts(products || []);
             console.log("[IAP] Successfully fetched pro_plan subscription details:", products);
           } catch (err) {
             console.log("[IAP] Error fetching subscriptions details:", err);
+          }
+          // Real purchase verification: grant Pro ONLY on Play purchase events.
+          if (typeof IAP.purchaseUpdatedListener === 'function') {
+            purchaseUpdate = IAP.purchaseUpdatedListener(async (purchase: any) => {
+              try {
+                const pid = purchase?.productId || purchase?.id || (purchase?.productIds || [])[0];
+                console.log("[IAP] Purchase event:", pid, purchase?.transactionId);
+                if (typeof IAP.finishTransaction === 'function') {
+                  await IAP.finishTransaction({ purchase, isConsumable: false });
+                }
+                if (pid === 'pro_plan') {
+                  const { auth } = require('@/services/firebase');
+                  const u = auth?.currentUser;
+                  if (u) {
+                    const { doc, updateDoc } = require('firebase/firestore');
+                    const { db } = require('@/services/firebase');
+                    const period = periodRef.current;
+                    const expiry = new Date(Date.now() + (period === 'weekly' ? 7 : 30) * 24 * 60 * 60 * 1000).toISOString();
+                    await updateDoc(doc(db, 'users', u.uid), { isPro: true, subPlan: period, subExpiry: expiry });
+                    setIsPro(true);
+                    setSubPlan(period);
+                    setSubExpiry(expiry);
+                    Alert.alert("Success 🎉", "Elite Pro activated! Enjoy unlimited exports.");
+                    setActiveModal(null);
+                  }
+                }
+              } catch (e) {
+                console.log("[IAP] Finish/grant error:", e);
+              }
+            });
+          }
+          if (typeof IAP.purchaseErrorListener === 'function') {
+            purchaseError = IAP.purchaseErrorListener((err: any) => {
+              console.log("[IAP] Purchase error event:", err?.code, err?.message);
+            });
           }
         }
       } catch (e) {
@@ -242,6 +284,11 @@ export default function ProfileScreen() {
       }
     };
     initIap();
+    return () => {
+      try { purchaseUpdate?.remove(); } catch {}
+      try { purchaseError?.remove(); } catch {}
+      try { IAPRef?.endConnection?.(); } catch {}
+    };
   }, []);
 
   useEffect(() => {
@@ -774,10 +821,16 @@ export default function ProfileScreen() {
               )}
 
               {activeModal === "Subscription" && (() => {
+                // v15 product shape: id + subscriptionOfferDetailsAndroid
+                const findSubProduct = () =>
+                  iapProducts.find((p: any) => (p.id || p.productId) === 'pro_plan');
+                const findOffers = (subProduct: any) =>
+                  subProduct?.subscriptionOfferDetailsAndroid || subProduct?.subscriptionOfferDetails || [];
                 const getDisplayPrice = (period: "monthly" | "weekly") => {
-                  const subProduct = iapProducts.find((p: any) => p.productId === 'pro_plan');
-                  if (subProduct && subProduct.subscriptionOfferDetails) {
-                    const offer = subProduct.subscriptionOfferDetails.find(
+                  const subProduct = findSubProduct();
+                  const offers = findOffers(subProduct);
+                  if (offers.length > 0) {
+                    const offer = offers.find(
                       (o: any) => o.basePlanId === period
                     );
                     if (offer && offer.pricingPhases && offer.pricingPhases.pricingPhaseList && offer.pricingPhases.pricingPhaseList[0]) {
@@ -866,35 +919,37 @@ export default function ProfileScreen() {
                           disabled={simulatedPaying}
                           onPress={async () => {
                             const IAP = require('react-native-iap');
-                            if (iapConnected && IAP && typeof IAP.requestSubscription === 'function') {
+                            // v15: requestPurchase({request: {google: {...}}, type: 'subs'})
+                            if (iapConnected && IAP && typeof IAP.requestPurchase === 'function') {
                               try {
                                 setSimulatedPaying(true);
-                                const subProduct = iapProducts.find((p: any) => p.productId === 'pro_plan');
-                                if (subProduct && subProduct.subscriptionOfferDetails) {
-                                  const offer = subProduct.subscriptionOfferDetails.find(
+                                const subProduct = findSubProduct();
+                                const offers = findOffers(subProduct);
+                                if (offers.length > 0) {
+                                  const offer = offers.find(
                                     (o: any) => o.basePlanId === subBillingPeriod
                                   );
                                   if (offer) {
-                                    await IAP.requestSubscription({
-                                      sku: 'pro_plan',
-                                      subscriptionOffers: [{
-                                        sku: 'pro_plan',
-                                        offerToken: offer.offerToken,
-                                      }]
+                                    // Play sheet opens here — Pro is granted by the
+                                    // purchase listener ONLY after real payment.
+                                    await IAP.requestPurchase({
+                                      request: {
+                                        google: {
+                                          skus: ['pro_plan'],
+                                          subscriptionOffers: [{
+                                            sku: 'pro_plan',
+                                            offerToken: offer.offerToken,
+                                          }],
+                                        },
+                                      },
+                                      type: 'subs',
                                     });
-                                    Alert.alert("Success", "Subscription processed successfully!");
+                                    console.log("[IAP] Billing sheet launched, awaiting purchase event...");
                                   } else {
                                     Alert.alert("Error", `Base plan ${subBillingPeriod} offer details not found.`);
                                   }
                                 } else {
-                                  // Fallback direct request
-                                  await IAP.requestSubscription({
-                                    sku: 'pro_plan',
-                                    subscriptionOffers: [{
-                                      sku: 'pro_plan',
-                                      offerToken: '', 
-                                    }]
-                                  });
+                                  Alert.alert("Error", "No subscription offers returned from Play. Check Play Console product setup.");
                                 }
                               } catch (e: any) {
                                 console.log("[IAP] Purchase error:", e);
@@ -935,6 +990,28 @@ export default function ProfileScreen() {
                               Subscribe Now ({pricing.country})
                             </Text>
                           )}
+                        </TouchableOpacity>
+                        {/* Test helper: remove Pro from this account for fresh purchase tests */}
+                        <TouchableOpacity
+                          onPress={async () => {
+                            if (!user) return;
+                            try {
+                              const { doc, updateDoc } = require('firebase/firestore');
+                              const { db } = require('@/services/firebase');
+                              await updateDoc(doc(db, 'users', user.uid), { isPro: false, subPlan: '', subExpiry: '' });
+                              setIsPro(false);
+                              setSubPlan('');
+                              setSubExpiry('');
+                              Alert.alert("Reset done", "Pro removed from this account. You can now test a fresh purchase.");
+                            } catch (e: any) {
+                              Alert.alert("Reset failed", e?.message || "Remove isPro in Firebase Console instead.");
+                            }
+                          }}
+                          style={{ marginTop: 12, alignItems: 'center', padding: 10 }}
+                        >
+                          <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>
+                            Testing? Remove Pro access
+                          </Text>
                         </TouchableOpacity>
                       </LinearGradient>
 
@@ -1032,7 +1109,7 @@ export default function ProfileScreen() {
                               style={{
                                 fontSize: 12,
                                 fontWeight: "800",
-                                color: selected ? "#000" : colors.text,
+                                color: selected ? "#fff" : colors.text,
                               }}
                             >
                               {opt.label}

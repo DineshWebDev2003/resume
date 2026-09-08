@@ -18,6 +18,8 @@ export interface UserResume {
   lastModified: number;
   snapshotUri?: string; // New field for image preview
   resumeNumber?: string; // New field for #001 format
+  fileUri?: string; // Original uploaded file (PDF) — shown as-is, never restyled
+  source?: 'builder' | 'upload'; // 'upload' = older resume PDF, view original
 }
 
 export const saveResume = async (

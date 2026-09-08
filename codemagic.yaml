@@ -98,6 +98,64 @@ workflows:
         recipients:
           - your-email@example.com
 
+  android-aab:
+    name: Android AAB Only
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      node: latest
+      groups:
+        - google_play # Defined in Codemagic UI for signing
+      vars:
+        PACKAGE_NAME: "com.resumeelite.app"
+    scripts:
+      - name: Install dependencies
+        script: npm install
+      - name: Fix Image Assets (sips)
+        script: |
+          for file in assets/images/*.png; do
+            sips -s format png "$file" --out "$file" || true
+          done
+      - name: Inject API Keys
+        script: |
+          sed -i '' "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts
+      - name: Expo Prebuild
+        script: CI=1 npx expo prebuild --clean
+      - name: Prepare Release Keystore
+        script: |
+          if [ -n "$CM_KEYSTORE_BASE64" ]; then
+            echo "Decoding Base64 Keystore from environment variables..."
+            echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore
+            export CM_KEYSTORE_PATH="android/app/release.keystore"
+            export CM_KEY_ALIAS="key"
+            export CM_KEYSTORE_PASSWORD="resume123"
+            export CM_KEY_PASSWORD="resume123"
+          fi
+          if [ -n "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
+            keytool -list -v -keystore "$CM_KEYSTORE_PATH" -alias "$CM_KEY_ALIAS" -storepass "$CM_KEYSTORE_PASSWORD" | grep SHA1
+          else
+            echo "Release keystore path not found in environment. Ensure Android code signing is enabled in Codemagic UI."
+          fi
+      - name: Build Release AAB Only
+        script: |
+          cd android
+          chmod +x gradlew
+          if [ -n "$CM_KEYSTORE_BASE64" ]; then
+            ./gradlew bundleRelease \
+              -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+              -Pandroid.injected.signing.store.password=resume123 \
+              -Pandroid.injected.signing.key.alias=key \
+              -Pandroid.injected.signing.key.password=resume123
+          else
+            ./gradlew bundleRelease
+          fi
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+
   android-release:
     name: Android Release Build
     max_build_duration: 60

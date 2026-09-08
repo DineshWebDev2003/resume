@@ -238,6 +238,15 @@ export default function ProfileScreen() {
             const products = await IAP.fetchProducts({ skus: ['pro_plan'], type: 'subs' });
             setIapProducts(products || []);
             console.log("[IAP] Successfully fetched pro_plan subscription details:", products);
+            try {
+              const p: any = (products || [])[0];
+              const offers = p?.subscriptionOfferDetailsAndroid || p?.subscriptionOfferDetails || [];
+              console.log("[IAP] Offers:", offers.map((o: any) => ({
+                basePlanId: o.basePlanId,
+                hasToken: !!o.offerToken,
+                price: o?.pricingPhases?.pricingPhaseList?.[0]?.formattedPrice,
+              })));
+            } catch {}
           } catch (err) {
             console.log("[IAP] Error fetching subscriptions details:", err);
           }
@@ -825,14 +834,25 @@ export default function ProfileScreen() {
                 const findSubProduct = () =>
                   iapProducts.find((p: any) => (p.id || p.productId) === 'pro_plan');
                 const findOffers = (subProduct: any) =>
-                  subProduct?.subscriptionOfferDetailsAndroid || subProduct?.subscriptionOfferDetails || [];
+                  subProduct?.subscriptionOfferDetailsAndroid ||
+                  subProduct?.subscriptionOfferDetails || [];
+                // Play basePlanIds may differ from our labels — match smartly, else first offer.
+                const findOffer = (offers: any[], period: "monthly" | "weekly") => {
+                  if (!offers.length) return null;
+                  const keys = period === "monthly" ? ["month"] : ["week"];
+                  return (
+                    offers.find((o: any) => o.basePlanId === period) ||
+                    offers.find((o: any) =>
+                      keys.some((k) => String(o.basePlanId || "").toLowerCase().includes(k)),
+                    ) ||
+                    offers[0]
+                  );
+                };
                 const getDisplayPrice = (period: "monthly" | "weekly") => {
                   const subProduct = findSubProduct();
                   const offers = findOffers(subProduct);
                   if (offers.length > 0) {
-                    const offer = offers.find(
-                      (o: any) => o.basePlanId === period
-                    );
+                    const offer = findOffer(offers, period);
                     if (offer && offer.pricingPhases && offer.pricingPhases.pricingPhaseList && offer.pricingPhases.pricingPhaseList[0]) {
                       return offer.pricingPhases.pricingPhaseList[0].formattedPrice;
                     }
@@ -926,10 +946,16 @@ export default function ProfileScreen() {
                                 const subProduct = findSubProduct();
                                 const offers = findOffers(subProduct);
                                 if (offers.length > 0) {
-                                  const offer = offers.find(
-                                    (o: any) => o.basePlanId === subBillingPeriod
-                                  );
+                                  const offer = findOffer(offers, subBillingPeriod);
                                   if (offer) {
+                                    const offerToken = offer.offerToken || offer.offerTokenAndroid || null;
+                                    const basePlanId = offer.basePlanId || '';
+                                    console.log("[IAP] Selected offer:", { basePlanId, hasToken: !!offerToken, token: offerToken ? `${offerToken.slice(0,8)}...` : 'NULL' });
+                                    if (!offerToken) {
+                                      Alert.alert("Error", "Subscription offer has no token. Check Play Console offer setup.");
+                                      setSimulatedPaying(false);
+                                      return;
+                                    }
                                     // Play sheet opens here — Pro is granted by the
                                     // purchase listener ONLY after real payment.
                                     await IAP.requestPurchase({
@@ -938,7 +964,7 @@ export default function ProfileScreen() {
                                           skus: ['pro_plan'],
                                           subscriptionOffers: [{
                                             sku: 'pro_plan',
-                                            offerToken: offer.offerToken,
+                                            offerToken,
                                           }],
                                         },
                                       },

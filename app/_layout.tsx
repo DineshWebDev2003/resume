@@ -23,6 +23,7 @@ import {
     DarkTheme,
     ThemeProvider
 } from "@react-navigation/native";
+import { signOut } from "@/services/auth";
 import { Buffer } from "buffer";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
@@ -67,8 +68,6 @@ function RootLayoutNav() {
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === "(tabs)";
-
     if (
       !user &&
       segments[0] !== "login" &&
@@ -78,15 +77,9 @@ function RootLayoutNav() {
     ) {
       // Redirect to the login page if the user is not authenticated
       router.replace("/login");
-    } else if (user) {
-      // If user has not completed onboarding and is not already on it
-      if (userProfile && userProfile.onboardingCompleted === false && segments[0] !== "onboarding") {
-        router.replace("/onboarding");
-      } 
-      // If user is authenticated and on login screen (and onboarding is done or loading)
-      else if (segments[0] === "login" && (!userProfile || userProfile.onboardingCompleted !== false)) {
-        router.replace("/(tabs)");
-      }
+    } else if (user && segments[0] === "login") {
+      // Authenticated user on login screen moves to main app tabs
+      router.replace("/(tabs)");
     }
   }, [user, userProfile, loading, segments]);
 
@@ -101,12 +94,14 @@ function RootLayoutNav() {
           />
           <StatusBar
             style={isDark ? "light" : "dark"}
-            backgroundColor={isDark ? colors.background : Theme.colors.primary}
+            backgroundColor="transparent"
             translucent={true}
           />
-          <Stack screenOptions={{ headerShown: false }}>
+          <Stack screenOptions={{ headerShown: false }} initialRouteName="login">
             <Stack.Screen name="login" />
             <Stack.Screen name="onboarding" />
+            <Stack.Screen name="choose-role" />
+            <Stack.Screen name="recruiter" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="modal" options={{ presentation: "modal" }} />
           </Stack>

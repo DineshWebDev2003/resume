@@ -11,7 +11,8 @@
 import { GlassCard } from "@/components/glass-card";
 import { generateResumeHtml } from "@/components/resume-html-generator";
 import { getLimits } from "@/constants/limits";
-import { Colors, Theme } from "@/constants/theme";
+import { C, Colors, Theme } from "@/constants/theme";
+import Svg, { Path } from "react-native-svg";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { callAI } from "@/services/ai";
 import { auth, db } from "@/services/firebase";
@@ -20,10 +21,10 @@ import { getResumes, saveResume } from "@/utils/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
-import * as IntentLauncher from "expo-intent-launcher";
 import * as Print from "expo-print";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
+import { exportToPDF } from "@/utils/resume-exporter";
 import { doc, getDoc } from "firebase/firestore";
 import {
   ArrowLeft,
@@ -59,6 +60,7 @@ import {
   FlatList,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -155,6 +157,7 @@ interface ResumeData {
   interests?: string;
   certifications?: any[];
   links?: any[];
+  _hiddenSections?: Record<string, boolean>;
 }
 
 // We now use getLimits(selectedTemplate) instead of static FIELD_LIMITS
@@ -855,8 +858,8 @@ export default function ManualBuilderScreen() {
   }, [importData, initialData]);
 
   const THEME_COLORS = [
-    "#1e293b",
-    "#0f172a",
+    "#573353",
+    "#FDA758",
     "#3b82f6",
     "#d946ef",
     "#10b981",
@@ -1246,6 +1249,7 @@ export default function ManualBuilderScreen() {
   const getRenderData = React.useCallback((): ResumeData => {
     return {
       ...data,
+      _hiddenSections: hiddenSections,
       experience:
         hiddenSections.experience ||
         !data.experience ||
@@ -1301,61 +1305,17 @@ export default function ManualBuilderScreen() {
     if (isGenerating) return;
     try {
       setIsGenerating(true);
-      const html = generateResumeHtml(
+      const safeName = `Resume_${(data.name || "Resume").replace(/[^a-zA-Z0-9_-]/g, "_")}_${Date.now()}.pdf`;
+      await exportToPDF(
         getRenderData(),
         selectedTemplate,
         primaryColor,
         "Inter",
-        true,
+        safeName,
       );
-
-      const { uri } = await Print.printToFileAsync({
-        html,
-        width: 595,
-        height: 842,
-        margins: { left: 0, right: 0, top: 0, bottom: 0 },
-      });
-
-      const fileName = `Resume_${data.name.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
-      const newPath = `${FileSystem.documentDirectory}${fileName}`;
-
-      await FileSystem.copyAsync({
-        from: uri,
-        to: newPath,
-      });
-
-      if (Platform.OS === "android") {
-        try {
-          const contentUri = await FileSystem.getContentUriAsync(newPath);
-          await IntentLauncher.startActivityAsync(
-            "android.intent.action.VIEW",
-            {
-              data: contentUri,
-              flags: 1,
-              type: "application/pdf",
-            },
-          );
-        } catch (launcherErr) {
-          console.log(
-            "IntentLauncher failed, falling back to sharing",
-            launcherErr,
-          );
-          await Sharing.shareAsync(newPath, {
-            mimeType: "application/pdf",
-            UTI: "com.adobe.pdf",
-            dialogTitle: "Download Resume",
-          });
-        }
-      } else {
-        await Sharing.shareAsync(newPath, {
-          mimeType: "application/pdf",
-          UTI: "com.adobe.pdf",
-          dialogTitle: "Download Resume",
-        });
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      Alert.alert("Error", "Failed to generate PDF.");
+      Alert.alert("Error", err?.message || "Failed to generate PDF.");
     } finally {
       setIsGenerating(false);
     }
@@ -1842,12 +1802,12 @@ export default function ManualBuilderScreen() {
                         borderRightColor: colors.glassBorder,
                       }}
                     >
-                      <Edit2 size={14} color="#8b5cf6" />
+                      <Edit2 size={14} color="#FDA758" />
                       <Text
                         style={{
                           fontSize: 12,
                           fontWeight: "800",
-                          color: "#8b5cf6",
+                          color: "#FDA758",
                         }}
                       >
                         Rename
@@ -1900,7 +1860,7 @@ export default function ManualBuilderScreen() {
                   width: 4,
                   height: 18,
                   borderRadius: 2,
-                  backgroundColor: "#8b5cf6",
+                  backgroundColor: "#FDA758",
                 }}
               />
               <Text
@@ -1910,14 +1870,14 @@ export default function ManualBuilderScreen() {
               </Text>
               <View
                 style={{
-                  backgroundColor: "#8b5cf620",
+                  backgroundColor: "rgba(253, 167, 88, 0.2)",
                   borderRadius: 8,
                   paddingHorizontal: 8,
                   paddingVertical: 2,
                 }}
               >
                 <Text
-                  style={{ fontSize: 11, fontWeight: "800", color: "#8b5cf6" }}
+                  style={{ fontSize: 11, fontWeight: "800", color: "#FDA758" }}
                 >
                   {historyList.length}
                 </Text>
@@ -2005,12 +1965,12 @@ export default function ManualBuilderScreen() {
                         width: 38,
                         height: 38,
                         borderRadius: 12,
-                        backgroundColor: "#8b5cf620",
+                        backgroundColor: "rgba(253, 167, 88, 0.2)",
                         alignItems: "center",
                         justifyContent: "center",
                       }}
                     >
-                      <History size={17} color="#8b5cf6" />
+                      <History size={17} color="#FDA758" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text
@@ -2035,7 +1995,7 @@ export default function ManualBuilderScreen() {
                     </View>
                     <View
                       style={{
-                        backgroundColor: "#8b5cf615",
+                        backgroundColor: "rgba(253, 167, 88, 0.15)",
                         borderRadius: 8,
                         paddingHorizontal: 8,
                         paddingVertical: 3,
@@ -2045,7 +2005,7 @@ export default function ManualBuilderScreen() {
                         style={{
                           fontSize: 10,
                           fontWeight: "800",
-                          color: "#8b5cf6",
+                          color: "#FDA758",
                         }}
                       >
                         #{index + 1}
@@ -2070,15 +2030,15 @@ export default function ManualBuilderScreen() {
                         paddingVertical: 11,
                         borderRightWidth: 1,
                         borderRightColor: colors.glassBorder,
-                        backgroundColor: "#8b5cf608",
+                        backgroundColor: "rgba(253, 167, 88, 0.08)",
                       }}
                     >
-                      <History size={14} color="#8b5cf6" />
+                      <History size={14} color="#FDA758" />
                       <Text
                         style={{
                           fontSize: 12,
                           fontWeight: "800",
-                          color: "#8b5cf6",
+                          color: "#FDA758",
                         }}
                       >
                         Restore
@@ -2097,12 +2057,12 @@ export default function ManualBuilderScreen() {
                         borderRightColor: colors.glassBorder,
                       }}
                     >
-                      <Edit2 size={14} color="#8b5cf6" />
+                      <Edit2 size={14} color="#FDA758" />
                       <Text
                         style={{
                           fontSize: 12,
                           fontWeight: "800",
-                          color: "#8b5cf6",
+                          color: "#FDA758",
                         }}
                       >
                         Rename
@@ -2142,9 +2102,36 @@ export default function ManualBuilderScreen() {
 
   const previewHtml = React.useMemo(
     () =>
-      generateResumeHtml(data, selectedTemplate, primaryColor, "Inter", false),
-    [data, primaryColor, selectedTemplate],
+      generateResumeHtml(getRenderData(), selectedTemplate, primaryColor, "Inter", false),
+    [getRenderData, primaryColor, selectedTemplate],
   );
+
+  // Bottom scooped tab bar mathematics (matching App TabBar UI)
+  const bottomPad = Math.max(insets.bottom, 10);
+  const barTop = 22;
+  const barHeight = 58;
+  const totalBarHeight = barTop + barHeight + bottomPad;
+
+  const cx = SCREEN_WIDTH / 2;
+  const biteDepth = 36;
+  const biteBottom = barTop + biteDepth; // 58
+  const p1x = cx - 56;
+  const c1x = cx - 36;
+  const c2x = cx - 26;
+  const c3x = cx + 26;
+  const c4x = cx + 36;
+  const p2x = cx + 56;
+
+  const bottomBarSvgPath = `
+    M 0 ${barTop}
+    L ${p1x} ${barTop}
+    C ${c1x} ${barTop}, ${c2x} ${biteBottom}, ${cx} ${biteBottom}
+    C ${c3x} ${biteBottom}, ${c4x} ${barTop}, ${p2x} ${barTop}
+    L ${SCREEN_WIDTH} ${barTop}
+    L ${SCREEN_WIDTH} ${totalBarHeight}
+    L 0 ${totalBarHeight}
+    Z
+  `;
 
   return (
     <View
@@ -2159,7 +2146,7 @@ export default function ManualBuilderScreen() {
             onPress={() => router.back()}
             style={styles.headerBtn}
           >
-            <ArrowLeft size={22} color="#8b5cf6" />
+            <ArrowLeft size={22} color="#FDA758" />
           </TouchableOpacity>
 
           <View>
@@ -2178,13 +2165,13 @@ export default function ManualBuilderScreen() {
             onPress={() => router.push('/builder/voice')}
             style={styles.headerBtn}
           >
-            <MessageSquare size={20} color="#8b5cf6" />
+            <MessageSquare size={20} color="#FDA758" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowSaveModal(true)}
             style={styles.headerBtn}
           >
-            <Save size={18} color="#8b5cf6" />
+            <Save size={18} color="#FDA758" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleDownloadPDF}
@@ -2192,9 +2179,9 @@ export default function ManualBuilderScreen() {
             style={styles.headerBtn}
           >
             {isGenerating ? (
-              <ActivityIndicator size="small" color="#8b5cf6" />
+              <ActivityIndicator size="small" color="#FDA758" />
             ) : (
-              <Download size={18} color="#8b5cf6" />
+              <Download size={18} color="#FDA758" />
             )}
           </TouchableOpacity>
         </View>
@@ -2416,41 +2403,6 @@ export default function ManualBuilderScreen() {
                       )}
                     </View>
                   )}
-                </View>
-
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    { color: colors.text, marginTop: 20 },
-                  ]}
-                >
-                  Elite Theme
-                </Text>
-                <View
-                  style={[
-                    styles.sectionCard,
-                    {
-                      backgroundColor: colors.surface,
-                      flexDirection: "row",
-                      gap: 12,
-                      flexWrap: "wrap",
-                    },
-                  ]}
-                >
-                  {THEME_COLORS.map((color) => (
-                    <TouchableOpacity
-                      key={color}
-                      onPress={() => {
-                        setPrimaryColor(color);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      }}
-                      style={[
-                        styles.colorCircle,
-                        { backgroundColor: color },
-                        primaryColor === color && styles.activeColorCircle,
-                      ]}
-                    />
-                  ))}
                 </View>
 
                 {/* Section Visibility Controls */}
@@ -3402,105 +3354,142 @@ export default function ManualBuilderScreen() {
         </ScrollView>
       )}
 
-      {/* Floating Bottom Tab Bar */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: Math.max(insets.bottom, 15) + 10,
-          left: 30,
-          right: 30,
-        }}
-      >
-        <GlassCard style={{ padding: 6, borderRadius: 30 }}>
-          <View
-            style={{ flexDirection: "row", justifyContent: "space-between" }}
+      {/* Bottom Scooped Tab Bar matching App TabBar UI */}
+      <View style={[styles.bottomBarWrap, { height: totalBarHeight }]} pointerEvents="box-none">
+        {/* SVG Bitten Rectangle Background */}
+        <View style={[StyleSheet.absoluteFill, styles.bottomBarShadow]} pointerEvents="none">
+          <Svg width={SCREEN_WIDTH} height={totalBarHeight} style={StyleSheet.absoluteFill}>
+            <Path
+              d={bottomBarSvgPath}
+              fill="#FFFFFF"
+              stroke="rgba(87, 51, 83, 0.08)"
+              strokeWidth={1}
+            />
+          </Svg>
+        </View>
+
+        {/* Floating Orange Preview Ball in the Center Bite */}
+        <View style={[styles.bottomBarFabWrap, { left: cx - 27.5 }]} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Preview Resume"
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setActiveTab((prev) => (prev === "preview" ? "edit" : "preview"));
+            }}
+            style={({ pressed }) => [
+              styles.bottomBarFab,
+              activeTab === "preview" && styles.bottomBarFabActive,
+              {
+                transform: [{ scale: pressed ? 0.92 : activeTab === "preview" ? 1.05 : 1 }],
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
           >
-            <TouchableOpacity
-              onPress={() => setActiveTab("edit")}
-              style={{
-                flex: activeTab === "edit" ? 1.5 : 1,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                paddingVertical: 12,
-                borderRadius: 24,
-                backgroundColor:
-                  activeTab === "edit" ? Theme.colors.primary : "transparent",
-              }}
-            >
-              <Edit2
-                size={18}
-                color={activeTab === "edit" ? "#fff" : colors.textMuted}
-              />
-              {activeTab === "edit" && (
-                <Text
-                  style={{ fontSize: 13, fontWeight: "800", color: "#fff" }}
-                >
-                  Editor
-                </Text>
-              )}
-            </TouchableOpacity>
+            <Eye
+              size={26}
+              color="#FFFFFF"
+              strokeWidth={activeTab === "preview" ? 2.8 : 2.2}
+            />
+          </Pressable>
+        </View>
 
-            <TouchableOpacity
-              onPress={() => setActiveTab("preview")}
-              style={{
-                flex: activeTab === "preview" ? 1.5 : 1,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                paddingVertical: 12,
-                borderRadius: 24,
-                backgroundColor:
-                  activeTab === "preview"
-                    ? Theme.colors.primary
-                    : "transparent",
-              }}
-            >
-              <Eye
-                size={18}
-                color={activeTab === "preview" ? "#fff" : colors.textMuted}
-              />
-              {activeTab === "preview" && (
-                <Text
-                  style={{ fontSize: 13, fontWeight: "800", color: "#fff" }}
-                >
-                  Preview
-                </Text>
-              )}
-            </TouchableOpacity>
+        {/* Interactive Navigation Slots */}
+        <View
+          style={[styles.bottomBarRow, { top: barTop + 6, bottom: bottomPad }]}
+          pointerEvents="box-none"
+        >
+          {/* Slot 0: Editor */}
+          <Pressable
+            style={styles.bottomBarSlot}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab("edit");
+            }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Editor"
+          >
+            {({ pressed }) => {
+              const isActive = activeTab === "edit";
+              return (
+                <View style={[styles.bottomBarTabContent, { opacity: pressed ? 0.7 : 1 }]}>
+                  <Edit2
+                    size={22}
+                    color={isActive ? C.primary : "#573353"}
+                    strokeWidth={isActive ? 2.5 : 2}
+                    style={{ opacity: isActive ? 1 : 0.45 }}
+                  />
+                  <Text
+                    style={[
+                      styles.bottomBarSlotLabel,
+                      {
+                        color: isActive ? C.primary : "#573353",
+                        fontWeight: isActive ? "800" : "600",
+                        opacity: isActive ? 1 : 0.55,
+                      },
+                    ]}
+                  >
+                    Editor
+                  </Text>
+                </View>
+              );
+            }}
+          </Pressable>
 
-            <TouchableOpacity
-              onPress={() => setActiveTab("history")}
+          {/* Middle Spacer for the Center Bite Notch */}
+          <View style={styles.bottomBarCenterSpacer} pointerEvents="none">
+            <Text
               style={{
-                flex: activeTab === "history" ? 1.5 : 1,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                paddingVertical: 12,
-                borderRadius: 24,
-                backgroundColor:
-                  activeTab === "history"
-                    ? Theme.colors.primary
-                    : "transparent",
+                fontSize: 11,
+                fontWeight: activeTab === "preview" ? "800" : "600",
+                color: activeTab === "preview" ? C.primary : "rgba(87, 51, 83, 0.45)",
+                marginTop: 34,
+                textAlign: "center",
               }}
             >
-              <History
-                size={18}
-                color={activeTab === "history" ? "#fff" : colors.textMuted}
-              />
-              {activeTab === "history" && (
-                <Text
-                  style={{ fontSize: 13, fontWeight: "800", color: "#fff" }}
-                >
-                  History
-                </Text>
-              )}
-            </TouchableOpacity>
+              Preview
+            </Text>
           </View>
-        </GlassCard>
+
+          {/* Slot 1: History */}
+          <Pressable
+            style={styles.bottomBarSlot}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab("history");
+            }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="History"
+          >
+            {({ pressed }) => {
+              const isActive = activeTab === "history";
+              return (
+                <View style={[styles.bottomBarTabContent, { opacity: pressed ? 0.7 : 1 }]}>
+                  <History
+                    size={22}
+                    color={isActive ? C.primary : "#573353"}
+                    strokeWidth={isActive ? 2.5 : 2}
+                    style={{ opacity: isActive ? 1 : 0.45 }}
+                  />
+                  <Text
+                    style={[
+                      styles.bottomBarSlotLabel,
+                      {
+                        color: isActive ? C.primary : "#573353",
+                        fontWeight: isActive ? "800" : "600",
+                        opacity: isActive ? 1 : 0.55,
+                      },
+                    ]}
+                  >
+                    History
+                  </Text>
+                </View>
+              );
+            }}
+          </Pressable>
+        </View>
       </View>
 
       {/* Save Version Modal */}
@@ -3855,11 +3844,11 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#8b5cf615',
+    backgroundColor: 'rgba(253, 167, 88, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: "800", color: '#4a3f6b' },
+  headerTitle: { fontSize: 16, fontWeight: "800", color: '#573353' },
   headerStatusRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -3872,7 +3861,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: "#10b981",
   },
-  headerSub: { fontSize: 11, fontWeight: "600", color: '#9a8aaa' },
+  headerSub: { fontSize: 11, fontWeight: "600", color: 'rgba(87, 51, 83, 0.55)' },
   saveBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -4105,5 +4094,74 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 4,
     marginBottom: 8,
+  },
+  bottomBarWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: "visible",
+    elevation: 12,
+    zIndex: 9999,
+  },
+  bottomBarShadow: {
+    shadowColor: "#573353",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  bottomBarFabWrap: {
+    position: "absolute",
+    top: -2,
+    width: 55,
+    alignItems: "center",
+    zIndex: 10000,
+  },
+  bottomBarFab: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: C.primaryDeep,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  bottomBarFabActive: {
+    borderWidth: 2.5,
+    borderColor: "#FFFFFF",
+    shadowOpacity: 0.6,
+  },
+  bottomBarRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingHorizontal: 16,
+  },
+  bottomBarSlot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+  },
+  bottomBarTabContent: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomBarCenterSpacer: {
+    width: 72,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomBarSlotLabel: {
+    fontSize: 11,
+    letterSpacing: -0.2,
+    marginTop: 3,
   },
 });

@@ -7,7 +7,7 @@ import { getAutoApplyContext, processAutoApplyBatch } from '@/services/autoApply
 import { Colors, Theme } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useJobStore } from '@/hooks/use-job-store';
-import { getMyApplications, getAutoApplyRecords, saveAutoApplyRecord, cleanupStaleAutoMirrors } from '@/services/firestore';
+import { getMyApplications, getAutoApplyRecords, saveAutoApplyRecord, cleanupStaleAutoMirrors, updateJobApplicationStatus } from '@/services/firestore';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
   ChevronLeft,
@@ -18,7 +18,9 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
-  Zap
+  Zap,
+  Mic,
+  Sparkles,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -361,6 +363,91 @@ export default function MyJobsScreen() {
                         })()}
                       </Text>
                     </View>
+                  </View>
+
+                  {/* Status Pipeline / Funnel */}
+                  <View style={styles.statusToggleRow}>
+                    {(['Applied', 'Interview', 'Offer', 'Archived'] as const).map((st) => {
+                      const active = (job.status || 'Applied') === st;
+                      return (
+                        <TouchableOpacity
+                          key={st}
+                          style={[
+                            styles.statusPillBtn,
+                            active && {
+                              backgroundColor:
+                                st === 'Offer'
+                                  ? '#10B981'
+                                  : st === 'Interview'
+                                  ? '#8B5CF6'
+                                  : st === 'Archived'
+                                  ? '#6B7280'
+                                  : '#F59E0B',
+                            },
+                          ]}
+                          onPress={async () => {
+                            try {
+                              if (job.id) {
+                                await updateJobApplicationStatus(job.id, st);
+                              }
+                              setApplications((prev) =>
+                                prev.map((a) => (a.id === job.id ? { ...a, status: st } : a))
+                              );
+                            } catch (err: any) {
+                              console.log('Update app status failed:', err);
+                            }
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.statusPillBtnText,
+                              active && { color: '#ffffff', fontWeight: '800' },
+                            ]}
+                          >
+                            {st}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* AI Quick Actions: Mock Interview & Resume Tailor */}
+                  <View style={styles.jobActionsRow}>
+                    <TouchableOpacity
+                      style={styles.interviewActionBtn}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/builder/voice',
+                          params: {
+                            mode: 'interview',
+                            role: job.title,
+                            company: job.company,
+                            description: job.description || '',
+                          },
+                        });
+                      }}
+                    >
+                      <Mic size={13} color="#8B5CF6" />
+                      <Text style={styles.interviewActionText}>AI Mock Interview</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.tailorActionBtn}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/builder/ats',
+                          params: {
+                            targetRole: job.title,
+                            company: job.company,
+                          },
+                        });
+                      }}
+                    >
+                      <Sparkles size={13} color="#FDA758" />
+                      <Text style={styles.tailorActionText}>Tailor Resume</Text>
+                    </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
               </Animated.View>
@@ -765,4 +852,67 @@ const styles = StyleSheet.create({
   },
   scanBtnText: { color: '#fff', fontWeight: '900', fontSize: 14 },
   scanHint: { fontSize: 11, lineHeight: 16, marginTop: 8, textAlign: 'center' },
+  statusToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  statusPillBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  statusPillBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#888',
+  },
+  jobActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  interviewActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.25)',
+  },
+  interviewActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#8B5CF6',
+  },
+  tailorActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(253, 167, 88, 0.12)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(253, 167, 88, 0.3)',
+  },
+  tailorActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FDA758',
+  },
 });

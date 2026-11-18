@@ -58,7 +58,7 @@ export default function LinkedInSyncScreen() {
   const subSteps = [
     { label: 'Initializing Intelligent Scraper...', icon: ShieldCheck, color: '#0077B5' },
     { label: 'Navigating to Profile Node...', icon: Search, color: '#10b981' },
-    { label: 'Extracting Structural Metadata...', icon: Cpu, color: '#8b5cf6' },
+    { label: 'Extracting Structural Metadata...', icon: Cpu, color: '#FDA758' },
     { label: 'AI Mapping Professional DNA...', icon: BrainCircuit, color: '#f59e0b' },
     { label: 'Synthesizing Resume Dataset...', icon: FileJson, color: '#ec4899' },
   ];
@@ -393,7 +393,7 @@ export default function LinkedInSyncScreen() {
 
             {isBlocked && (
               <TouchableOpacity style={styles.assistantBtn} onPress={() => setShowAssistant(true)}>
-                <LinearGradient colors={['#8b5cf6', '#6d28d9']} style={styles.syncBtnGradient}>
+                <LinearGradient colors={['#FDA758', '#FC9D45']} style={styles.syncBtnGradient}>
                   <Cpu size={18} color="#fff" />
                   <Text style={styles.syncBtnText}>Launch Sync Assistant</Text>
                 </LinearGradient>
@@ -825,7 +825,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     padding: 12,
-    backgroundColor: '#8b5cf610',
+    backgroundColor: 'rgba(253, 167, 88, 0.12)',
     marginHorizontal: 16,
     borderRadius: 12,
     marginBottom: 10,

@@ -17,12 +17,13 @@ import {
   Plus,
   Upload,
   ShieldCheck,
-  Target
+  Target,
+  Share2,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { getResumes, deleteResume, saveResume } from '@/utils/storage';
 import { getAtsHistory } from '@/services/firestore';
-import { exportToPDF } from '@/utils/resume-exporter';
+import { exportToPDF, shareResumeToWhatsApp, shareResumeViaEmail } from '@/utils/resume-exporter';
 import { ActivityIndicator } from 'react-native';
 
 const formatDate = (timestamp: any) => {
@@ -115,6 +116,52 @@ export default function MyResumesScreen() {
       loadData();
     }, [reload])
   );
+
+  const handleShareOptions = async (resume: any) => {
+    try {
+      let pdfUri = resume.pdfUri;
+      if (!pdfUri && resume.data) {
+        pdfUri = await exportToPDF(
+          resume.data,
+          resume.template || 'Modern',
+          resume.color || '#1e293b',
+          'Inter',
+          resume.name ? `${resume.name}.pdf` : undefined,
+        );
+      }
+      if (!pdfUri) {
+        Alert.alert('Resume File', 'Please download the resume first to generate the PDF file.');
+        return;
+      }
+      Alert.alert(
+        'Share Resume',
+        `Send "${resume.name || 'Resume'}" directly:`,
+        [
+          {
+            text: '🟢 WhatsApp',
+            onPress: () => shareResumeToWhatsApp(pdfUri, resume.name),
+          },
+          {
+            text: '✉️ Email',
+            onPress: () => shareResumeViaEmail(pdfUri, resume.name),
+          },
+          {
+            text: '📤 Other Apps',
+            onPress: () => exportToPDF(
+              resume.data,
+              resume.template || 'Modern',
+              resume.color || '#1e293b',
+              'Inter',
+              resume.name ? `${resume.name}.pdf` : undefined,
+            ),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert('Share', e?.message || 'Unable to share resume.');
+    }
+  };
 
   /** Upload an older resume PDF: extract text, save as a resume for matching. */
   const handleUploadPdf = async () => {
@@ -315,7 +362,7 @@ export default function MyResumesScreen() {
                  <View style={styles.resumeCardLeft}>
                    <View style={styles.resumeIconBox}>
                       <ExpoImage
-                        source={require("@/assets/images/cv.webp")}
+                        source={require("@/assets/images/resume-create-transparent.png")}
                         style={styles.resumeIcon}
                         contentFit="contain"
                       />
@@ -358,12 +405,27 @@ export default function MyResumesScreen() {
                  <View style={styles.chatMeta}>
                     {resume.type === "builder" && resume.source !== "upload" && (
                       <TouchableOpacity
-                        onPress={async () => await exportToPDF(resume.data, resume.template, resume.color)}
+                        onPress={async () =>
+                          await exportToPDF(
+                            resume.data,
+                            resume.template,
+                            resume.color,
+                            "Inter",
+                            resume.name ? `${resume.name}.pdf` : undefined,
+                          )
+                        }
                         style={styles.downloadIconBtn}
                       >
                         <Download size={18} color={colors.textMuted} />
                       </TouchableOpacity>
                     )}
+                    <TouchableOpacity
+                      onPress={() => handleShareOptions(resume)}
+                      style={styles.downloadIconBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Share2 size={17} color={Theme.colors.primary} />
+                    </TouchableOpacity>
                    {resume.type === "builder" && (
                      <TouchableOpacity
                        onPress={() => handleDelete(resume.id)}
@@ -379,7 +441,11 @@ export default function MyResumesScreen() {
            ))
         ) : (
           <View style={styles.emptyContainer}>
-            <FileText size={64} color={colors.textMuted} opacity={0.3} />
+            <ExpoImage
+              source={require('@/assets/images/resume-portfolio-transparent.png')}
+              style={{ width: 140, height: 140, marginBottom: 16 }}
+              contentFit="contain"
+            />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Resumes Yet</Text>
             <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
               Start building your professional resume to see it here.

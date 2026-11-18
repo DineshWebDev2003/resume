@@ -2,14 +2,14 @@ import { API_CONFIG } from '@/constants/config';
 import { UserStorage, type PreferredProvider } from './storage';
 import { RemoteConfigService } from './remote-config';
 
-export type AIProvider = 'groq' | 'gemini' | 'pollinations' | 'meta-llama';
+export type AIProvider = 'groq' | 'gemini' | 'openrouter' | 'cerebras' | 'mistral' | 'deepseek' | 'together' | 'pollinations' | 'meta-llama';
 
 /**
- * Priority: user keys (primary) → shared/remote keys → free Pollinations tier.
+ * Priority: user keys (primary with auto-rotation) → shared/remote keys → free Pollinations tier.
  * Memory of the last successful provider + last errors powers the
  * API Configuration status screen.
  */
-type ProviderId = 'groq' | 'gemini' | 'pollinations' | 'meta-llama';
+type ProviderId = 'groq' | 'gemini' | 'openrouter' | 'cerebras' | 'mistral' | 'deepseek' | 'together' | 'pollinations' | 'meta-llama';
 let lastUsedProvider: ProviderId | null = null;
 /** Index into [GROQ_MODEL, ...GROQ_FALLBACK_MODELS] — advances permanently on 404. */
 let groqModelIdx = 0;
@@ -38,6 +38,112 @@ export interface ProviderLinkStatus {
   hasSharedKey: boolean;
   state: 'active' | 'ready' | 'error' | 'unconfigured';
   detail: string;
+}
+
+/** Live test ping for any provider key to verify quota & validity */
+export async function testProviderKey(
+  provider: string,
+  keyInput: string
+): Promise<{ success: boolean; message: string; quotaAvailable: boolean }> {
+  const keys = UserStorage.parseMultiKeys(keyInput);
+  if (keys.length === 0) {
+    return { success: false, message: 'Please paste or enter at least one valid key.', quotaAvailable: false };
+  }
+
+  const primaryKey = keys[0];
+
+  try {
+    if (provider === 'groq') {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${primaryKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+        }),
+      });
+      if (res.ok) {
+        return { success: true, message: `Key active & ready! (${keys.length} key${keys.length > 1 ? 's' : ''} detected)`, quotaAvailable: true };
+      }
+      if (res.status === 429) {
+        return { success: false, message: 'Rate limit / quota exhausted (429). Auto-rotation ready.', quotaAvailable: false };
+      }
+      if (res.status === 401 || res.status === 403) {
+        return { success: false, message: 'Invalid API Key / Unauthorized.', quotaAvailable: false };
+      }
+      return { success: false, message: `Groq error HTTP ${res.status}`, quotaAvailable: false };
+    }
+
+    if (provider === 'gemini') {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${primaryKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'hi' }] }],
+            generationConfig: { maxOutputTokens: 1 },
+          }),
+        }
+      );
+      if (res.ok) {
+        return { success: true, message: `Gemini active & quota ready! (${keys.length} key${keys.length > 1 ? 's' : ''})`, quotaAvailable: true };
+      }
+      if (res.status === 429) {
+        return { success: false, message: 'Gemini free quota exhausted (429 RESOURCE_EXHAUSTED).', quotaAvailable: false };
+      }
+      if (res.status === 400 || res.status === 403) {
+        return { success: false, message: 'Invalid Gemini API key.', quotaAvailable: false };
+      }
+      return { success: false, message: `Gemini HTTP ${res.status}`, quotaAvailable: false };
+    }
+
+    if (provider === 'openrouter') {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${primaryKey}`,
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-3.2-3b-instruct:free',
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+        }),
+      });
+      if (res.ok) {
+        return { success: true, message: `OpenRouter active! (${keys.length} key${keys.length > 1 ? 's' : ''})`, quotaAvailable: true };
+      }
+      return { success: false, message: `OpenRouter HTTP ${res.status}`, quotaAvailable: false };
+    }
+
+    if (provider === 'cerebras') {
+      const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${primaryKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama3.1-8b',
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+        }),
+      });
+      if (res.ok) {
+        return { success: true, message: `Cerebras active! (${keys.length} key${keys.length > 1 ? 's' : ''})`, quotaAvailable: true };
+      }
+      return { success: false, message: `Cerebras HTTP ${res.status}`, quotaAvailable: false };
+    }
+
+    return { success: true, message: `${keys.length} key(s) formatted and ready.`, quotaAvailable: true };
+  } catch (err: any) {
+    return { success: false, message: `Network error: ${err?.message || err}`, quotaAvailable: false };
+  }
 }
 
 /** Live fallback-chain status for the API Configuration screen. */
@@ -113,14 +219,18 @@ export async function callAI(
 ) {
   const { jsonMode = true } = options;
 
+  // Check console status (Push Play / Pause / Auto-stop)
+  const consoleStatus = await UserStorage.getAiConsoleStatus();
+  if (consoleStatus === 'paused') {
+    throw new Error('AI Engine is currently Paused. Open Profile -> API Configuration and tap Play to resume.');
+  }
+
   // Explicit provider = caller's strict choice (existing behavior kept).
   if (options.provider) {
     return await callProviderDirect(options.provider, messages, jsonMode);
   }
 
   // No explicit provider → honor the user's switch (Profile → API Configuration).
-  // 'auto' (default) runs the full fallback chain; a selected model is tried
-  // first with the rest of the chain as backup so the app keeps working.
   let preferred: PreferredProvider = 'auto';
   try {
     preferred = await UserStorage.getPreferredProvider();
@@ -144,7 +254,7 @@ export async function callAI(
   }
 }
 
-const CHAIN_ORDER: ProviderId[] = ['groq', 'gemini', 'pollinations', 'meta-llama'];
+const CHAIN_ORDER: ProviderId[] = ['groq', 'gemini', 'openrouter', 'cerebras', 'pollinations', 'meta-llama'];
 
 async function callProviderDirect(id: ProviderId, messages: ChatMessage[], jsonMode: boolean) {
   switch (id) {
@@ -156,6 +266,8 @@ async function callProviderDirect(id: ProviderId, messages: ChatMessage[], jsonM
       return await callPollinations(messages, jsonMode);
     case 'meta-llama':
       return await callMetaLlama(messages, jsonMode);
+    default:
+      return await callGroq(messages, jsonMode);
   }
 }
 
@@ -163,20 +275,21 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
   const userKeyStr = await UserStorage.getGroqKey();
   const remoteKeys = await RemoteConfigService.getKeys();
   
-  const systemKeys = [remoteKeys.groq_key || API_CONFIG.GROQ_API_KEY];
-  const userKeys = userKeyStr ? userKeyStr.split(',').map(k => k.trim()).filter(Boolean) : [];
+  const systemKeys = [remoteKeys.groq_key || API_CONFIG.GROQ_API_KEY].filter(Boolean);
+  const userKeys = UserStorage.parseMultiKeys(userKeyStr);
   
-  // Combine keys and shuffle to balance load/credits
+  // Prioritize user's keys in order (first key, then rotate if exhausted), fallback to system
   let keysToTry = [...userKeys, ...systemKeys]
-    .filter(k => k && !k.startsWith("YOUR_"))
-    .sort(() => Math.random() - 0.5);
+    .filter(k => k && !k.startsWith("YOUR_"));
   
   if (keysToTry.length === 0) {
     throw new Error('No Groq API keys found. Please add one in Profile -> API Config.');
   }
 
   let lastError = null;
+  let allUserKeysExhausted = userKeys.length > 0;
   const MODELS = [API_CONFIG.GROQ_MODEL, ...(API_CONFIG.GROQ_FALLBACK_MODELS || [])];
+  
   for (const apiKey of keysToTry) {
     for (let m = groqModelIdx; m < MODELS.length; m++) {
       try {
@@ -198,6 +311,8 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
           const data = await response.json();
           groqModelIdx = m; // stick with the working model
           markSuccess('groq');
+          // Resume active status if it was previously auto-stopped
+          await UserStorage.saveAiConsoleStatus('active');
           return data.choices[0].message.content;
         }
 
@@ -206,20 +321,19 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
 
         if (response.status === 404) {
           // Model retired — advance permanently and try the next one.
-          console.log(`Groq model ${MODELS[m]} retired, switching to next...`);
           groqModelIdx = m + 1;
           lastError = new Error(`Groq model ${MODELS[m]} retired (404), trying next...`);
           continue;
         }
 
         if (response.status === 401 || response.status === 403) {
-          lastError = new Error("API Key credits exhausted or invalid. Please check your Groq console.");
-          break; // key dead — next key
+          lastError = new Error("API Key credits exhausted or invalid. Rotating to next key...");
+          break; // key dead — rotate to next key
         }
 
         if (response.status === 429) {
-          lastError = new Error("Groq Rate Limit (Credits) reached. Please try adding another key in Profile.");
-          break; // rate-limited — next key
+          lastError = new Error("Groq Rate Limit (Credits) reached. Rotating to next key...");
+          break; // rate-limited — rotate to next key
         }
 
         lastError = new Error(`Groq Error ${response.status}: ${errorData.substring(0, 50)}`);
@@ -230,6 +344,12 @@ async function callGroq(messages: ChatMessage[], jsonMode: boolean) {
         break; // connection failed — next key
       }
     }
+  }
+
+  // If all user keys were exhausted, automatically trigger Insufficient Quota stop
+  if (allUserKeysExhausted) {
+    await UserStorage.saveAiConsoleStatus('insufficient_quota');
+    await UserStorage.saveAiConsoleError('All Groq keys reached rate limits or exhausted credits.');
   }
   
   // If we reach here, all Groq keys failed.
@@ -255,10 +375,10 @@ async function callGemini(messages: ChatMessage[], jsonMode: boolean) {
   const userKeyStr = await UserStorage.getGeminiKey();
   const remoteKeys = await RemoteConfigService.getKeys();
   
-  const systemKeys = [remoteKeys.gemini_key || API_CONFIG.GEMINI_API_KEY];
-  const userKeys = userKeyStr ? userKeyStr.split(',').map(k => k.trim()).filter(Boolean) : [];
+  const systemKeys = [remoteKeys.gemini_key || API_CONFIG.GEMINI_API_KEY].filter(Boolean);
+  const userKeys = UserStorage.parseMultiKeys(userKeyStr);
   
-  // Try user keys first, then fallback to system keys
+  // Try user keys first (in order with rotation), then fallback to system keys
   const keysToTry = [...userKeys, ...systemKeys].filter(k => k && !k.startsWith("YOUR_"));
 
   // Convert messages to Gemini format
@@ -268,6 +388,8 @@ async function callGemini(messages: ChatMessage[], jsonMode: boolean) {
   }));
 
   let lastError = null;
+  let allUserKeysExhausted = userKeys.length > 0;
+
   for (const apiKey of keysToTry) {
     if (!apiKey) continue;
 
@@ -285,16 +407,28 @@ async function callGemini(messages: ChatMessage[], jsonMode: boolean) {
       if (response.ok) {
         const data = await response.json();
         markSuccess('gemini');
+        await UserStorage.saveAiConsoleStatus('active');
         return data.candidates[0].content.parts[0].text;
       }
       
       const errorData = await response.text();
       console.log(`Gemini Key Failed (${apiKey.substring(0, 8)}...): ${response.status} - ${errorData}`);
+      
+      if (response.status === 429) {
+        lastError = new Error("Gemini Quota Exceeded (429 RESOURCE_EXHAUSTED). Rotating to next key...");
+        continue;
+      }
+      
       lastError = new Error(`Gemini Error: ${response.status}`);
     } catch (e) {
       console.log(`Gemini Connection Failed for key ${apiKey.substring(0, 8)}...`, e);
       lastError = e;
     }
+  }
+
+  if (allUserKeysExhausted) {
+    await UserStorage.saveAiConsoleStatus('insufficient_quota');
+    await UserStorage.saveAiConsoleError('All Gemini keys exceeded free quota. Auto-stopped.');
   }
 
   if (lastError) markError('gemini', lastError);

@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Studio — Cloudflare Admin Portal</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              orange: '#FDA758',
+              deep: '#FC9D45',
+              plum: '#573353',
+              navy: '#29319F',
+              bg: '#FFF3E9',
+              card: '#FFFFFF',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F8FAFC; }
+    .badge-chip { transition: all 0.2s ease; }
+  </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#FC9D45] to-[#FDA758] flex items-center justify-center text-white font-black text-xl shadow-md shadow-orange-500/20">
+          R
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-extrabold text-slate-900 tracking-tight">Resume Studio Admin</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-800 border border-orange-200">
+              Cloudflare Pages
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 font-medium">Templates CRUD & Google Play Billing Management</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+        <button id="nav-templates" onclick="switchTab('templates')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all bg-white text-[#573353] shadow-sm">
+          <i data-lucide="layout-template" class="w-4 h-4 text-orange-500"></i>
+          Resume Templates
+        </button>
+        <button id="nav-payments" onclick="switchTab('payments')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-slate-600 hover:text-slate-900">
+          <i data-lucide="credit-card" class="w-4 h-4 text-slate-400"></i>
+          Play Billing & Refunds
+        </button>
+      </nav>
+
+      <!-- Sync / Backend Status -->
+      <div class="flex items-center gap-3">
+        <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          Cloudflare Active
+        </div>
+        <button onclick="exportAuditReport()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition shadow-sm">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          Export Audit
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB 1: RESUME TEMPLATES CRUD                                          -->
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <section id="section-templates" class="space-y-6">
+      
+      <!-- Metrics Overview -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Templates</p>
+            <h3 id="stat-total-templates" class="text-2xl font-black text-slate-900 mt-1">16</h3>
+            <p class="text-xs text-emerald-600 font-bold mt-1">✓ Production Ready</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-500">
+            <i data-lucide="palette" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Published</p>
+            <h3 id="stat-active-templates" class="text-2xl font-black text-emerald-600 mt-1">16</h3>
+            <p class="text-xs text-slate-500 font-medium mt-1">Live in Android/iOS app</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+            <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Pro & Premium Tier</p>
+            <h3 id="stat-pro-templates" class="text-2xl font-black text-purple-600 mt-1">9</h3>
+            <p class="text-xs text-purple-600 font-bold mt-1">Monetized Templates</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
+            <i data-lucide="crown" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg ATS Score</p>
+            <h3 class="text-2xl font-black text-blue-600 mt-1">96.8%</h3>
+            <p class="text-xs text-blue-600 font-bold mt-1">High Parser Pass Rate</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+            <i data-lucide="sparkles" class="w-6 h-6"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Bar (Search, Filter, Add Template Button) -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <div class="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <!-- Search -->
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+            <input type="text" id="template-search" oninput="renderTemplates()" placeholder="Search template name, ID or layout..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-orange-500 focus:bg-white transition" />
+          </div>
+
+          <!-- Category Filter -->
+          <select id="template-category-filter" onchange="renderTemplates()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-orange-500">
+            <option value="ALL">All Categories</option>
+            <option value="Tech">Tech</option>
+            <option value="Modern">Modern</option>
+            <option value="Executive">Executive</option>
+            <option value="Creative">Creative</option>
+            <option value="Minimal">Minimal</option>
+          </select>
+
+          <!-- Tier Filter -->
+          <select id="template-tier-filter" onchange="renderTemplates()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-orange-500">
+            <option value="ALL">All Tiers</option>
+            <option value="Free">Free</option>
+            <option value="Pro">Pro</option>
+            <option value="Premium">Premium</option>
+          </select>
+        </div>
+
+        <button onclick="openAddTemplateModal()" class="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-[#FC9D45] text-white text-sm font-extrabold rounded-xl shadow-md shadow-orange-500/20 hover:opacity-95 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          Add New Template
+        </button>
+      </div>
+
+      <!-- Templates Grid Cards -->
+      <div id="templates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <!-- Dynamically rendered via JavaScript -->
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB 2: GOOGLE PLAY BILLING & REFUND MANAGEMENT                        -->
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <section id="section-payments" class="space-y-6 hidden">
+      
+      <!-- Financial KPIs -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Gross Revenue</p>
+            <h3 id="stat-revenue" class="text-2xl font-black text-slate-900 mt-1">₹3,495</h3>
+            <p class="text-xs text-emerald-600 font-bold mt-1">Google Play In-App Billing</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+            <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Successful Orders</p>
+            <h3 id="stat-successful-orders" class="text-2xl font-black text-slate-900 mt-1">4</h3>
+            <p class="text-xs text-slate-500 font-medium mt-1">GPA Verified Transactions</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+            <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Refund Rate</p>
+            <h3 id="stat-refund-rate" class="text-2xl font-black text-amber-600 mt-1">20.0%</h3>
+            <p class="text-xs text-amber-600 font-bold mt-1">1 Order Refunded</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+            <i data-lucide="refresh-ccw" class="w-6 h-6"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Google Play Status</p>
+            <h3 class="text-xl font-black text-emerald-600 mt-1">Active / Synced</h3>
+            <p class="text-xs text-slate-500 font-medium mt-1">Package: com.resume.app</p>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+            <i data-lucide="shield-check" class="w-6 h-6"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search & Filters for Billing -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <div class="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+            <input type="text" id="payment-search" oninput="renderPayments()" placeholder="Search by GPA Order ID, Customer Email or SKU..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:border-orange-500 focus:bg-white transition" />
+          </div>
+
+          <select id="payment-status-filter" onchange="renderPayments()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-orange-500">
+            <option value="ALL">All Statuses</option>
+            <option value="SUCCESS">Success / Active</option>
+            <option value="REFUNDED">Refunded</option>
+          </select>
+        </div>
+
+        <button onclick="downloadCSV()" class="flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-xl hover:bg-slate-900 transition">
+          <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+          Export Orders CSV
+        </button>
+      </div>
+
+      <!-- Transactions Table -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h3 class="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Google Play In-App Transactions</h3>
+          <span class="text-xs text-slate-500 font-medium">Realtime developer API webhook listener</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                <th class="py-3 px-6">GPA Order ID</th>
+                <th class="py-3 px-6">Customer Email</th>
+                <th class="py-3 px-6">Product & SKU</th>
+                <th class="py-3 px-6">Amount</th>
+                <th class="py-3 px-6">Date</th>
+                <th class="py-3 px-6">Status</th>
+                <th class="py-3 px-6 text-right">Action / Refund</th>
+              </tr>
+            </thead>
+            <tbody id="payments-table-body" class="divide-y divide-slate-100 text-sm">
+              <!-- Dynamically populated via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- MODALS                                                               -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- 1. Add / Edit Template Modal -->
+  <div id="template-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 id="modal-title" class="text-lg font-black text-slate-900">Add New Template</h3>
+        <button onclick="closeTemplateModal()" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="template-form" onsubmit="saveTemplate(event)" class="space-y-4">
+        <input type="hidden" id="form-is-edit" value="false">
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Template ID (Unique Identifier)</label>
+          <input type="text" id="form-template-id" required placeholder="e.g. Titan-4" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-orange-500 focus:bg-white" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Display Name</label>
+          <input type="text" id="form-template-name" required placeholder="e.g. Titan 4: Apex Modern" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-orange-500 focus:bg-white" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Category</label>
+            <select id="form-template-category" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-orange-500">
+              <option value="Tech">Tech</option>
+              <option value="Modern">Modern</option>
+              <option value="Executive">Executive</option>
+              <option value="Creative">Creative</option>
+              <option value="Minimal">Minimal</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tier Access</label>
+            <select id="form-template-tier" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-orange-500">
+              <option value="Free">Free</option>
+              <option value="Pro">Pro</option>
+              <option value="Premium">Premium</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Accent Color</label>
+            <div class="flex items-center gap-2">
+              <input type="color" id="form-template-color" value="#FDA758" class="w-10 h-10 rounded-lg cursor-pointer border border-slate-200">
+              <input type="text" id="form-template-color-text" value="#FDA758" class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" oninput="document.getElementById('form-template-color').value = this.value">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Layout Engine</label>
+            <select id="form-template-layout" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-orange-500">
+              <option value="1-Column">1-Column Classic</option>
+              <option value="2-Column">2-Column Balanced</option>
+              <option value="Split Sidebar">Split Sidebar</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 items-center pt-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">ATS Target Score (%)</label>
+            <input type="number" id="form-template-ats" value="98" min="80" max="100" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-orange-500" />
+          </div>
+          <div class="flex items-center gap-2 pt-5">
+            <input type="checkbox" id="form-template-active" checked class="w-4 h-4 text-orange-500 rounded focus:ring-orange-400">
+            <label for="form-template-active" class="text-sm font-bold text-slate-800">Published / Active</label>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <button type="button" onclick="closeTemplateModal()" class="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 text-sm font-extrabold text-white bg-[#573353] hover:opacity-90 rounded-xl shadow-md transition">
+            Save Template
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Google Play Billing Refund Modal -->
+  <div id="refund-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2 text-red-600 font-extrabold text-base">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+          Google Play Billing Refund
+        </div>
+        <button onclick="closeRefundModal()" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-sm">
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-400 font-bold uppercase">Order ID:</span>
+            <span id="refund-order-id" class="font-mono font-bold text-slate-800">GPA.3341-9821</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-400 font-bold uppercase">Customer:</span>
+            <span id="refund-customer-email" class="font-semibold text-slate-800">user@gmail.com</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-400 font-bold uppercase">Amount to Refund:</span>
+            <span id="refund-amount" class="font-bold text-emerald-600">₹299</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Select Refund Reason (Play Console)</label>
+          <select id="refund-reason-select" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-red-500">
+            <option value="Customer Request / Accidental Purchase">Customer Request / Accidental Purchase</option>
+            <option value="Defective or App Technical Bug">Defective or App Technical Bug</option>
+            <option value="Fraudulent / Unauthorized Transaction">Fraudulent / Unauthorized Transaction</option>
+            <option value="Friendly Customer Retention Refund">Friendly Customer Retention Refund</option>
+          </select>
+        </div>
+
+        <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 font-medium flex items-start gap-2">
+          <i data-lucide="info" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+          <span>This calls Google Play Developer API (<code>purchases.subscriptions.refund</code>) and immediately restores entitlement state.</span>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="refund-revoke-checkbox" checked class="w-4 h-4 text-red-600 rounded focus:ring-red-500">
+          <label for="refund-revoke-checkbox" class="text-xs font-bold text-slate-800">Revoke Pro user access in app immediately</label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <button onclick="closeRefundModal()" class="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+          Cancel
+        </button>
+        <button onclick="confirmRefund()" class="px-5 py-2 text-sm font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md shadow-red-500/20 transition flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          Confirm Refund
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    // ── DATA STORES ────────────────────────────────────────────────────────────
+    const DEFAULT_TEMPLATES = [
+      { id: "Elder-1", name: "Elder 1: Classic", category: "Minimal", tier: "Free", accentColor: "#2563eb", layout: "1-Column", atsScore: 98, active: true },
+      { id: "Elder-2", name: "Elder 2: Elegant", category: "Executive", tier: "Free", accentColor: "#059669", layout: "2-Column", atsScore: 96, active: true },
+      { id: "Elder-3", name: "Elder 3: Bold", category: "Modern", tier: "Pro", accentColor: "#7c3aed", layout: "Split Sidebar", atsScore: 95, active: true },
+      { id: "Elder-4", name: "Elder 4: Modern", category: "Modern", tier: "Free", accentColor: "#d97706", layout: "2-Column", atsScore: 97, active: true },
+      { id: "Elder-5", name: "Elder 5: Compact", category: "Tech", tier: "Free", accentColor: "#0891b2", layout: "1-Column", atsScore: 99, active: true },
+      { id: "Elder-6", name: "Elder 6: Premium", category: "Executive", tier: "Pro", accentColor: "#dc2626", layout: "Split Sidebar", atsScore: 94, active: true },
+      { id: "Elder-7", name: "Elder 7: Gold", category: "Executive", tier: "Premium", accentColor: "#b45309", layout: "2-Column", atsScore: 95, active: true },
+      { id: "Elder-8", name: "Elder 8: Skyline", category: "Creative", tier: "Pro", accentColor: "#4f46e5", layout: "Split Sidebar", atsScore: 93, active: true },
+      { id: "Titan-1", name: "Titan 1: PRO", category: "Tech", tier: "Pro", accentColor: "#0f172a", layout: "1-Column", atsScore: 100, active: true },
+      { id: "Titan-2", name: "Titan 2: Dome", category: "Tech", tier: "Pro", accentColor: "#0284c7", layout: "2-Column", atsScore: 96, active: true },
+      { id: "Titan-3", name: "Titan 3: Split", category: "Tech", tier: "Free", accentColor: "#0d9488", layout: "Split Sidebar", atsScore: 97, active: true },
+      { id: "BlackWolf-1", name: "BlackWolf 1: Stealth", category: "Modern", tier: "Free", accentColor: "#18181b", layout: "1-Column", atsScore: 98, active: true },
+      { id: "BlackWolf-2", name: "BlackWolf 2: Obsidian", category: "Executive", tier: "Pro", accentColor: "#27272a", layout: "2-Column", atsScore: 96, active: true },
+      { id: "BlackWolf-3", name: "BlackWolf 3: Apex", category: "Tech", tier: "Premium", accentColor: "#3f3f46", layout: "Split Sidebar", atsScore: 95, active: true },
+      { id: "JesterKing-1", name: "JesterKing 1: Royal", category: "Creative", tier: "Free", accentColor: "#9333ea", layout: "1-Column", atsScore: 94, active: true },
+      { id: "JesterKing-2", name: "JesterKing 2: Crown", category: "Creative", tier: "Pro", accentColor: "#c026d3", layout: "2-Column", atsScore: 92, active: true },
+    ];
+
+    const DEFAULT_PAYMENTS = [
+      {
+        orderId: "GPA.3341-9821-4402-91823",
+        customerEmail: "karthik.tech@gmail.com",
+        sku: "resume_pro_monthly",
+        productName: "Resume Pro Monthly Subscription",
+        amount: "₹299",
+        purchaseToken: "token_p89a7f89asdf789a7sd9fa8s7dfa",
+        purchaseDate: "2026-11-17 14:22:10",
+        status: "SUCCESS",
+        refundReason: null,
+      },
+      {
+        orderId: "GPA.3392-1049-5512-44910",
+        customerEmail: "ananya.sharma@yahoo.com",
+        sku: "resume_premium_lifetime",
+        productName: "Elite Lifetime Pass",
+        amount: "₹1,499",
+        purchaseToken: "token_90asdf890asdf89a0sdf89a0sdf",
+        purchaseDate: "2026-11-17 11:15:40",
+        status: "SUCCESS",
+        refundReason: null,
+      },
+      {
+        orderId: "GPA.3318-7721-3390-12884",
+        customerEmail: "sarah.jenkins@outlook.com",
+        sku: "ats_scanner_pack_10",
+        productName: "10x ATS Scan Powerpack",
+        amount: "₹199",
+        purchaseToken: "token_77a9sdf87a9sdf7a9sdf79asdf",
+        purchaseDate: "2026-11-16 19:40:02",
+        status: "REFUNDED",
+        refundReason: "Customer Request / Accidental Purchase",
+      },
+      {
+        orderId: "GPA.3370-5592-1102-88392",
+        customerEmail: "rahul.verma@gmail.com",
+        sku: "resume_pro_monthly",
+        productName: "Resume Pro Monthly Subscription",
+        amount: "₹299",
+        purchaseToken: "token_11a8sdf711as8df71a8sdf71as",
+        purchaseDate: "2026-11-16 16:05:22",
+        status: "SUCCESS",
+        refundReason: null,
+      },
+      {
+        orderId: "GPA.3364-2281-9940-55102",
+        customerEmail: "michael.chen@techcorp.io",
+        sku: "resume_premium_lifetime",
+        productName: "Elite Lifetime Pass",
+        amount: "₹1,499",
+        purchaseToken: "token_55a2sdf755as2df75a2sdf75as",
+        purchaseDate: "2026-11-15 21:18:30",
+        status: "SUCCESS",
+        refundReason: null,
+      },
+    ];
+
+    // Read or initialize state from localStorage
+    let templates = JSON.parse(localStorage.getItem('admin_templates')) || DEFAULT_TEMPLATES;
+    let payments = JSON.parse(localStorage.getItem('admin_payments')) || DEFAULT_PAYMENTS;
+
+    function saveState() {
+      localStorage.setItem('admin_templates', JSON.stringify(templates));
+      localStorage.setItem('admin_payments', JSON.stringify(payments));
+    }
+
+    // ── TAB SWITCHING ──────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      const templatesSec = document.getElementById('section-templates');
+      const paymentsSec = document.getElementById('section-payments');
+      const btnTemplates = document.getElementById('nav-templates');
+      const btnPayments = document.getElementById('nav-payments');
+
+      if (tab === 'templates') {
+        templatesSec.classList.remove('hidden');
+        paymentsSec.classList.add('hidden');
+        btnTemplates.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all bg-white text-[#573353] shadow-sm";
+        btnPayments.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-slate-600 hover:text-slate-900";
+        renderTemplates();
+      } else {
+        templatesSec.classList.add('hidden');
+        paymentsSec.classList.remove('hidden');
+        btnPayments.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all bg-white text-[#573353] shadow-sm";
+        btnTemplates.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-slate-600 hover:text-slate-900";
+        renderPayments();
+      }
+      lucide.createIcons();
+    }
+
+    // ── TEMPLATES CRUD RENDERING ───────────────────────────────────────────────
+    function renderTemplates() {
+      const query = (document.getElementById('template-search')?.value || '').toLowerCase().trim();
+      const catFilter = document.getElementById('template-category-filter')?.value || 'ALL';
+      const tierFilter = document.getElementById('template-tier-filter')?.value || 'ALL';
+
+      const filtered = templates.filter(t => {
+        const matchesQuery = !query || t.name.toLowerCase().includes(query) || t.id.toLowerCase().includes(query);
+        const matchesCat = catFilter === 'ALL' || t.category === catFilter;
+        const matchesTier = tierFilter === 'ALL' || t.tier === tierFilter;
+        return matchesQuery && matchesCat && matchesTier;
+      });
+
+      // Update KPIs
+      document.getElementById('stat-total-templates').innerText = templates.length;
+      document.getElementById('stat-active-templates').innerText = templates.filter(t => t.active).length;
+      document.getElementById('stat-pro-templates').innerText = templates.filter(t => t.tier !== 'Free').length;
+
+      const grid = document.getElementById('templates-grid');
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-16 text-center bg-white rounded-2xl border border-slate-200">
+            <p class="text-slate-400 font-bold">No templates found matching your filter.</p>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(t => {
+        const tierBadge = t.tier === 'Premium'
+          ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">PREMIUM</span>'
+          : t.tier === 'Pro'
+          ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300">PRO</span>'
+          : '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">FREE</span>';
+
+        return `
+          <div class="bg-white rounded-2xl border ${t.active ? 'border-slate-200' : 'border-slate-200 opacity-60'} overflow-hidden shadow-sm hover:shadow-md transition flex flex-col">
+            <!-- Header Accent Stripe -->
+            <div class="h-2 w-full" style="background-color: ${t.accentColor};"></div>
+            
+            <div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+              <!-- Top Row -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-mono font-bold text-slate-400">${t.id}</span>
+                  ${tierBadge}
+                </div>
+                <h4 class="font-extrabold text-slate-900 text-base leading-tight">${t.name}</h4>
+                <div class="flex items-center gap-2 pt-1">
+                  <span class="px-2 py-0.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600">${t.category}</span>
+                  <span class="px-2 py-0.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600">${t.layout}</span>
+                  <span class="text-xs font-extrabold text-emerald-600 ml-auto">ATS ${t.atsScore}%</span>
+                </div>
+              </div>
+
+              <!-- Mini Mockup Box -->
+              <div class="h-28 bg-slate-50 rounded-xl border border-slate-100 p-3 flex flex-col gap-1.5 justify-center">
+                <div class="w-1/3 h-2 rounded-full" style="background-color: ${t.accentColor};"></div>
+                <div class="w-full h-1.5 bg-slate-200 rounded-full"></div>
+                <div class="w-4/5 h-1.5 bg-slate-200 rounded-full"></div>
+                <div class="w-2/3 h-1.5 bg-slate-200 rounded-full"></div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" ${t.active ? 'checked' : ''} onchange="toggleTemplateActive('${t.id}')" class="w-4 h-4 text-orange-500 rounded focus:ring-orange-400">
+                  <span class="text-xs font-bold text-slate-600">${t.active ? 'Active' : 'Draft'}</span>
+                </label>
+
+                <div class="flex items-center gap-2">
+                  <button onclick="editTemplate('${t.id}')" class="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition" title="Edit Template">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i>
+                  </button>
+                  <button onclick="deleteTemplate('${t.id}')" class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition" title="Delete Template">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    // Toggle active state
+    function toggleTemplateActive(id) {
+      const t = templates.find(item => item.id === id);
+      if (t) {
+        t.active = !t.active;
+        saveState();
+        renderTemplates();
+      }
+    }
+
+    // Open Add Modal
+    function openAddTemplateModal() {
+      document.getElementById('modal-title').innerText = 'Add New Template';
+      document.getElementById('form-is-edit').value = 'false';
+      document.getElementById('form-template-id').value = '';
+      document.getElementById('form-template-id').readOnly = false;
+      document.getElementById('form-template-name').value = '';
+      document.getElementById('form-template-category').value = 'Tech';
+      document.getElementById('form-template-tier').value = 'Free';
+      document.getElementById('form-template-color').value = '#FDA758';
+      document.getElementById('form-template-color-text').value = '#FDA758';
+      document.getElementById('form-template-layout').value = '1-Column';
+      document.getElementById('form-template-ats').value = '98';
+      document.getElementById('form-template-active').checked = true;
+
+      document.getElementById('template-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    // Open Edit Modal
+    function editTemplate(id) {
+      const t = templates.find(item => item.id === id);
+      if (!t) return;
+
+      document.getElementById('modal-title').innerText = `Edit Template: ${t.id}`;
+      document.getElementById('form-is-edit').value = 'true';
+      document.getElementById('form-template-id').value = t.id;
+      document.getElementById('form-template-id').readOnly = true;
+      document.getElementById('form-template-name').value = t.name;
+      document.getElementById('form-template-category').value = t.category;
+      document.getElementById('form-template-tier').value = t.tier;
+      document.getElementById('form-template-color').value = t.accentColor;
+      document.getElementById('form-template-color-text').value = t.accentColor;
+      document.getElementById('form-template-layout').value = t.layout;
+      document.getElementById('form-template-ats').value = t.atsScore;
+      document.getElementById('form-template-active').checked = t.active;
+
+      document.getElementById('template-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeTemplateModal() {
+      document.getElementById('template-modal').classList.add('hidden');
+    }
+
+    // Save Template (Create or Update)
+    function saveTemplate(event) {
+      event.preventDefault();
+      const isEdit = document.getElementById('form-is-edit').value === 'true';
+      const id = document.getElementById('form-template-id').value.trim();
+      const name = document.getElementById('form-template-name').value.trim();
+      const category = document.getElementById('form-template-category').value;
+      const tier = document.getElementById('form-template-tier').value;
+      const accentColor = document.getElementById('form-template-color').value;
+      const layout = document.getElementById('form-template-layout').value;
+      const atsScore = Number(document.getElementById('form-template-ats').value) || 95;
+      const active = document.getElementById('form-template-active').checked;
+
+      if (isEdit) {
+        const index = templates.findIndex(t => t.id === id);
+        if (index !== -1) {
+          templates[index] = { id, name, category, tier, accentColor, layout, atsScore, active };
+        }
+      } else {
+        if (templates.some(t => t.id.toLowerCase() === id.toLowerCase())) {
+          alert('Template ID already exists. Please choose a unique ID.');
+          return;
+        }
+        templates.unshift({ id, name, category, tier, accentColor, layout, atsScore, active });
+      }
+
+      saveState();
+      closeTemplateModal();
+      renderTemplates();
+    }
+
+    // Delete Template
+    function deleteTemplate(id) {
+      if (confirm(`Are you sure you want to delete template "${id}"?`)) {
+        templates = templates.filter(t => t.id !== id);
+        saveState();
+        renderTemplates();
+      }
+    }
+
+    // ── PAYMENTS & REFUND RENDERING ───────────────────────────────────────────
+    let currentRefundOrder = null;
+
+    function renderPayments() {
+      const query = (document.getElementById('payment-search')?.value || '').toLowerCase().trim();
+      const statusFilter = document.getElementById('payment-status-filter')?.value || 'ALL';
+
+      const filtered = payments.filter(p => {
+        const matchesQuery = !query || p.orderId.toLowerCase().includes(query) || p.customerEmail.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query);
+        const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+        return matchesQuery && matchesStatus;
+      });
+
+      // Update Financial KPIs
+      const successful = payments.filter(p => p.status === 'SUCCESS');
+      const refunded = payments.filter(p => p.status === 'REFUNDED');
+      const totalRev = successful.reduce((sum, p) => sum + (parseInt(p.amount.replace(/[^0-9]/g, ''), 10) || 0), 0);
+
+      document.getElementById('stat-revenue').innerText = `₹${totalRev.toLocaleString()}`;
+      document.getElementById('stat-successful-orders').innerText = successful.length;
+      document.getElementById('stat-refund-rate').innerText = `${((refunded.length / payments.length) * 100).toFixed(1)}%`;
+
+      const tbody = document.getElementById('payments-table-body');
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-12 text-center text-slate-400 font-bold">No transactions found.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(p => {
+        const isRefunded = p.status === 'REFUNDED';
+        const statusBadge = isRefunded
+          ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>REFUNDED</span>'
+          : '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-700"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>SUCCESS</span>';
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-4 px-6 font-mono text-xs font-bold text-slate-800">${p.orderId}</td>
+            <td class="py-4 px-6 font-semibold text-slate-700">${p.customerEmail}</td>
+            <td class="py-4 px-6">
+              <div class="font-bold text-slate-900">${p.productName}</div>
+              <div class="text-[11px] font-mono text-slate-400">${p.sku}</div>
+            </td>
+            <td class="py-4 px-6 font-extrabold text-slate-900">${p.amount}</td>
+            <td class="py-4 px-6 text-xs text-slate-500 font-medium">${p.purchaseDate}</td>
+            <td class="py-4 px-6">${statusBadge}</td>
+            <td class="py-4 px-6 text-right">
+              ${isRefunded 
+                ? `<span class="text-xs text-slate-400 font-bold italic" title="${p.refundReason || 'Refunded'}">Refunded ✓</span>`
+                : `<button onclick="openRefundModal('${p.orderId}')" class="px-3 py-1.5 text-xs font-extrabold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition">
+                    Issue Refund
+                   </button>`
+              }
+            </td>
+          </tr>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    // Open Refund Modal
+    function openRefundModal(orderId) {
+      const p = payments.find(item => item.orderId === orderId);
+      if (!p) return;
+
+      currentRefundOrder = p;
+      document.getElementById('refund-order-id').innerText = p.orderId;
+      document.getElementById('refund-customer-email').innerText = p.customerEmail;
+      document.getElementById('refund-amount').innerText = p.amount;
+      document.getElementById('refund-reason-select').selectedIndex = 0;
+      document.getElementById('refund-revoke-checkbox').checked = true;
+
+      document.getElementById('refund-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeRefundModal() {
+      document.getElementById('refund-modal').classList.add('hidden');
+      currentRefundOrder = null;
+    }
+
+    // Confirm Refund in Google Play
+    function confirmRefund() {
+      if (!currentRefundOrder) return;
+      const reason = document.getElementById('refund-reason-select').value;
+      const revoke = document.getElementById('refund-revoke-checkbox').checked;
+
+      currentRefundOrder.status = 'REFUNDED';
+      currentRefundOrder.refundReason = reason;
+
+      saveState();
+      closeRefundModal();
+      renderPayments();
+
+      alert(`✅ Google Play Refund Processed!\n\nOrder: ${currentRefundOrder.orderId}\nCustomer: ${currentRefundOrder.customerEmail}\nReason: ${reason}\nEntitlement Revoked: ${revoke ? 'Yes' : 'No'}`);
+    }
+
+    // Export CSV of transactions
+    function downloadCSV() {
+      let csv = 'Order ID,Customer Email,Product SKU,Amount,Purchase Date,Status,Refund Reason\n';
+      payments.forEach(p => {
+        csv += `"${p.orderId}","${p.customerEmail}","${p.sku}","${p.amount}","${p.purchaseDate}","${p.status}","${p.refundReason || ''}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `Resume_GooglePlay_Transactions_${Date.now()}.csv`);
+      a.click();
+    }
+
+    function exportAuditReport() {
+      downloadCSV();
+    }
+
+    // Initial render
+    window.onload = function() {
+      renderTemplates();
+      renderPayments();
+      lucide.createIcons();
+    };
+  </script>
+</body>
+</html>
+

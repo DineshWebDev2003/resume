@@ -3621,11 +3621,136 @@ export const generateResumeHtml = (
     `;
   }
 
+  const hiddenMap = data?._hiddenSections || {};
+  const hiddenSelectors: string[] = [];
+
+  const checkAndHide = (key: string, isDataEmpty: boolean, selectors: string[]) => {
+    if (hiddenMap[key] || isDataEmpty) {
+      hiddenSelectors.push(...selectors);
+    }
+  };
+
+  checkAndHide(
+    "experience",
+    !data?.experience || data.experience.length === 0,
+    [
+      '[onclick*="edit:section:experience"]',
+      '[data-section="experience"]',
+      '.section-experience',
+      '.exp-section',
+      '#section-experience',
+    ]
+  );
+
+  checkAndHide(
+    "education",
+    !eduArray || eduArray.length === 0,
+    [
+      '[onclick*="edit:section:education"]',
+      '[data-section="education"]',
+      '.section-education',
+      '.edu-section',
+      '#section-education',
+    ]
+  );
+
+  checkAndHide(
+    "projects",
+    !data?.projects || data.projects.length === 0,
+    [
+      '[onclick*="edit:section:projects"]',
+      '[data-section="projects"]',
+      '.section-projects',
+      '.project-section',
+      '#section-projects',
+    ]
+  );
+
+  checkAndHide(
+    "skills",
+    !skills || skills.length === 0,
+    [
+      '[onclick*="edit:section:skills"]:not([onclick*="tools"]):not([onclick*="languages"])',
+      '[data-section="skills"]',
+      '.section-skills',
+      '.skills-section',
+      '#section-skills',
+    ]
+  );
+
+  checkAndHide(
+    "tools",
+    !tools || tools.length === 0,
+    [
+      '[onclick*="edit:section:tools"]',
+      '[data-section="tools"]',
+      '.section-tools',
+      '.tools-section',
+      '#section-tools',
+    ]
+  );
+
+  checkAndHide(
+    "languages",
+    !languages || languages.length === 0,
+    [
+      '[onclick*="edit:section:languages"]',
+      '[data-section="languages"]',
+      '.section-languages',
+      '.languages-section',
+      '#section-languages',
+    ]
+  );
+
+  checkAndHide(
+    "references",
+    !references || references.length === 0,
+    [
+      '[onclick*="edit:section:references"]',
+      '[data-section="references"]',
+      '.section-references',
+      '.references-section',
+      '#section-references',
+    ]
+  );
+
+  checkAndHide(
+    "links",
+    !data?.links || data.links.length === 0,
+    [
+      '[onclick*="edit:section:links"]',
+      '[data-section="links"]',
+      '.section-links',
+      '.links-section',
+      '#section-links',
+    ]
+  );
+
+  const hiddenSectionsCss = hiddenSelectors.length > 0
+    ? `
+    /* Cleanly remove hidden sections and their headings completely */
+    ${hiddenSelectors.join(",\n    ")} {
+      display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
+      min-height: 0 !important;
+      max-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      overflow: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+  `
+    : "";
+
   const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; }
     body { font-family: 'Inter', sans-serif; }
     svg { width: 1.1em; height: 1.1em; vertical-align: text-bottom; }
+    ${hiddenSectionsCss}
     
     .page { 
       width: 595pt; 
@@ -4972,9 +5097,43 @@ export const generateResumeHtml = (
 
   const printStyles = `
     ${styles}
-    @page { size: 595pt 842pt; margin: 0; }
-    html, body { width: 595pt; height: 842pt; margin: 0; padding: 0; overflow: hidden; }
-    .page { width: 595pt; height: 842pt; margin: 0; padding: 0; }
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
+      width: 595.276pt !important;
+      height: 841.89pt !important;
+      max-height: 841.89pt !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background: #fff !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .page {
+      width: 595.276pt !important;
+      height: 841.89pt !important;
+      max-height: 841.89pt !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+    }
+    .sidebar {
+      height: 841.89pt !important;
+      max-height: 841.89pt !important;
+    }
+    .main {
+      height: 841.89pt !important;
+      max-height: 841.89pt !important;
+    }
   `;
 
   if (isPrint) {

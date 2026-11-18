@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Image,
   Dimensions,
-  useColorScheme,
+  Platform,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -16,14 +16,15 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import * as SplashScreen from "expo-splash-screen";
-import { Theme, Colors } from "@/constants/theme";
 import { Sparkles } from "lucide-react-native";
+import { StatusBar } from "expo-status-bar";
+import { C } from "@/constants/theme";
 
-const { width, height } = Dimensions.get("window");
+const { height } = Dimensions.get("window");
 
 interface CustomSplashScreenProps {
-  isLoading: boolean; // Whether the authentication state is still resolving
-  onFinish: () => void; // Callback when the splash exit animation finishes
+  isLoading: boolean; // Whether authentication state is still resolving
+  onFinish: () => void; // Callback when splash exit animation completes
 }
 
 export default function CustomSplashScreen({
@@ -31,64 +32,60 @@ export default function CustomSplashScreen({
   onFinish,
 }: CustomSplashScreenProps) {
   // Animation shared values
-  const logoScale = useSharedValue(0.3);
-  const logoRotate = useSharedValue(-15);
+  const logoScale = useSharedValue(0.7);
+  const logoOpacity = useSharedValue(0);
   const contentOpacity = useSharedValue(0);
-  const contentTranslateY = useSharedValue(30);
+  const contentTranslateY = useSharedValue(24);
   const progress = useSharedValue(0);
 
   // Exit animation shared values
   const containerTranslateY = useSharedValue(0);
   const containerOpacity = useSharedValue(1);
 
-  // Local state to track when internal animations are complete
+  // Track internal animation completion
   const [animationComplete, setAnimationComplete] = useState(false);
 
   useEffect(() => {
-    // 1. Hide the native splash screen immediately when the custom layout mounts
+    // 1. Hide the native splash screen immediately when this custom layout mounts
     const hideNativeSplash = async () => {
       try {
         await SplashScreen.hideAsync();
       } catch (error) {
-        console.log("Expo SplashScreen hide error (can be ignored in dev):", error);
+        // Safe to ignore in dev
       }
     };
     hideNativeSplash();
 
-    // 2. Trigger logo entry animation (Spring scale & rotation)
+    // 2. Smooth logo entrance (gentle spring & fade-in, no awkward rotate or harsh box)
     logoScale.value = withSpring(1, {
-      damping: 10,
-      stiffness: 80,
+      damping: 14,
+      stiffness: 90,
     });
-    logoRotate.value = withSpring(-3, {
-      damping: 12,
-      stiffness: 70,
-    });
+    logoOpacity.value = withTiming(1, { duration: 500 });
 
-    // 3. Fade and slide up content (Title, subtext, progress bar)
+    // 3. Fade and slide up brand content
     contentOpacity.value = withDelay(
-      300,
+      250,
       withTiming(1, { duration: 600 })
     );
     contentTranslateY.value = withDelay(
-      300,
-      withSpring(0, { damping: 15, stiffness: 90 })
+      250,
+      withSpring(0, { damping: 16, stiffness: 100 })
     );
 
-    // 4. Fill progress loader from 0% to 100% over 1.6 seconds
-    progress.value = withTiming(1, { duration: 1600 }, (finished) => {
+    // 4. Progress loader animation
+    progress.value = withTiming(1, { duration: 1500 }, (finished) => {
       if (finished) {
         runOnJS(setAnimationComplete)(true);
       }
     });
   }, []);
 
-  // 5. Watch for both loading to end (Firebase auth ready) and entry animations to complete
+  // 5. Watch for both auth resolution & animation completion before exiting
   useEffect(() => {
     if (!isLoading && animationComplete) {
-      // Execute exit transition: slide up and fade out
-      containerOpacity.value = withTiming(0, { duration: 450 });
-      containerTranslateY.value = withTiming(-height, { duration: 500 }, (finished) => {
+      containerOpacity.value = withTiming(0, { duration: 400 });
+      containerTranslateY.value = withTiming(-height, { duration: 450 }, (finished) => {
         if (finished) {
           runOnJS(onFinish)();
         }
@@ -97,83 +94,72 @@ export default function CustomSplashScreen({
   }, [isLoading, animationComplete]);
 
   // Animated styles
-  const logoAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        { scale: logoScale.value },
-        { rotate: `${logoRotate.value}deg` },
-      ] as any,
-    };
-  });
+  const logoAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
+    transform: [{ scale: logoScale.value }],
+  }));
 
-  const contentAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: contentOpacity.value,
-      transform: [{ translateY: contentTranslateY.value }],
-    };
-  });
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+    transform: [{ translateY: contentTranslateY.value }],
+  }));
 
-  const progressAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      width: `${progress.value * 100}%`,
-    };
-  });
+  const progressAnimatedStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
 
-  const containerAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: containerOpacity.value,
-      transform: [{ translateY: containerTranslateY.value }],
-    };
-  });
+  const containerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: containerOpacity.value,
+    transform: [{ translateY: containerTranslateY.value }],
+  }));
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        containerAnimatedStyle as any,
-      ]}
-    >
+    <Animated.View style={[styles.container, containerAnimatedStyle as any]}>
+      <StatusBar style="dark" backgroundColor="transparent" translucent={true} />
+      {/* Ambient background decoration */}
+      <View style={styles.ambientGlowTop} />
+      <View style={styles.ambientGlowBottom} />
+
       <View style={styles.centerContent}>
-        {/* Animated Logo Badge */}
-        <Animated.View style={[styles.logoBadge, styles.brutalShadowLime, logoAnimatedStyle as any]}>
+        {/* Floating Transparent Logo - No background card, no white box border */}
+        <Animated.View style={[styles.logoWrapper, logoAnimatedStyle as any]}>
           <Image
-            source={require("@/assets/images/icon.png")}
+            source={require("@/assets/images/splash-icon.png")}
             style={styles.logoImage}
-            resizeMode="cover"
+            resizeMode="contain"
           />
         </Animated.View>
 
         {/* Animated Brand Content */}
         <Animated.View style={[styles.brandContainer, contentAnimatedStyle as any]}>
-          {/* Main Title with highlights */}
+          {/* Main Title */}
           <Text style={styles.heroText}>
             ELEVATE{"\n"}
-            <Text style={{ color: "#A3E635" }}>YOUR CAREER.</Text>
+            <Text style={{ color: C.primary }}>YOUR CAREER.</Text>
           </Text>
 
-          {/* Neo-Brutalism Logo Header Card */}
-          <View style={[styles.cardHeader, styles.brutalShadowSmallLime]}>
+          {/* Clean Pill Badge */}
+          <View style={styles.brandBadge}>
             <Text style={styles.brandTitle}>
-              Resume <Text style={{ color: "#A3E635" }}>Elite</Text>
+              Resume <Text style={{ color: C.primary }}>Elite</Text>
             </Text>
-            <View style={styles.taglineBadge}>
-              <Sparkles size={12} color="#000" />
-              <Text style={styles.taglineText}>AI-POWERED</Text>
+            <View style={styles.aiTag}>
+              <Sparkles size={11} color="#573353" />
+              <Text style={styles.aiTagText}>AI-POWERED</Text>
             </View>
           </View>
 
           {/* Subtitle */}
           <Text style={styles.subHeroText}>
-            Create an ATS-friendly, premium resume in minutes and land your dream job faster.
+            Build ATS-optimized resumes and unlock top opportunities effortlessly.
           </Text>
 
-          {/* Neo-Brutalist Progress Loader */}
+          {/* Smooth Rounded Progress Bar */}
           <View style={styles.progressContainer}>
-            <View style={[styles.progressBarOuter, styles.brutalShadowTinyLime]}>
+            <View style={styles.progressBarOuter}>
               <Animated.View
                 style={[
                   styles.progressBarInner,
-                  { backgroundColor: "#A3E635" },
                   progressAnimatedStyle as any,
                 ]}
               />
@@ -185,9 +171,9 @@ export default function CustomSplashScreen({
         </Animated.View>
       </View>
 
-      {/* Decorative footer */}
+      {/* Elegant minimalist footer */}
       <View style={styles.footerContainer}>
-        <Text style={styles.footerText}>AI Resume Builder &bull; ATS Optimizer</Text>
+        <Text style={styles.footerText}>AI Resume Builder • Smart ATS Matcher</Text>
       </View>
     </Animated.View>
   );
@@ -196,54 +182,46 @@ export default function CustomSplashScreen({
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 9999, // Ensure it sits on top of all stack navigation
+    zIndex: 9999,
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 50,
-    backgroundColor: "#000000", // Solid black background
+    paddingVertical: Platform.OS === "ios" ? 60 : 50,
+    backgroundColor: "#FFF8F5", // Warm Habit App cream background
+    overflow: "hidden",
+  },
+  ambientGlowTop: {
+    position: "absolute",
+    top: -120,
+    right: -80,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: "rgba(253, 167, 88, 0.12)",
+  },
+  ambientGlowBottom: {
+    position: "absolute",
+    bottom: -100,
+    left: -70,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(87, 51, 83, 0.05)",
   },
   centerContent: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     width: "100%",
-    paddingHorizontal: 30,
+    paddingHorizontal: 28,
   },
-  // Neo-Brutalism Styles with White Borders and Lime Shadows for Dark Mode
-  brutalShadowLime: {
-    borderWidth: 2.5,
-    borderColor: "#ffffff",
-    shadowColor: "#A3E635",
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 0,
-  },
-  brutalShadowSmallLime: {
-    borderWidth: 2,
-    borderColor: "#ffffff",
-    shadowColor: "#A3E635",
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 0,
-  },
-  brutalShadowTinyLime: {
-    borderWidth: 1.5,
-    borderColor: "#ffffff",
-    shadowColor: "#A3E635",
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 0,
-  },
-  logoBadge: {
-    width: 95,
-    height: 95,
-    backgroundColor: "#ffffff",
-    borderRadius: 22,
-    marginBottom: 30,
-    overflow: "hidden",
+  // Clean floating logo wrapper without background boxes, borders, or harsh shadow
+  logoWrapper: {
+    width: 120,
+    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 26,
+    backgroundColor: "transparent",
   },
   logoImage: {
     width: "100%",
@@ -255,94 +233,99 @@ const styles = StyleSheet.create({
   },
   heroText: {
     fontFamily: "PoppinsBold",
-    fontSize: 36,
-    lineHeight: 40,
+    fontSize: 34,
+    lineHeight: 38,
     fontWeight: "900",
     textAlign: "center",
-    color: "#ffffff", // Solid white text
-    textTransform: "uppercase",
-    marginBottom: 20,
+    color: "#573353", // Deep Plum
+    letterSpacing: -0.5,
+    marginBottom: 16,
   },
-  cardHeader: {
+  brandBadge: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#000000", // Black inner card
-    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    width: "100%",
-    maxWidth: 280,
-    marginBottom: 25,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: "rgba(87, 51, 83, 0.08)",
+    shadowColor: "#573353",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+    marginBottom: 18,
+    gap: 8,
   },
   brandTitle: {
     fontFamily: "PoppinsBold",
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#ffffff", // White text
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#573353",
+    letterSpacing: -0.2,
   },
-  taglineBadge: {
+  aiTag: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#A3E635", // Vibrant green badge
+    backgroundColor: "rgba(253, 167, 88, 0.2)",
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: "#000000",
-    gap: 3,
+    paddingVertical: 3,
+    borderRadius: 999,
+    gap: 4,
   },
-  taglineText: {
+  aiTagText: {
     fontFamily: "PoppinsBold",
-    fontSize: 8,
-    fontWeight: "900",
-    color: "#000000",
-    letterSpacing: 0.5,
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#573353",
+    letterSpacing: 0.4,
   },
   subHeroText: {
     fontFamily: "Poppins",
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#ffffff", // White text
+    fontSize: 13,
+    fontWeight: "600",
+    color: "rgba(87, 51, 83, 0.65)",
     textAlign: "center",
-    opacity: 0.9,
-    lineHeight: 20,
-    paddingHorizontal: 10,
-    marginBottom: 40,
+    lineHeight: 19,
+    paddingHorizontal: 20,
+    marginBottom: 32,
   },
-  // Progress Bar
+  // Smooth Rounded Progress Bar
   progressContainer: {
     width: "100%",
-    maxWidth: 260,
+    maxWidth: 240,
     alignItems: "center",
   },
   progressBarOuter: {
     width: "100%",
-    height: 16,
-    backgroundColor: "#000000", // Black track
-    borderRadius: 6,
+    height: 8,
+    backgroundColor: "rgba(87, 51, 83, 0.08)",
+    borderRadius: 999,
     overflow: "hidden",
   },
   progressBarInner: {
     height: "100%",
-    borderRadius: 4,
+    backgroundColor: "#FDA758",
+    borderRadius: 999,
   },
   loadingText: {
     fontFamily: "Poppins",
     fontSize: 11,
-    fontWeight: "800",
-    color: "#ffffff", // White loading text
-    marginTop: 12,
-    opacity: 0.8,
+    fontWeight: "700",
+    color: "rgba(87, 51, 83, 0.55)",
+    marginTop: 10,
+    letterSpacing: -0.1,
   },
   footerContainer: {
     alignItems: "center",
+    paddingBottom: 10,
   },
   footerText: {
     fontFamily: "Poppins",
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#ffffff", // White footer text
-    opacity: 0.7,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(87, 51, 83, 0.4)",
+    letterSpacing: 0.2,
   },
 });

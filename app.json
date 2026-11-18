@@ -2,7 +2,7 @@
   "expo": {
     "name": "Resume Elite",
     "slug": "resume-elite",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "resume",
@@ -15,15 +15,19 @@
       "package": "com.resumeelite.app",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#0F172A",
-        "foregroundImage": "./assets/images/icon.png"
+        "backgroundColor": "#FFF8F5",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 7,
+      "versionCode": 8,
       "permissions": [
         "com.android.vending.BILLING",
         "com.google.android.gms.permission.AD_ID"
       ]
+    },
+    "notification": {
+      "icon": "./assets/images/android-icon-monochrome.png",
+      "color": "#FDA758"
     },
     "web": {
       "output": "static",
@@ -44,11 +48,11 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#FFF8F5",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#FFF8F5"
           }
         }
       ]

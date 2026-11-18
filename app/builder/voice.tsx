@@ -11,9 +11,8 @@ import {
 } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { ChevronLeft, Sparkles, Trash2, Edit3 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { useFocusEffect } from 'expo-router';
 import { AudioService } from '@/services/audio';
 import { transcribeAudio, callAI } from '@/services/ai';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -38,6 +37,12 @@ const SILENCE_THRESHOLD = -30;
 
 export default function VoiceAssistantScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string; role?: string; company?: string; description?: string }>();
+
+  const isInterviewMode = params.mode === 'interview';
+  const targetRole = (params.role as string) || 'Software Professional';
+  const targetCompany = (params.company as string) || 'Company';
+  const targetDescription = (params.description as string) || '';
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -153,7 +158,7 @@ export default function VoiceAssistantScreen() {
   const animatedGlow = useAnimatedStyle(() => ({
     transform: [{ scale: glowValue.value }],
     opacity: withTiming(isListening ? 0.8 : 0.2),
-    backgroundColor: isListening ? '#8b5cf6' : '#475569',
+    backgroundColor: isListening ? '#FDA758' : '#A898A6',
   }));
 
   const detectLanguage = (text: string): string => {
@@ -249,9 +254,18 @@ export default function VoiceAssistantScreen() {
     }
   };
 
-  // ─── AI Greeting (onboarding with known fields) ─────
+  // ─── AI Greeting (onboarding with known fields / Interview Mode) ─────
   const handleAutoGreeting = async () => {
     try {
+      if (isInterviewMode) {
+        const greeting = `Welcome to your mock interview for the ${targetRole} position at ${targetCompany}! I'll be your Senior Hiring Manager. I will ask you realistic technical and situational questions, and provide immediate feedback on your responses. Let's begin: please introduce yourself and summarize your experience relevant to this role.`;
+        setCurrentQuestion(greeting);
+        addMessage('ai', greeting);
+        speakThenListen(greeting);
+        setInterviewPhase('collecting');
+        return;
+      }
+
       const known = RESUME_FIELDS.filter(f => resumeDataRef.current[f]);
       let greeting: string;
       if (known.length > 0) {
@@ -264,7 +278,9 @@ export default function VoiceAssistantScreen() {
       speakThenListen(greeting);
       setInterviewPhase('collecting');
     } catch {
-      const fallback = "Hi there! I'm your AI resume builder. What's your name?";
+      const fallback = isInterviewMode
+        ? `Hello! Welcome to your mock interview for ${targetRole} at ${targetCompany}. Could you please introduce yourself?`
+        : "Hi there! I'm your AI resume builder. What's your name?";
       setCurrentQuestion(fallback);
       addMessage('ai', fallback);
       speakThenListen(fallback);
@@ -290,6 +306,46 @@ export default function VoiceAssistantScreen() {
         role: msg.role === 'ai' ? 'assistant' as const : 'user' as const,
         content: msg.text,
       }));
+
+      // ── MOCK INTERVIEW MODE FLOW ──
+      if (isInterviewMode) {
+        const userAnswersCount = conversationRef.current.filter(m => m.role === 'user').length + 1;
+        const isFinalWrapUp = userAnswersCount >= 5;
+
+        const interviewPrompt = `You are a professional Senior Technical Hiring Manager at "${targetCompany}" interviewing a candidate for the role of "${targetRole}".
+Job Context / Requirements: ${targetDescription || 'Focus on industry-standard engineering skills, problem solving, teamwork, and best practices.'}
+
+Current Candidate Answer: "${text}"
+Interview Progress: Answer #${userAnswersCount} of 5.
+
+Instructions:
+${
+  isFinalWrapUp
+    ? `1. Provide an overall interview scorecard summary.
+2. Give an Interview Rating (e.g., 8.5/10), mentioning 2 key strengths and 1 area of improvement.
+3. Congratulate them on completing the mock interview.`
+    : `1. Give 1 sentence of constructive, professional feedback on their answer (what was strong or what could be improved).
+2. Ask the NEXT realistic interview question (mix of technical scenario, system design / coding concepts, or behavioral STAR questions).
+3. Keep the total response concise (under 3 sentences) so the audio voice is snappy.`
+}
+Support English, Tamil, or Hindi if the user speaks in that language.`;
+
+        const response = await callAI([
+          { role: 'system', content: interviewPrompt },
+          ...history,
+          { role: 'user', content: text },
+        ], { jsonMode: false });
+
+        if (!isActive.current) return;
+        const cleaned = response.trim();
+        setCurrentQuestion(cleaned);
+        addMessage('ai', cleaned);
+        speakThenListen(cleaned);
+        if (isFinalWrapUp) {
+          setInterviewPhase('complete');
+        }
+        return;
+      }
 
       const collectedSnapshot = { ...resumeDataRef.current };
       const collectedFieldsList = Array.from(collectedFieldsRef.current);
@@ -450,11 +506,22 @@ Return ONLY JSON. Make ATS-optimized with action verbs.`;
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.headerBtn}>
-          <ChevronLeft color="#8b5cf6" size={24} />
+          <ChevronLeft color="#FDA758" size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Voice Assistant</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={styles.headerTitle}>
+            {isInterviewMode ? 'AI Mock Interview' : 'Voice Assistant'}
+          </Text>
+          {isInterviewMode && (
+            <View style={{ backgroundColor: '#8B5CF620', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 2 }}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: '#8B5CF6' }}>
+                {targetRole} • {targetCompany}
+              </Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity onPress={handleNewChat} style={styles.headerBtn}>
-          <Edit3 color="#8b5cf6" size={20} />
+          <Edit3 color="#FDA758" size={20} />
         </TouchableOpacity>
       </View>
 
@@ -470,7 +537,7 @@ Return ONLY JSON. Make ATS-optimized with action verbs.`;
         </View>
         {currentQuestion ? (
           <View style={styles.questionCard}>
-            <Text style={styles.questionLabel}>AI says</Text>
+            <Text style={styles.questionLabel}>{isInterviewMode ? 'Hiring Manager' : 'AI says'}</Text>
             <Text style={styles.questionText} numberOfLines={4}>{currentQuestion}</Text>
           </View>
         ) : null}
@@ -492,10 +559,10 @@ Return ONLY JSON. Make ATS-optimized with action verbs.`;
               <View
                 style={[styles.msgBubble, msg.role === 'user' ? styles.userBubble : styles.aiBubble]}
               >
-                <Text style={[styles.bubbleLabel, { color: msg.role === 'user' ? '#ffffff90' : '#8b5cf6' }]}>
-                  {msg.role === 'user' ? 'YOU' : 'AI'}
+                <Text style={[styles.bubbleLabel, { color: msg.role === 'user' ? '#ffffff90' : '#FDA758' }]}>
+                  {msg.role === 'user' ? 'YOU (Candidate)' : isInterviewMode ? 'INTERVIEWER' : 'AI'}
                 </Text>
-                <Text style={[styles.bubbleText, { color: msg.role === 'user' ? '#fff' : '#3d3352' }]}>
+                <Text style={[styles.bubbleText, { color: msg.role === 'user' ? '#fff' : '#573353' }]}>
                   {msg.text}
                 </Text>
               </View>
@@ -507,7 +574,7 @@ Return ONLY JSON. Make ATS-optimized with action verbs.`;
           {isProcessing && (
             <View style={[styles.msgRow, styles.aiMsgRow]}>
               <View style={[styles.msgBubble, styles.aiBubble]}>
-                <ActivityIndicator color="#8b5cf6" size="small" />
+                <ActivityIndicator color="#FDA758" size="small" />
               </View>
             </View>
           )}
@@ -516,38 +583,72 @@ Return ONLY JSON. Make ATS-optimized with action verbs.`;
 
       {/* ── Progress + Bottom Controls ── */}
       <View style={styles.bottomSection}>
-        <View style={styles.progressRow}>
-          <Text style={styles.progressLabel}>Progress</Text>
-          <Text style={styles.progressCount}>{collectedFields.size}/{RESUME_FIELDS.length}</Text>
-        </View>
-        <View style={styles.progressTrack}>
-          <View
-            style={[styles.progressFill, { width: `${(collectedFields.size / RESUME_FIELDS.length) * 100}%` }]}
-          />
-        </View>
-        <View style={styles.pillRow}>
-          {RESUME_FIELDS.slice(0, 8).map(field => (
-            <View
-              key={field}
-              style={[styles.fieldPill, { backgroundColor: collectedFields.has(field) ? '#8b5cf620' : '#f1f0f0' }]}
-            >
-              <Text
-                style={[styles.fieldPillText, { color: collectedFields.has(field) ? '#8b5cf6' : '#b0a8a8' }]}
-              >
-                {field === 'name' ? 'Name' : field === 'title' ? 'Title' : field === 'phone' ? 'Phone' : field === 'email' ? 'Email' : field === 'location' ? 'Loc' : field === 'summary' ? 'Sum' : field === 'experience' ? 'Exp' : field === 'education' ? 'Edu' : field.slice(0, 3)}
+        {isInterviewMode ? (
+          <>
+            <View style={styles.progressRow}>
+              <Text style={styles.progressLabel}>Interview Questions</Text>
+              <Text style={[styles.progressCount, { color: '#8B5CF6' }]}>
+                {Math.min(5, conversation.filter(m => m.role === 'user').length + 1)} / 5
               </Text>
             </View>
-          ))}
-          {RESUME_FIELDS.length > 8 && (
-            <View style={[styles.fieldPill, { backgroundColor: '#f1f0f0' }]}>
-              <Text style={[styles.fieldPillText, { color: '#b0a8a8' }]}>+{RESUME_FIELDS.length - 8}</Text>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: '#8B5CF6',
+                    width: `${Math.min(100, ((conversation.filter(m => m.role === 'user').length + 1) / 5) * 100)}%`,
+                  },
+                ]}
+              />
             </View>
-          )}
-        </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.progressRow}>
+              <Text style={styles.progressLabel}>Progress</Text>
+              <Text style={styles.progressCount}>{collectedFields.size}/{RESUME_FIELDS.length}</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[styles.progressFill, { width: `${(collectedFields.size / RESUME_FIELDS.length) * 100}%` }]}
+              />
+            </View>
+            <View style={styles.pillRow}>
+              {RESUME_FIELDS.slice(0, 8).map(field => (
+                <View
+                  key={field}
+                  style={[styles.fieldPill, { backgroundColor: collectedFields.has(field) ? 'rgba(253, 167, 88, 0.2)' : '#f1f0f0' }]}
+                >
+                  <Text
+                    style={[styles.fieldPillText, { color: collectedFields.has(field) ? '#FDA758' : '#b0a8a8' }]}
+                  >
+                    {field === 'name' ? 'Name' : field === 'title' ? 'Title' : field === 'phone' ? 'Phone' : field === 'email' ? 'Email' : field === 'location' ? 'Loc' : field === 'summary' ? 'Sum' : field === 'experience' ? 'Exp' : field === 'education' ? 'Edu' : field.slice(0, 3)}
+                  </Text>
+                </View>
+              ))}
+              {RESUME_FIELDS.length > 8 && (
+                <View style={[styles.fieldPill, { backgroundColor: '#f1f0f0' }]}>
+                  <Text style={[styles.fieldPillText, { color: '#b0a8a8' }]}>+{RESUME_FIELDS.length - 8}</Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
         <View style={styles.bottomRow}>
           {isProcessing ? (
-            <ActivityIndicator color="#8b5cf6" size="large" />
-          ) : interviewPhase === 'complete' ? (
+            <ActivityIndicator color="#FDA758" size="large" />
+          ) : isInterviewMode && interviewPhase === 'complete' ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.back()}
+              style={[styles.generateBtn, { backgroundColor: '#8B5CF6' }]}
+            >
+              <Sparkles size={20} color="#fff" />
+              <Text style={styles.generateBtnText}>Interview Complete • Back to Jobs</Text>
+            </TouchableOpacity>
+          ) : !isInterviewMode && interviewPhase === 'complete' ? (
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={handleFinalSynthesis}
@@ -598,14 +699,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#8b5cf615',
+    backgroundColor: 'rgba(253, 167, 88, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#4a3f6b',
+    color: '#573353',
   },
   topSection: {
     paddingHorizontal: 20,
@@ -632,18 +733,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     width: '100%',
-    shadowColor: '#8b5cf6',
+    shadowColor: '#FDA758',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#f0e8ff',
+    borderColor: 'rgba(87, 51, 83, 0.1)',
   },
   questionLabel: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#8b5cf6',
+    color: '#FDA758',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 4,
@@ -651,7 +752,7 @@ const styles = StyleSheet.create({
   questionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#3d3352',
+    color: '#573353',
     lineHeight: 21,
   },
 
@@ -673,13 +774,13 @@ const styles = StyleSheet.create({
     maxWidth: '82%',
   },
   userBubble: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#FDA758',
     borderBottomRightRadius: 4,
   },
   aiBubble: {
-    backgroundColor: '#f5f0ff',
+    backgroundColor: '#FFF6ED',
     borderWidth: 1,
-    borderColor: '#f0e8ff',
+    borderColor: 'rgba(87, 51, 83, 0.1)',
     borderBottomLeftRadius: 4,
   },
   bubbleLabel: { fontSize: 9, fontWeight: '900', marginBottom: 3 },
@@ -688,7 +789,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#f5f0ff',
+    backgroundColor: '#FFF6ED',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 4,
@@ -703,14 +804,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   progressLabel: { fontSize: 12, fontWeight: '700', color: '#7a6f8a' },
-  progressCount: { fontSize: 12, fontWeight: '800', color: '#8b5cf6' },
+  progressCount: { fontSize: 12, fontWeight: '800', color: '#FDA758' },
   progressTrack: {
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#f0e8ff',
+    backgroundColor: 'rgba(87, 51, 83, 0.1)',
     overflow: 'hidden',
   },
-  progressFill: { height: '100%', backgroundColor: '#8b5cf6', borderRadius: 3 },
+  progressFill: { height: '100%', backgroundColor: '#FDA758', borderRadius: 3 },
   pillRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -725,11 +826,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#FDA758',
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 26,
-    shadowColor: '#8b5cf6',
+    shadowColor: '#FDA758',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 14,
@@ -765,6 +866,6 @@ const styles = StyleSheet.create({
   waveBar: {
     width: 4,
     borderRadius: 2,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#FDA758',
   },
 });

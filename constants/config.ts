@@ -1,6 +1,15 @@
 const isProd = !__DEV__;
 
 export const API_CONFIG = {
+  // Firebase Auth kept; API calls routed through Cloudflare Worker + D1.
+  // Set API_PROVIDER to 'existing' to bypass Cloudflare during rollback.
+  API_PROVIDER: "cloudflare" as "existing" | "cloudflare",
+  AUTH_PROVIDER: "existing" as "existing" | "better-auth",
+  CLOUDFLARE_API_BASE_URL: "https://resume-ats-api.dinesh-mahi-dev.workers.dev",
+  CLOUDFLARE_MIGRATION_TOKEN: "",
+  // R2 ready for future paid enablement (bucket/binding configured in wrangler when needed).
+  R2_ENABLED: false,
+
   ATS_ENGINE_ENDPOINT: "https://api.groq.com/openai/v1/chat/completions",
   GROQ_API_KEY: "YOUR_REMOTE_KEY",
   // Groq retired all Llama IDs on 2026-08-16 (llama-3.3-70b-versatile = 404).

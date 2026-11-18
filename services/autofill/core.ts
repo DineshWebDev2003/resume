@@ -57,7 +57,20 @@ export function buildSmartAutofillJS(profile: MinimalApplyProfile, ats: ATSKind)
       linkedin: '${esc(profile.linkedin)}',
       portfolio: '${esc(profile.portfolio)}',
       github: '${esc(profile.github)}',
-      website: '${esc(profile.website)}'
+      website: '${esc(profile.website)}',
+      workAuthorization: '${esc(profile.workAuthorization || "Yes")}',
+      visaRequired: '${esc(profile.visaRequired || "No")}',
+      noticePeriod: '${esc(profile.noticePeriod || "Immediate")}',
+      yearsOfExperience: '${esc(profile.yearsOfExperience || "3")}',
+      currentTitle: '${esc(profile.currentTitle || "")}',
+      currentCompany: '${esc(profile.currentCompany || "")}',
+      degree: '${esc(profile.degree || "Bachelor")}',
+      major: '${esc(profile.major || "Computer Science")}',
+      university: '${esc(profile.university || "")}',
+      salaryExpectation: '${esc(profile.salaryExpectation || "Competitive")}',
+      gender: '${esc(profile.gender || "Decline to self-identify")}',
+      disability: '${esc(profile.disability || "No")}',
+      veteran: '${esc(profile.veteran || "No")}'
     };
     var PATTERNS = ${JSON.stringify(patterns)};
     var RISKY = ${JSON.stringify(RISKY_QUESTION_KEYS)};
@@ -80,6 +93,59 @@ export function buildSmartAutofillJS(profile: MinimalApplyProfile, ats: ATSKind)
       try{var ne=new Event('blur',{bubbles:true});el.dispatchEvent(ne);}catch(e){}
       return true;
     }catch(e){try{el.value=val;return true;}catch(_){return false;}}
+  }
+  function setSelectVal(el,val,field){
+    if(!el||!val) return false;
+    try{
+      var opts=Array.prototype.slice.call(el.options||[]);
+      if(!opts.length) return false;
+      var targetNorm=norm(val);
+      var matched=null;
+      // 1. Partial/Exact text match
+      for(var i=0;i<opts.length;i++){
+        var o=opts[i];
+        var oNorm=norm(o.text+' '+(o.value||''));
+        if(oNorm.indexOf(targetNorm)!==-1||targetNorm.indexOf(oNorm)!==-1){matched=o;break;}
+      }
+      // 2. Boolean Yes/No matching for work auth & visa
+      if(!matched){
+        if(/yes|true|authorized|eligible/i.test(val)){
+          matched=opts.find(function(o){return /^yes|^authorized|^eligible/i.test(norm(o.text));});
+        }else if(/no|false|not/i.test(val)){
+          matched=opts.find(function(o){return /^no|^not|^will_not/i.test(norm(o.text));});
+        }
+      }
+      // 3. EEO Decline option
+      if(!matched&&/decline|prefer_not/i.test(val)){
+        matched=opts.find(function(o){return /decline|prefer_not|choose_not|not_disclose/i.test(norm(o.text));});
+      }
+      if(matched){
+        el.value=matched.value;
+        ['input','change','blur'].forEach(function(t){try{el.dispatchEvent(new Event(t,{bubbles:true}));}catch(e){}});
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function setRadioVal(group,val){
+    if(!group||!group.length||!val) return false;
+    try{
+      var isYes=/yes|authorized|eligible/i.test(val);
+      var isNo=/no|not/i.test(val);
+      var matched=null;
+      for(var i=0;i<group.length;i++){
+        var r=group[i];
+        var txt=norm(labelText(r)+' '+(r.value||'')+' '+surroundingText(r));
+        if(isYes&&(/yes|true|authorized/i.test(txt))){matched=r;break;}
+        if(isNo&&(/no|false|will_not/i.test(txt))){matched=r;break;}
+      }
+      if(matched){
+        matched.checked=true;
+        ['change','click','input'].forEach(function(t){try{matched.dispatchEvent(new Event(t,{bubbles:true}));}catch(e){}});
+        return true;
+      }
+    }catch(e){}
+    return false;
   }
   function labelText(el){
     try{
@@ -231,6 +297,56 @@ export function buildSmartAutofillJS(profile: MinimalApplyProfile, ats: ATSKind)
       fields.push({field:m.field,matchedBy:m.by,success:!!ok});
       if(ok)filled++;else skipped++;
     }catch(e){skipped++;}
+  });
+
+  // ---- Smart Select Dropdowns (Workday / Greenhouse / Lever / Taleo) ----
+  qAll('select').forEach(function(el){
+    try{
+      if(el.disabled||el.readOnly)return;
+      var sig=signals(el);
+      var m=matchField(sig);
+      if(!m)return;
+      var val=PROFILE[m.field];
+      if(!val)return;
+      var ok=setSelectVal(el,val,m.field);
+      fields.push({field:m.field,matchedBy:(m.by||'select'),success:!!ok});
+      if(ok)filled++;
+    }catch(e){}
+  });
+
+  // ---- Smart Radio Groups (Yes/No questions: Authorization, Visa, Sponsorship) ----
+  var radiosByName={};
+  qAll('input[type="radio"]').forEach(function(r){
+    var n=r.name||r.id;
+    if(n)(radiosByName[n]=radiosByName[n]||[]).push(r);
+  });
+  Object.keys(radiosByName).forEach(function(n){
+    try{
+      var group=radiosByName[n];
+      if(group.some(function(r){return r.checked;}))return; // already selected
+      var sig=signals(group[0]);
+      var m=matchField(sig);
+      if(!m)return;
+      var val=PROFILE[m.field];
+      if(!val)return;
+      var ok=setRadioVal(group,val);
+      fields.push({field:m.field,matchedBy:(m.by||'radio'),success:!!ok});
+      if(ok)filled++;
+    }catch(e){}
+  });
+
+  // ---- Auto-Consent Checkboxes (Terms, Privacy Policy, Accuracy Confirmation) ----
+  qAll('input[type="checkbox"]').forEach(function(cb){
+    try{
+      var hay=norm(labelText(cb)+' '+(cb.name||'')+' '+(cb.id||''));
+      if(/agree|consent|acknowledge|terms|privacy|certif/i.test(hay)){
+        if(!cb.checked){
+          cb.checked=true;
+          ['change','click','input'].forEach(function(t){try{cb.dispatchEvent(new Event(t,{bubbles:true}));}catch(e){}});
+          filled++;
+        }
+      }
+    }catch(e){}
   });
   var questions=detectQuestions();
   var sig1=detectSignals();

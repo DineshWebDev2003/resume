@@ -8,24 +8,36 @@ import { AutoApplyBadge } from "@/components/AutoApplyBadge";
 import { processAutoApplyBatch, getAutoApplyContext } from "@/services/autoApply";
 import type { AutoApplyJob } from "@/services/autoApply";
 import type { AutoApplyStatus } from "@/constants/autoApply";
-import { getCached, setCached, getMem, setMem } from "@/services/jobCache";
 import { auth } from "@/services/firebase";
-import { getGlobalJobs, saveGlobalJobs, canUserFetchJobs, saveAutoApplyRecord, getAutoApplyRecords } from "@/services/firestore";
+import { getAutoApplyRecords, saveAutoApplyRecord } from "@/services/firestore";
+import { notifyHighMatchJobs } from "@/services/autoApplyNotifier";
 import { useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 import {
-  Briefcase,
+  getUnifiedGlobalJobs,
+  filterStoredJobs,
+  UnifiedJob,
+} from "@/services/globalJobsFeed";
+import {
+  Calendar,
   ChevronRight,
+  ExternalLink,
   Globe,
   Heart,
+  Link as LinkIcon,
   MapPin,
+  Plus,
   RefreshCw,
   Search,
   ShieldCheck,
+  Sparkles,
   Wifi,
   WifiOff,
+  X,
   Zap,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -34,6 +46,7 @@ import {
   Image,
   InteractionManager,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -43,11 +56,200 @@ import {
 } from "react-native";
 import Animated, { FadeInRight, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scrapeJobFromUrl, saveScrapedJob } from "@/services/jobScraper";
 
 const { width } = Dimensions.get("window");
 
 // ─── Tab types ───────────────────────────────────────────────────────────────
 type ActiveTab = "india" | "remote" | "verified";
+
+// ─── Helper: Format Posted Date ───────────────────────────────────────────────
+function formatPostedDate(dateStr?: string | number): string {
+  if (!dateStr) return "Recently";
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return String(dateStr);
+    const now = Date.now();
+    const diffMs = now - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (diffHours < 1) return "Just now";
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return "1d ago";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    return `${Math.floor(diffDays / 30)}mo ago`;
+  } catch {
+    return "Recently";
+  }
+}
+
+// ─── Helper: Extract Company Monogram / Initials ──────────────────────────────
+function getCompanyMonogram(name?: string): string {
+  if (!name) return "";
+  const cleaned = name.trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return cleaned.slice(0, 2).toUpperCase();
+}
+
+// ─── Curated High-Growth India Tech Roles (Active Fallback) ──────────────────
+const CURATED_INDIA_JOBS: any[] = [
+  {
+    job_id: "curated-in-1",
+    title: "Software Development Engineer (Frontend/Mobile)",
+    company_name: "Swiggy",
+    location: "Bangalore",
+    description: "Looking for an SDE to build delightful customer and partner experiences using React Native, TypeScript, and modern state architectures.",
+    salary: "₹18L – ₹28L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://careers.swiggy.com",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-2",
+    title: "Product Engineer (Full Stack)",
+    company_name: "Zoho Corporation",
+    location: "Chennai",
+    description: "Build robust SaaS products serving 100M+ users globally. Work with Java, JavaScript/TypeScript, scalable cloud systems, and privacy-first engineering.",
+    salary: "₹10L – ₹18L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.zoho.com/careers/",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-3",
+    title: "Senior React Native / Mobile Developer",
+    company_name: "Zomato",
+    location: "Gurgaon",
+    description: "Architect and lead our core mobile ordering and delivery consumer application with ultra-fast startup times and smooth 60fps animations.",
+    salary: "₹24L – ₹36L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.zomato.com/careers",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 14 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-4",
+    title: "UI/UX & Frontend Engineer",
+    company_name: "Freshworks",
+    location: "Chennai",
+    description: "Design and implement intuitive customer engagement experiences on Freshdesk & Freshservice using Ember, React, and design systems.",
+    salary: "₹14L – ₹24L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.freshworks.com/company/careers/",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 22 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-5",
+    title: "Cloud Infrastructure & DevOps Engineer",
+    company_name: "Flipkart",
+    location: "Bangalore",
+    description: "Manage large-scale Kubernetes clusters, distributed Kafka pipelines, automated CI/CD deployments, and high-availability cloud infrastructure.",
+    salary: "₹22L – ₹34L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.flipkartcareers.com",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 28 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-6",
+    title: "Backend Platform Engineer (Go / Java)",
+    company_name: "PhonePe",
+    location: "Bangalore",
+    description: "Design low-latency microservices handling millions of UPI transactions per minute with 99.999% uptime and bulletproof transaction safety.",
+    salary: "₹25L – ₹40L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.phonepe.com/careers/",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 36 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-7",
+    title: "Enterprise Solutions Developer",
+    company_name: "TCS",
+    location: "Chennai",
+    description: "Lead enterprise modernization for Fortune 500 financial clients with Java Spring Boot, microservices, and cloud-native solutions.",
+    salary: "₹8L – ₹16L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.tcs.com/careers",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-8",
+    title: "Senior Systems Engineer",
+    company_name: "Infosys",
+    location: "Pune",
+    description: "Develop cutting-edge digital transformation platforms, microservices architectures, and automated testing pipelines for global clients.",
+    salary: "₹9L – ₹18L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.infosys.com/careers.html",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 52 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-9",
+    title: "Cloud Support & Systems Engineer",
+    company_name: "Amazon Development Centre",
+    location: "Hyderabad",
+    description: "Work directly with AWS cloud architectures, troubleshooting distributed enterprise systems and ensuring optimal cloud performance.",
+    salary: "₹16L – ₹28L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://www.amazon.jobs/en/locations/hyderabad-india",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 60 * 3600 * 1000).toISOString(),
+  },
+  {
+    job_id: "curated-in-10",
+    title: "Software Engineer II (Full Stack)",
+    company_name: "Microsoft IDC",
+    location: "Hyderabad",
+    description: "Join the Azure & Developer Productivity division building high-scale developer tooling, TypeScript SDKs, and intelligent cloud features.",
+    salary: "₹28L – ₹42L/yr",
+    schedule_type: "Full-time",
+    apply_link: "https://careers.microsoft.com",
+    thumbnail: null,
+    source: "verified",
+    posted_at: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
+  },
+];
+
+function getCuratedIndiaJobs(keywords?: string, city?: string): any[] {
+  let list = CURATED_INDIA_JOBS;
+  if (city && city !== "All India" && city !== "India") {
+    const cityLower = city.toLowerCase();
+    const cityFiltered = list.filter((j) =>
+      j.location.toLowerCase().includes(cityLower),
+    );
+    if (cityFiltered.length > 0) list = cityFiltered;
+  }
+  if (keywords && keywords.trim()) {
+    const q = keywords.toLowerCase().trim();
+    const qFiltered = list.filter(
+      (j) =>
+        j.title.toLowerCase().includes(q) ||
+        j.company_name.toLowerCase().includes(q) ||
+        j.description.toLowerCase().includes(q),
+    );
+    if (qFiltered.length > 0) list = qFiltered;
+  }
+  return list;
+}
 
 // ─── Adzuna India job fetcher ─────────────────────────────────────────────────
 async function fetchAdzunaJobs(keywords: string, location: string): Promise<any[]> {
@@ -77,10 +279,11 @@ async function fetchAdzunaJobs(keywords: string, location: string): Promise<any[
     thumbnail: null,
     schedule_type: j.contract_time === "full_time" ? "Full-time" : j.contract_time || "Full-time",
     source: "adzuna",
+    posted_at: j.created || new Date().toISOString(),
   }));
 }
 
-// ─── Jobicy remote jobs fetcher (no API key needed) ───────────────────────────
+// ─── Jobicy remote jobs fetcher ───────────────────────────────────────────────
 async function fetchJobicyJobs(tag: string): Promise<any[]> {
   // Jobicy expects a single slug tag — multi-word roles 400, so use first token.
   const slug = (tag || "developer").toLowerCase().trim().split(/[^a-z]+/).filter(Boolean)[0] || "developer";
@@ -102,10 +305,11 @@ async function fetchJobicyJobs(tag: string): Promise<any[]> {
     thumbnail: j.companyLogo,
     schedule_type: "Remote",
     source: "jobicy",
+    posted_at: j.pubDate || new Date().toISOString(),
   }));
 }
 
-// ─── Remotive fallback fetcher (no API key needed) ────────────────────────────
+// ─── Remotive fallback fetcher ────────────────────────────────────────────────
 async function fetchRemotiveJobs(category: string): Promise<any[]> {
   const cat = encodeURIComponent(category || "software-dev");
   const url = `${API_CONFIG.REMOTIVE_ENDPOINT}?category=${cat}&limit=20`;
@@ -123,6 +327,7 @@ async function fetchRemotiveJobs(category: string): Promise<any[]> {
     thumbnail: j.company_logo,
     schedule_type: "Remote",
     source: "remotive",
+    posted_at: j.publication_date || new Date().toISOString(),
   }));
 }
 
@@ -199,115 +404,94 @@ export default function JobsScreen() {
   const router = useRouter();
   const isDark = colorScheme === "dark";
   const colors = isDark ? Colors.dark : Colors.light;
-  const { saveJob, unsaveJob, isJobSaved } = useJobStore();
+  const { saveJob, unsaveJob, isJobSaved, getJobStatus, updateJobStatus } = useJobStore();
+  const hasNotifiedRef = useRef(false);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>("india");
-  const [jobs, setJobs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "india" | "remote" | "global">("all");
+  const [masterJobs, setMasterJobs] = useState<UnifiedJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [roleQuery, setRoleQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
 
-  // India tab state
-  const [indiaQuery, setIndiaQuery] = useState("software developer");
-  const [selectedCity, setSelectedCity] = useState("Chennai");
-  const hasAdzuna =
-    API_CONFIG.ADZUNA_APP_ID !== "YOUR_ADZUNA_APP_ID" &&
-    API_CONFIG.ADZUNA_APP_KEY !== "YOUR_ADZUNA_APP_KEY";
+  // Recommended Smart Filter States
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [fullTimeOnly, setFullTimeOnly] = useState(false);
+  const [freshersOnly, setFreshersOnly] = useState(false);
+  const [thisWeekOnly, setThisWeekOnly] = useState(false);
+  const [matchMyResume, setMatchMyResume] = useState(false);
+  const [userResumeSkills, setUserResumeSkills] = useState<string[]>([]);
 
-  // Remote tab state
-  const [selectedRemoteCat, setSelectedRemoteCat] = useState(0);
+  // Custom User Scraper & Importer States ($0 API Cost)
+  const [showScrapeModal, setShowScrapeModal] = useState(false);
+  const [scrapeUrlInput, setScrapeUrlInput] = useState("");
+  const [scrapingLoading, setScrapingLoading] = useState(false);
 
-  // ── Fetch India jobs (Adzuna) — memory-cache-first, silent refresh ─────────
-  const fetchIndiaJobs = useCallback(async (keywords: string, city: string, opts?: { background?: boolean }) => {
-    const memKey = `india:${keywords}:${city}`;
-    if (!opts?.background) {
-      const fast = getMem<any[]>(memKey);
-      if (fast && fast.length > 0) {
-        setJobs(fast);
-        setError(null);
-        setLoading(false);
-        // Refresh silently underneath for next visit.
-        fetchIndiaJobs(keywords, city, { background: true });
-        return;
-      }
-      setLoading(true);
-      setError(null);
+  const hasActiveFilter =
+    roleQuery.trim().length > 0 ||
+    locationQuery.trim().length > 0 ||
+    remoteOnly ||
+    fullTimeOnly ||
+    freshersOnly ||
+    thisWeekOnly ||
+    matchMyResume;
+
+  const clearAllFilters = useCallback(() => {
+    setRoleQuery("");
+    setLocationQuery("");
+    setRemoteOnly(false);
+    setFullTimeOnly(false);
+    setFreshersOnly(false);
+    setThisWeekOnly(false);
+    setMatchMyResume(false);
+  }, []);
+
+  const handleScrapeJob = async () => {
+    const url = scrapeUrlInput.trim();
+    if (!url) {
+      Alert.alert("Enter Job URL", "Please paste a job link from LinkedIn, Naukri, Indeed, or any career portal.");
+      return;
     }
+    setScrapingLoading(true);
     try {
-      if (!hasAdzuna) {
-        // No Adzuna key — show placeholder message
-        if (!opts?.background) {
-          setJobs([]);
-          setError("adzuna_setup");
-        }
-        return;
-      }
-
-      // Check global cache first
-      const cacheKey = `adzuna_${keywords}_${city}`;
-      const cached = await getGlobalJobs(cacheKey, city).catch(() => null);
-      if (cached && cached.length > 0) {
-        setJobs(cached);
-        setMem(memKey, cached);
-        return;
-      }
-
-      // Check daily limit
-      const canFetch = await canUserFetchJobs().catch(() => true);
-      if (!canFetch) {
-        if (!opts?.background) {
-          Alert.alert("Daily Limit Reached", "Try again tomorrow or switch to Remote Jobs tab!");
-        }
-        return;
-      }
-
-      const results = await fetchAdzunaJobs(keywords, INDIA_CITIES_ADZUNA[city] || city);
-      setJobs(results);
-      setMem(memKey, results);
-
-      if (results.length > 0) {
-        await saveGlobalJobs(cacheKey, city, results).catch(() => {});
-      }
-    } catch (e: any) {
-      if (!opts?.background) setError(e.message || "Failed to load jobs");
+      const newJob = await scrapeJobFromUrl(url);
+      await saveScrapedJob(newJob);
+      setMasterJobs((prev) => [newJob, ...prev]);
+      setShowScrapeModal(false);
+      setScrapeUrlInput("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Job Scraped & Saved! 🎉",
+        `"${newJob.title}" at ${newJob.company_name} is now added to your feed. You can now ATS match or Auto-Apply!`
+      );
+    } catch (err: any) {
+      Alert.alert("Scraping Failed", err.message || "Could not scrape job from this link.");
     } finally {
-      if (!opts?.background) setLoading(false);
+      setScrapingLoading(false);
     }
-  }, [hasAdzuna]);
+  };
 
-  // ── Fetch Remote jobs (Jobicy → fallback Remotive) — cache-first ──────────
-  const fetchRemoteJobs = useCallback(async (catIndex: number, opts?: { background?: boolean }) => {
-    const cacheId = `remote:${REMOTE_CATEGORIES[catIndex].jobicyTag}`;
-    if (!opts?.background) {
-      const fast = getMem<any[]>(cacheId) || (await getCached<any[]>(cacheId, 30 * 60 * 1000).catch(() => null));
-      if (fast && fast.length > 0) {
-        setJobs(fast);
-        setError(null);
-        setLoading(false);
-        fetchRemoteJobs(catIndex, { background: true });
-        return;
-      }
-      setLoading(true);
-      setError(null);
-    }
-    const cat = REMOTE_CATEGORIES[catIndex];
+  // Single Global Ingest & Cache Loader
+  const loadGlobalJobs = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) setRefreshing(true);
+    else setLoading(true);
     try {
-      let results: any[] = [];
-      try {
-        results = await fetchJobicyJobs(cat.jobicyTag);
-      } catch {
-        // Fallback to Remotive
-        results = await fetchRemotiveJobs(cat.remotiveCat);
-      }
-      setJobs(results);
-      setMem(cacheId, results);
-      if (results.length > 0) await setCached(cacheId, results);
-    } catch (e: any) {
-      if (!opts?.background) setError(e.message || "Failed to load remote jobs");
+      const feed = await getUnifiedGlobalJobs(forceRefresh);
+      setMasterJobs(feed);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load global jobs");
     } finally {
-      if (!opts?.background) setLoading(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
+
+  useEffect(() => {
+    loadGlobalJobs(false);
+  }, [loadGlobalJobs]);
 
   // ── Auto Apply: background per-job processing (existing flow hook) ──────
   const { settings: aaSettings } = useAutoApplySettings();
@@ -315,6 +499,63 @@ export default function JobsScreen() {
   const aaRunning = useRef(false);
   const aaSettingsRef = useRef(aaSettings);
   aaSettingsRef.current = aaSettings;
+
+  // Auto-extract user skills from saved profile/resume for "Match My Resume"
+  useEffect(() => {
+    (async () => {
+      try {
+        const { profile } = await getAutoApplyContext(aaSettings);
+        const skills: string[] = [];
+        if (profile.skillsText) {
+          const tokens = profile.skillsText
+            .split(/[\n,;•|/]+/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 1);
+          skills.push(...tokens);
+        }
+        if (profile.roles && profile.roles.length) {
+          skills.push(...profile.roles);
+        }
+        setUserResumeSkills(Array.from(new Set(skills)));
+      } catch {}
+    })();
+  }, [aaSettings]);
+
+  // High Match Jobs Notification (alerts once per session)
+  useEffect(() => {
+    if (hasNotifiedRef.current || loading || masterJobs.length === 0 || userResumeSkills.length === 0) return;
+    const highMatches = masterJobs.filter((j) => (j.jobMatchScore || 0) >= 30);
+    if (highMatches.length > 0) {
+      hasNotifiedRef.current = true;
+      notifyHighMatchJobs(highMatches.length, userResumeSkills[0]);
+    }
+  }, [loading, masterJobs, userResumeSkills]);
+
+  // Instant in-memory filtering from the single stored master dataset
+  const filteredJobs = useMemo(() => {
+    return filterStoredJobs(masterJobs, {
+      tab: activeTab,
+      roleQuery,
+      locationQuery,
+      remoteOnly,
+      fullTimeOnly,
+      freshersOnly,
+      thisWeekOnly,
+      matchMyResume,
+      userSkills: userResumeSkills,
+    });
+  }, [
+    masterJobs,
+    activeTab,
+    roleQuery,
+    locationQuery,
+    remoteOnly,
+    fullTimeOnly,
+    freshersOnly,
+    thisWeekOnly,
+    matchMyResume,
+    userResumeSkills,
+  ]);
 
   const runAutoApply = useCallback(async (list: any[], fallbackSource: string) => {
       const settings = aaSettingsRef.current;
@@ -373,29 +614,18 @@ export default function JobsScreen() {
     [],
   );
 
-  // ── Initial load and tab switch ────────────────────────────────────────────
+  // ── Auto Apply pass over freshly loaded master jobs (not on every keystroke) ────
   useEffect(() => {
-    InteractionManager.runAfterInteractions(() => {
-      if (activeTab === "india") {
-        fetchIndiaJobs(indiaQuery, selectedCity);
-      } else if (activeTab === "remote") {
-        fetchRemoteJobs(selectedRemoteCat);
-      }
-    });
-  }, [activeTab]);
-
-  // ── Auto Apply pass over freshly loaded jobs (fire-and-forget) ────────────
-  useEffect(() => {
-    if ((activeTab === 'india' || activeTab === 'remote') && jobs.length > 0) {
-      runAutoApply(jobs, activeTab === 'india' ? 'adzuna' : 'remote');
+    if (masterJobs.length > 0 && aaSettings.enabled && !aaSettings.paused) {
+      runAutoApply(masterJobs.slice(0, 30), "global");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, activeTab]);
+  }, [masterJobs, aaSettings.enabled, aaSettings.paused, runAutoApply]);
 
   // ── Job Card ───────────────────────────────────────────────────────────────
   const renderJobCard = (job: any, idx: number) => {
     const jobId = job.job_id || `${job.title}-${job.company_name}`;
     const saved = isJobSaved(jobId);
+    const trackedStatus = getJobStatus ? getJobStatus(jobId) : undefined;
     const isRemote = job.source === "jobicy" || job.source === "remotive";
 
     return (
@@ -420,12 +650,22 @@ export default function JobsScreen() {
               }
             >
               <View style={styles.jobHeader}>
-                {/* Company Logo */}
+                {/* Company Logo / Company Monogram / Fallback Icon */}
                 <View style={[styles.logoBox, { backgroundColor: "#fff", borderColor: colors.glassBorder }]}>
                   {job.thumbnail ? (
                     <Image source={{ uri: job.thumbnail }} style={styles.logo} resizeMode="contain" />
+                  ) : job.company_name?.trim() ? (
+                    <View style={styles.companyMonogramBox}>
+                      <Text style={styles.companyMonogramText}>
+                        {getCompanyMonogram(job.company_name)}
+                      </Text>
+                    </View>
                   ) : (
-                    <Briefcase size={20} color={Theme.colors.primary} />
+                    <ExpoImage
+                      source={require("@/assets/images/resume-portfolio-transparent.png")}
+                      style={styles.resumeIcon}
+                      contentFit="contain"
+                    />
                   )}
                 </View>
 
@@ -433,8 +673,8 @@ export default function JobsScreen() {
                   <Text style={[styles.jobTitle, { color: colors.text }]} numberOfLines={2}>
                     {job.title}
                   </Text>
-                  <Text style={[styles.companyName, { color: colors.textMuted }]}>
-                    {job.company_name}
+                  <Text style={[styles.companyName, { color: "#573353", fontWeight: "700" }]}>
+                    {job.company_name || "Direct Hire"}
                   </Text>
                 </View>
 
@@ -471,12 +711,26 @@ export default function JobsScreen() {
                     {job.location}
                   </Text>
                 </View>
-                <View style={[styles.tag, { backgroundColor: Theme.colors.secondary + "12" }]}>
-                  {isRemote ? <Wifi size={10} color={Theme.colors.secondary} /> : <Zap size={10} color={Theme.colors.secondary} />}
-                  <Text style={[styles.tagText, { color: Theme.colors.secondary }]}>
+                <View style={[styles.tag, { backgroundColor: "rgba(87, 51, 83, 0.08)" }]}>
+                  {isRemote ? <Wifi size={10} color="#573353" /> : <Zap size={10} color="#573353" />}
+                  <Text style={[styles.tagText, { color: "#573353" }]}>
                     {job.schedule_type || "Full-time"}
                   </Text>
                 </View>
+                {/* Posted Date Tag */}
+                <View style={[styles.tag, { backgroundColor: "rgba(87, 51, 83, 0.06)" }]}>
+                  <Calendar size={10} color="#573353" />
+                  <Text style={[styles.tagText, { color: "#573353" }]}>
+                    {formatPostedDate(job.posted_at)}
+                  </Text>
+                </View>
+                {/* User Scraped Badge */}
+                {job.source === "user_scraped" && (
+                  <View style={[styles.tag, { backgroundColor: "rgba(253, 167, 88, 0.2)", borderColor: "rgba(253, 167, 88, 0.5)", borderWidth: 1 }]}>
+                    <Sparkles size={10} color="#573353" />
+                    <Text style={[styles.tagText, { color: "#573353", fontWeight: "800" }]}>Custom Scraped</Text>
+                  </View>
+                )}
                 {job.salary && job.salary !== "Competitive" && (
                   <View style={[styles.tag, { backgroundColor: "#10b98112" }]}>
                     <Text style={[styles.tagText, { color: "#10b981" }]}>💰 {job.salary}</Text>
@@ -492,9 +746,48 @@ export default function JobsScreen() {
                   />
                 </View>
               )}
+
+              {/* Application Status Tracker Pill */}
+              {trackedStatus && (
+                <View style={{ marginBottom: 10 }}>
+                  <View
+                    style={[
+                      styles.trackerBadge,
+                      trackedStatus === 'offer'
+                        ? { backgroundColor: '#F59E0B18', borderColor: '#F59E0B' }
+                        : trackedStatus === 'interview'
+                        ? { backgroundColor: '#8B5CF618', borderColor: '#8B5CF6' }
+                        : trackedStatus === 'rejected'
+                        ? { backgroundColor: '#EF444418', borderColor: '#EF4444' }
+                        : { backgroundColor: '#10B98118', borderColor: '#10B981' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.trackerBadgeText,
+                        trackedStatus === 'offer'
+                          ? { color: '#D97706' }
+                          : trackedStatus === 'interview'
+                          ? { color: '#7C3AED' }
+                          : trackedStatus === 'rejected'
+                          ? { color: '#DC2626' }
+                          : { color: '#059669' },
+                      ]}
+                    >
+                      {trackedStatus === 'offer'
+                        ? '🎉 Offer Received'
+                        : trackedStatus === 'interview'
+                        ? '📅 Interview Scheduled'
+                        : trackedStatus === 'rejected'
+                        ? '✕ Archived'
+                        : '✓ Applied'}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </TouchableOpacity>
 
-            {/* Action Buttons */}
+            {/* Action Buttons (High Contrast & Visible) */}
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.atsBtn, { backgroundColor: Theme.colors.primary }]}
@@ -510,11 +803,29 @@ export default function JobsScreen() {
                   })
                 }
               >
-                <Zap size={13} color="#fff" fill="#fff" />
+                <Zap size={12} color="#fff" fill="#fff" />
                 <Text style={styles.atsBtnText}>ATS Match</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.applyBtn, { borderColor: colors.glassBorder }]}
+                style={[styles.tailorBtn, { backgroundColor: "#059669" }]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/builder/ats",
+                    params: {
+                      jobUrl: job.apply_link,
+                      autoScan: "true",
+                      autoOptimize: "true",
+                      jobTitle: job.title,
+                      company: job.company_name,
+                    },
+                  })
+                }
+              >
+                <Sparkles size={12} color="#fff" />
+                <Text style={styles.tailorBtnText}>🎯 Tailor</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.applyBtn, { backgroundColor: "#573353", borderColor: "#573353" }]}
                 onPress={() =>
                   router.push({
                     pathname: "/job-details",
@@ -526,12 +837,13 @@ export default function JobsScreen() {
                       applyLink: job.apply_link,
                       salary: job.salary || "Competitive",
                       autoApply: "true",
+                      postedAt: formatPostedDate(job.posted_at),
                     },
                   })
                 }
               >
-                <Globe size={13} color={colors.text} />
-                <Text style={[styles.applyBtnText, { color: colors.text }]}>Apply</Text>
+                <Zap size={12} color="#FDA758" fill="#FDA758" />
+                <Text style={[styles.applyBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>Auto Apply</Text>
               </TouchableOpacity>
             </View>
           </GlassCard>
@@ -568,7 +880,11 @@ export default function JobsScreen() {
 
           <View style={styles.verifiedTop}>
             <View style={[styles.verifiedLogo, { backgroundColor: Theme.colors.primary + "15" }]}>
-              <Briefcase size={20} color={Theme.colors.primary} />
+              <ExpoImage
+                source={require("@/assets/images/resume-portfolio-transparent.png")}
+                style={styles.resumeIcon}
+                contentFit="contain"
+              />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.verifiedTitle, { color: colors.text }]} numberOfLines={1}>{job.title}</Text>
@@ -595,151 +911,263 @@ export default function JobsScreen() {
               <MapPin size={13} color={colors.textMuted} />
               <Text style={[styles.metaText, { color: colors.text }]}>{job.loc}</Text>
             </View>
-            <View style={[styles.typeBadge, { backgroundColor: Theme.colors.secondary + "15" }]}>
-              <Text style={[styles.typeText, { color: Theme.colors.secondary }]}>{job.type}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View style={[styles.tag, { backgroundColor: "rgba(87, 51, 83, 0.06)" }]}>
+                <Calendar size={10} color="#573353" />
+                <Text style={[styles.tagText, { color: "#573353" }]}>Updated Today</Text>
+              </View>
+              <View style={[styles.typeBadge, { backgroundColor: Theme.colors.primary + "15" }]}>
+                <Text style={[styles.typeText, { color: Theme.colors.primary }]}>{job.type}</Text>
+              </View>
             </View>
           </View>
 
-          <View style={[styles.secureRow, { borderTopColor: colors.glassBorder }]}>
-            <Text style={[styles.secureText, { color: colors.textMuted }]}>
-              Safety:{" "}
-              <Text style={{ color: "#10b981", fontWeight: "800" }}>100% Direct Link ✓</Text>
-            </Text>
-            <ChevronRight size={15} color={colors.textMuted} />
+          {/* Action Row for Verified Card */}
+          <View style={[styles.actionRow, { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 4 }]}>
+            <TouchableOpacity
+              style={[styles.atsBtn, { backgroundColor: Theme.colors.primary }]}
+              onPress={() =>
+                router.push({
+                  pathname: "/builder/ats",
+                  params: {
+                    jobUrl: job.url,
+                    autoScan: "true",
+                    jobTitle: job.title,
+                    company: job.company,
+                  },
+                })
+              }
+            >
+              <Zap size={12} color="#fff" fill="#fff" />
+              <Text style={styles.atsBtnText}>ATS Match</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tailorBtn, { backgroundColor: "#059669" }]}
+              onPress={() =>
+                router.push({
+                  pathname: "/builder/ats",
+                  params: {
+                    jobUrl: job.url,
+                    autoScan: "true",
+                    autoOptimize: "true",
+                    jobTitle: job.title,
+                    company: job.company,
+                  },
+                })
+              }
+            >
+              <Sparkles size={12} color="#fff" />
+              <Text style={styles.tailorBtnText}>🎯 Tailor</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.applyBtn, { backgroundColor: "#573353", borderColor: "#573353" }]}
+              onPress={() =>
+                router.push({
+                  pathname: "/job-details",
+                  params: {
+                    title: job.title,
+                    company: job.company,
+                    location: job.loc,
+                    logo: "",
+                    applyLink: job.url,
+                    salary: "Competitive",
+                    postedAt: "Updated Today",
+                  },
+                })
+              }
+            >
+              <ExternalLink size={13} color="#FDA758" />
+              <Text style={[styles.applyBtnText, { color: "#FFFFFF", fontWeight: "800" }]}>Portal Link</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Animated.View>
     </React.Fragment>
   );
 
-  // ── Adzuna Setup Card ──────────────────────────────────────────────────────
-  const renderAdzunaSetup = () => (
-    <GlassCard style={[styles.setupCard, { backgroundColor: colors.surface, borderColor: Theme.colors.primary + "40" }]}>
-      <View style={[styles.setupIconCircle, { backgroundColor: Theme.colors.primary + "15" }]}>
-        <Briefcase size={32} color={Theme.colors.primary} />
-      </View>
-      <Text style={[styles.setupTitle, { color: colors.text }]}>Activate India Job Feed</Text>
-      <Text style={[styles.setupSub, { color: colors.textMuted }]}>
-        Get live Indian job listings from Adzuna — completely FREE (250 calls/month).
-      </Text>
-      <View style={styles.setupSteps}>
-        {[
-          "Go to developer.adzuna.com",
-          "Sign up free (no credit card)",
-          "Copy your App ID + App Key",
-          "Paste into constants/config.ts",
-        ].map((step, i) => (
-          <View key={i} style={styles.setupStep}>
-            <View style={[styles.stepNum, { backgroundColor: Theme.colors.primary }]}>
-              <Text style={styles.stepNumText}>{i + 1}</Text>
-            </View>
-            <Text style={[styles.stepText, { color: colors.text }]}>{step}</Text>
-          </View>
-        ))}
-      </View>
-      <TouchableOpacity
-        style={[styles.setupBtn, { backgroundColor: Theme.colors.primary }]}
-        onPress={() => Linking.openURL("https://developer.adzuna.com")}
-      >
-        <Globe size={16} color="#fff" />
-        <Text style={styles.setupBtnText}>Get Free Adzuna Key</Text>
-      </TouchableOpacity>
-
-      <View style={[styles.orDivider, { borderTopColor: colors.glassBorder }]}>
-        <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "700" }}>
-          Meanwhile, use our Remote Jobs tab — zero setup required ↓
-        </Text>
-      </View>
-    </GlassCard>
-  );
-
   // ── Virtualized list: header (filters) + empty states ─────────────────────
-  const verifiedList =
-    VERIFIED_COMPANIES[selectedCity] || VERIFIED_COMPANIES["Chennai"];
+  const renderListHeader = () => {
+    const activeFilterLabels: string[] = [];
+    if (roleQuery) activeFilterLabels.push(`"${roleQuery}"`);
+    if (locationQuery) activeFilterLabels.push(`"${locationQuery}"`);
+    if (matchMyResume) activeFilterLabels.push("🎯 Resume Match");
+    if (remoteOnly) activeFilterLabels.push("🏠 Remote");
+    if (freshersOnly) activeFilterLabels.push("🎓 Freshers");
+    if (fullTimeOnly) activeFilterLabels.push("💼 Full-Time");
+    if (thisWeekOnly) activeFilterLabels.push("🕒 This Week");
 
-  const renderListHeader = () => (
-    <View style={{ gap: 12, marginBottom: 4 }}>
-      {activeTab === "india" && (
-        <>
-          {showSearch && (
-            <GlassCard style={[styles.searchCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-              <View style={styles.searchField}>
-                <Search size={17} color={Theme.colors.primary} />
-                <TextInput
-                  style={[styles.searchInput, { color: colors.text }]}
-                  value={indiaQuery}
-                  onChangeText={setIndiaQuery}
-                  placeholder="e.g. React Native, DevOps..."
-                  placeholderTextColor={colors.textMuted}
-                  returnKeyType="search"
-                  onSubmitEditing={() => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); }}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.searchGoBtn, { backgroundColor: Theme.colors.primary }]}
-                onPress={() => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); }}
-              >
-                <Text style={styles.searchGoBtnText}>Search</Text>
-              </TouchableOpacity>
-            </GlassCard>
-          )}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={styles.pillRow}>
-            {INDIA_LOCATIONS.map(city => (
-              <TouchableOpacity
-                key={city}
-                style={[styles.pill, { backgroundColor: selectedCity === city ? Theme.colors.primary : colors.surface, borderColor: selectedCity === city ? Theme.colors.primary : colors.glassBorder }]}
-                onPress={() => {
-                  setSelectedCity(city);
-                  fetchIndiaJobs(indiaQuery, city).catch(() => {});
-                }}
-              >
-                <Text style={[styles.pillText, { color: selectedCity === city ? "#fff" : colors.text }]}>{city}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </>
-      )}
-
-      {activeTab === "remote" && (
-        <>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={styles.pillRow}>
-            {REMOTE_CATEGORIES.map((cat, i) => (
-              <TouchableOpacity
-                key={cat.label}
-                style={[styles.pill, { backgroundColor: selectedRemoteCat === i ? Theme.colors.primary : colors.surface, borderColor: selectedRemoteCat === i ? Theme.colors.primary : colors.glassBorder }]}
-                onPress={() => {
-                  setSelectedRemoteCat(i);
-                  fetchRemoteJobs(i);
-                }}
-              >
-                <Text style={[styles.pillText, { color: selectedRemoteCat === i ? "#fff" : colors.text }]}>{cat.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          <View style={[styles.freeBadgeRow, { backgroundColor: "#10b98112", borderColor: "#10b98130" }]}>
-            <Wifi size={14} color="#10b981" />
-            <Text style={styles.freeBadgeText}>
-              Live remote jobs • No API key • Powered by Jobicy + Remotive
-            </Text>
-          </View>
-        </>
-      )}
-
-      {activeTab === "verified" && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={styles.pillRow}>
-          {Object.keys(VERIFIED_COMPANIES).map(city => (
-            <TouchableOpacity
-              key={city}
-              style={[styles.pill, { backgroundColor: selectedCity === city ? Theme.colors.primary : colors.surface, borderColor: selectedCity === city ? Theme.colors.primary : colors.glassBorder }]}
-              onPress={() => setSelectedCity(city)}
+    return (
+      <View style={{ gap: 10, marginBottom: 8, marginTop: 4 }}>
+        {/* Quick Smart Filter Chips Row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipsScroll}
+        >
+          {/* Match My Resume Chip */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              matchMyResume
+                ? { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary }
+                : { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setMatchMyResume((prev) => !prev);
+            }}
+            activeOpacity={0.8}
+          >
+            <Sparkles size={13} color={matchMyResume ? "#FFFFFF" : Theme.colors.primary} />
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: matchMyResume ? "#FFFFFF" : colors.text },
+              ]}
             >
-              <Text style={[styles.pillText, { color: selectedCity === city ? "#fff" : colors.text }]}>{city}</Text>
-            </TouchableOpacity>
-          ))}
+              Match My Resume
+            </Text>
+          </TouchableOpacity>
+
+          {/* Remote Only */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              remoteOnly
+                ? { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary }
+                : { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setRemoteOnly((prev) => !prev);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.filterChipIcon}>🏠</Text>
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: remoteOnly ? "#FFFFFF" : colors.text },
+              ]}
+            >
+              Remote Only
+            </Text>
+          </TouchableOpacity>
+
+          {/* Freshers / Entry */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              freshersOnly
+                ? { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary }
+                : { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setFreshersOnly((prev) => !prev);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.filterChipIcon}>🎓</Text>
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: freshersOnly ? "#FFFFFF" : colors.text },
+              ]}
+            >
+              Freshers / Entry
+            </Text>
+          </TouchableOpacity>
+
+          {/* Full-Time */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              fullTimeOnly
+                ? { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary }
+                : { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setFullTimeOnly((prev) => !prev);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.filterChipIcon}>💼</Text>
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: fullTimeOnly ? "#FFFFFF" : colors.text },
+              ]}
+            >
+              Full-Time
+            </Text>
+          </TouchableOpacity>
+
+          {/* This Week */}
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              thisWeekOnly
+                ? { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary }
+                : { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setThisWeekOnly((prev) => !prev);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.filterChipIcon}>🕒</Text>
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: thisWeekOnly ? "#FFFFFF" : colors.text },
+              ]}
+            >
+              This Week
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
-      )}
-    </View>
-  );
+
+        {/* Filter summary chip when filters are active */}
+        {hasActiveFilter && (
+          <TouchableOpacity
+            style={[
+              styles.activeFilterChip,
+              { backgroundColor: Theme.colors.primary + "12", borderColor: Theme.colors.primary + "30" },
+            ]}
+            onPress={() => setShowSearch(true)}
+            activeOpacity={0.8}
+          >
+            <Search size={13} color={Theme.colors.primary} />
+            <Text style={[styles.activeFilterChipText, { color: Theme.colors.primary }]} numberOfLines={1}>
+              Active Filters: {activeFilterLabels.join(" • ")}
+            </Text>
+            <TouchableOpacity
+              onPress={clearAllFilters}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <X size={14} color={Theme.colors.primary} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        )}
+
+        {/* Freshness & Count Status Banner */}
+        <View style={[styles.freeBadgeRow, { backgroundColor: "rgba(87, 51, 83, 0.05)", borderColor: "rgba(87, 51, 83, 0.1)" }]}>
+          <Globe size={14} color="#573353" />
+          <Text style={[styles.freeBadgeText, { color: "#573353" }]}>
+            {filteredJobs.length} Verified Tech Roles • Updated Live
+          </Text>
+          <TouchableOpacity onPress={() => loadGlobalJobs(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <RefreshCw size={13} color="#573353" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   const renderRetry = (msg: string, onRetry: () => void) => (
     <View style={styles.centered}>
@@ -758,42 +1186,63 @@ export default function JobsScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Theme.colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textMuted }]}>
-            {activeTab === "india" ? `Finding jobs in ${selectedCity}...` : "Loading remote jobs..."}
+            Loading global live openings...
           </Text>
         </View>
       );
     }
-    if (activeTab === "india") {
-      if (error === "adzuna_setup" || (!error && jobs.length === 0)) return renderAdzunaSetup();
-      if (error) return renderRetry(error, () => { fetchIndiaJobs(indiaQuery, selectedCity).catch(() => {}); });
-      return renderAdzunaSetup();
+    if (error) {
+      return renderRetry(error, () => loadGlobalJobs(true));
     }
-    if (activeTab === "remote") {
-      if (error) return renderRetry(error, () => fetchRemoteJobs(selectedRemoteCat));
-      return (
-        <View style={styles.centered}>
-          <WifiOff size={40} color={colors.textMuted} />
-          <Text style={[styles.errorText, { color: colors.textMuted }]}>No jobs found. Try another category.</Text>
+    return (
+      <View style={styles.centered}>
+        <View style={[styles.emptyLogoBox, { backgroundColor: Theme.colors.primary + "15" }]}>
+          <ExpoImage
+            source={require("@/assets/images/resume-portfolio-transparent.png")}
+            style={{ width: 44, height: 44 }}
+            contentFit="contain"
+          />
         </View>
-      );
-    }
-    return null;
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+          No Active Jobs Found
+        </Text>
+        <Text style={[styles.errorText, { color: colors.textMuted }]}>
+          {hasActiveFilter
+            ? `No jobs match current filter criteria. Try clearing filters or searching different keywords.`
+            : "No live openings in this category right now. Expired jobs were automatically pruned."}
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryBtn, { backgroundColor: Theme.colors.primary, marginTop: 8 }]}
+          onPress={() => {
+            clearAllFilters();
+            loadGlobalJobs(true);
+          }}
+        >
+          <RefreshCw size={14} color="#fff" />
+          <Text style={styles.retryText}>Reset Search & Refresh</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   // ─── Main Render ────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <View style={[styles.headerWrap, { paddingTop: insets.top + 16 }]}>
+      <View style={[styles.headerWrap, { paddingTop: insets.top + 16, paddingBottom: 6 }]}>
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.title, { color: colors.text }]}>Explore Jobs</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              {activeTab === "india"
-                ? `Live Indian Job Market • ${selectedCity}`
+              {hasActiveFilter
+                ? `${filteredJobs.length} jobs match your filter`
+                : activeTab === "india"
+                ? `India Tech Openings • ${filteredJobs.length} Live`
                 : activeTab === "remote"
-                ? "Remote Tech Jobs Worldwide"
-                : "Official Verified Company Portals"}
+                ? `Worldwide Remote Roles • ${filteredJobs.length} Live`
+                : activeTab === "global"
+                ? `USA & Global Roles • ${filteredJobs.length} Live`
+                : `${filteredJobs.length} Live Roles Worldwide`}
             </Text>
           </View>
           <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
@@ -825,50 +1274,179 @@ export default function JobsScreen() {
                 Auto {aaSettings.enabled ? (aaSettings.paused ? "Paused" : "ON") : "OFF"}
               </Text>
             </TouchableOpacity>
-            {activeTab !== "verified" && (
-              <TouchableOpacity
-                style={[styles.searchToggleBtn, { backgroundColor: showSearch ? Theme.colors.primary : colors.surface, borderColor: showSearch ? Theme.colors.primary : colors.glassBorder }]}
-                onPress={() => setShowSearch(p => !p)}
-              >
-                <Search size={19} color={showSearch ? "#fff" : colors.text} />
-              </TouchableOpacity>
-            )}
+
+            {/* Search Icon button: toggles Role & Location search box */}
+            <TouchableOpacity
+              style={[
+                styles.searchToggleBtn,
+                {
+                  backgroundColor: showSearch || hasActiveFilter ? Theme.colors.primary : colors.surface,
+                  borderColor: showSearch || hasActiveFilter ? Theme.colors.primary : colors.glassBorder,
+                  position: "relative",
+                },
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowSearch((p) => !p);
+              }}
+              activeOpacity={0.8}
+            >
+              <Search size={19} color={showSearch || hasActiveFilter ? "#fff" : colors.text} />
+              {hasActiveFilter && !showSearch && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 6,
+                    right: 6,
+                    width: 7,
+                    height: 7,
+                    borderRadius: 3.5,
+                    backgroundColor: "#FFFFFF",
+                  }}
+                />
+              )}
+            </TouchableOpacity>
+
+            {/* User Custom Scraper / Import Job URL Button ($0 API Cost) */}
+            <TouchableOpacity
+              style={[
+                styles.searchToggleBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.glassBorder,
+                  marginLeft: 6,
+                },
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowScrapeModal(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Plus size={19} color={colors.text} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* ── 3-Tab Switcher ────────────────────────────────────────── */}
-        <View style={[styles.tabBar, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+        {/* ── Segmented Category Tabs ────────────────────────── */}
+        <View style={styles.tabContainer}>
           {(
             [
-              { id: "india", label: "🇮🇳 India Jobs", icon: MapPin },
-              { id: "remote", label: "🌐 Remote", icon: Wifi },
-              { id: "verified", label: "✅ Verified", icon: ShieldCheck },
-            ] as { id: ActiveTab; label: string; icon: any }[]
-          ).map(({ id, label }) => (
-            <TouchableOpacity
-              key={id}
-              style={[styles.tabBtn, activeTab === id && { backgroundColor: Theme.colors.primary }]}
-              onPress={() => {
-                setActiveTab(id);
-                setShowSearch(false);
-              }}
-            >
-              <Text style={[styles.tabBtnText, { color: activeTab === id ? "#fff" : colors.textMuted }]}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+              { id: "all", label: "All Jobs", icon: Sparkles },
+              { id: "india", label: "India", icon: MapPin },
+              { id: "remote", label: "Remote", icon: Wifi },
+              { id: "global", label: "Global", icon: Globe },
+            ] as const
+          ).map(({ id, label, icon: IconComponent }) => {
+            const isActive = activeTab === id;
+            return (
+              <TouchableOpacity
+                key={id}
+                style={[
+                  styles.tabPill,
+                  {
+                    backgroundColor: isActive ? Theme.colors.primary : "transparent",
+                  },
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveTab(id);
+                }}
+                activeOpacity={0.8}
+              >
+                <IconComponent
+                  size={12}
+                  color={isActive ? "#FFFFFF" : "#573353"}
+                  strokeWidth={isActive ? 2.5 : 2}
+                  style={{ opacity: isActive ? 1 : 0.65 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: isActive ? "800" : "600",
+                    color: isActive ? "#FFFFFF" : "#573353",
+                    opacity: isActive ? 1 : 0.75,
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
+
+        {/* ── Search Panel (Positioned in static header outside FlatList: Continuous typing without remounting) ── */}
+        {showSearch && (
+          <View style={{ marginTop: 8 }}>
+            <GlassCard style={[styles.searchCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              {/* Field 1: Role / Job Title / Skills */}
+              <View style={styles.searchField}>
+                <Search size={16} color={Theme.colors.primary} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.text }]}
+                  value={roleQuery}
+                  onChangeText={setRoleQuery}
+                  placeholder="Role or skill (e.g. Frontend, React Native, SDE)"
+                  placeholderTextColor={colors.textMuted}
+                  returnKeyType="search"
+                />
+                {roleQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setRoleQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <X size={15} color={colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={[styles.fieldDivider, { backgroundColor: colors.glassBorder }]} />
+
+              {/* Field 2: Manual Location Entry */}
+              <View style={styles.searchField}>
+                <MapPin size={16} color="#573353" />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.text }]}
+                  value={locationQuery}
+                  onChangeText={setLocationQuery}
+                  placeholder="Location"
+                  placeholderTextColor={colors.textMuted}
+                  returnKeyType="search"
+                />
+                {locationQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setLocationQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <X size={15} color={colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Action Bar */}
+              <View style={styles.searchActionRow}>
+                {hasActiveFilter && (
+                  <TouchableOpacity
+                    style={[styles.clearBtn, { borderColor: colors.glassBorder }]}
+                    onPress={clearAllFilters}
+                  >
+                    <Text style={[styles.clearBtnText, { color: colors.textMuted }]}>Reset All</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.doneSearchBtn, { backgroundColor: Theme.colors.primary }]}
+                  onPress={() => setShowSearch(false)}
+                >
+                  <Text style={styles.doneSearchBtnText}>
+                    {hasActiveFilter ? `Apply (${filteredJobs.length} Jobs)` : "Close"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </GlassCard>
+          </View>
+        )}
       </View>
 
       {/* ── Virtualized list (mounts only visible cards) ───────────────────── */}
       <FlatList
-        key={activeTab}
-        data={activeTab === "verified" ? verifiedList : jobs}
-        keyExtractor={(item: any, i: number) => item.job_id || item.id || `${activeTab}-${i}`}
-        renderItem={({ item, index }: any) =>
-          activeTab === "verified" ? renderVerifiedCard(item, index) : renderJobCard(item, index)
-        }
+        data={filteredJobs}
+        keyExtractor={(item: any, i: number) => item.job_id || item.id || `job-${i}`}
+        renderItem={({ item, index }: any) => renderJobCard(item, index)}
         ListHeaderComponent={renderListHeader}
         ListEmptyComponent={renderListEmpty}
         ListFooterComponent={<View style={{ height: 100 }} />}
@@ -879,7 +1457,96 @@ export default function JobsScreen() {
         windowSize={5}
         removeClippedSubviews
         updateCellsBatchingPeriod={50}
+        refreshing={refreshing}
+        onRefresh={() => loadGlobalJobs(true)}
       />
+
+      {/* ── User Custom Job Scraper Modal ($0 API Cost) ────────────────── */}
+      <Modal
+        visible={showScrapeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !scrapingLoading && setShowScrapeModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <GlassCard
+            style={[
+              styles.scrapeModalCard,
+              { backgroundColor: colors.surface, borderColor: colors.glassBorder },
+            ]}
+          >
+            <View style={styles.scrapeModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.scrapeModalTitle, { color: colors.text }]}>
+                  Scrape & Import Job
+                </Text>
+                <Text style={[styles.scrapeModalSubtitle, { color: colors.textMuted }]}>
+                  Paste any job link from LinkedIn, Naukri, Indeed, or career portal ($0 API cost)
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowScrapeModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                disabled={scrapingLoading}
+              >
+                <X size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <View
+              style={[
+                styles.scrapeInputWrap,
+                { backgroundColor: colors.background, borderColor: colors.glassBorder },
+              ]}
+            >
+              <LinkIcon size={16} color={Theme.colors.primary} />
+              <TextInput
+                style={[styles.scrapeInput, { color: colors.text }]}
+                placeholder="https://... (Job URL)"
+                placeholderTextColor={colors.textMuted}
+                value={scrapeUrlInput}
+                onChangeText={setScrapeUrlInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+              {scrapeUrlInput.length > 0 && (
+                <TouchableOpacity onPress={() => setScrapeUrlInput("")}>
+                  <X size={15} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.scrapeModalActions}>
+              <TouchableOpacity
+                style={[styles.scrapeCancelBtn, { borderColor: colors.glassBorder }]}
+                onPress={() => setShowScrapeModal(false)}
+                disabled={scrapingLoading}
+              >
+                <Text style={[styles.scrapeCancelText, { color: colors.textMuted }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.scrapeSubmitBtn,
+                  { backgroundColor: Theme.colors.primary, opacity: scrapingLoading ? 0.7 : 1 },
+                ]}
+                onPress={handleScrapeJob}
+                disabled={scrapingLoading}
+              >
+                {scrapingLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Sparkles size={15} color="#fff" />
+                    <Text style={styles.scrapeSubmitText}>Scrape & Add</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -895,21 +1562,57 @@ const styles = StyleSheet.create({
   autoPill: { flexDirection: "row", alignItems: "center", gap: 5, height: 42, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1.2 },
   autoPillText: { fontSize: 11, fontWeight: "800" },
 
-  tabBar: { flexDirection: "row", padding: 5, borderRadius: 18, borderWidth: 1.2, marginBottom: 14, gap: 4 },
-  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  tabBtnText: { fontSize: 11, fontWeight: "800" },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: "rgba(87, 51, 83, 0.08)",
+    shadowColor: "#573353",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    marginTop: 8,
+    gap: 3,
+  },
+  tabPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
 
-  scroll: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
+  scroll: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 140 },
 
-  searchCard: { borderRadius: 20, padding: 16, borderWidth: 1.2, gap: 12 },
-  searchField: { flexDirection: "row", alignItems: "center", gap: 10 },
-  searchInput: { flex: 1, fontSize: 15, fontWeight: "600" },
-  searchGoBtn: { paddingVertical: 12, borderRadius: 14, alignItems: "center" },
-  searchGoBtnText: { color: "#fff", fontWeight: "800", fontSize: 14, paddingHorizontal: 20 },
+  searchCard: { borderRadius: 20, padding: 14, borderWidth: 1.2, gap: 8, marginBottom: 4 },
+  searchField: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 2 },
+  searchInput: { flex: 1, fontSize: 14, fontWeight: "600", paddingVertical: 4 },
+  fieldDivider: { height: 1, marginVertical: 2 },
+  searchActionRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 4 },
+  clearBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
+  clearBtnText: { fontSize: 12, fontWeight: "700" },
+  doneSearchBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
+  doneSearchBtnText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  activeFilterChip: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14, borderWidth: 1 },
+  activeFilterChipText: { fontSize: 12, fontWeight: "700", flex: 1 },
 
-  pillRow: { gap: 10, paddingVertical: 4 },
-  pill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 14, borderWidth: 1.2 },
-  pillText: { fontSize: 12, fontWeight: "700" },
+  filterChipsScroll: { paddingVertical: 4, gap: 8 },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 7.5,
+    borderRadius: 14,
+    borderWidth: 1.2,
+  },
+  filterChipIcon: { fontSize: 12 },
+  filterChipText: { fontSize: 11, fontWeight: "700" },
 
   freeBadgeRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
   freeBadgeText: { fontSize: 12, fontWeight: "700", color: "#10b981", flex: 1 },
@@ -926,11 +1629,15 @@ const styles = StyleSheet.create({
   tag: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10 },
   tagText: { fontSize: 10, fontWeight: "700" },
 
-  actionRow: { flexDirection: "row", gap: 10 },
-  atsBtn: { flex: 1.6, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 13 },
-  atsBtnText: { fontSize: 12, fontWeight: "900", color: "#fff" },
-  applyBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 13, borderWidth: 1.2 },
+  actionRow: { flexDirection: "row", gap: 8, marginTop: 4 },
+  atsBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 11, borderRadius: 13 },
+  atsBtnText: { fontSize: 12, fontWeight: "800", color: "#fff" },
+  tailorBtn: { flex: 1.05, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 11, borderRadius: 13 },
+  tailorBtnText: { fontSize: 12, fontWeight: "800", color: "#fff" },
+  applyBtn: { flex: 1.15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 11, borderRadius: 13, borderWidth: 1.2 },
   applyBtnText: { fontSize: 12, fontWeight: "800" },
+  trackerBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4.5, borderRadius: 8, borderWidth: 1.2 },
+  trackerBadgeText: { fontSize: 11, fontWeight: '800' },
 
   // Verified Card
   verifiedCard: { borderRadius: 20, borderWidth: 1.2, overflow: "hidden", marginBottom: 10 },
@@ -948,19 +1655,49 @@ const styles = StyleSheet.create({
   secureRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1 },
   secureText: { fontSize: 11, fontWeight: "600" },
 
-  // Adzuna Setup Card
-  setupCard: { borderRadius: 24, padding: 24, borderWidth: 1.5, alignItems: "center", gap: 14, marginTop: 8 },
-  setupIconCircle: { width: 72, height: 72, borderRadius: 36, justifyContent: "center", alignItems: "center" },
-  setupTitle: { fontSize: 20, fontWeight: "900", textAlign: "center" },
-  setupSub: { fontSize: 13, textAlign: "center", lineHeight: 20, fontWeight: "500" },
-  setupSteps: { width: "100%", gap: 10 },
-  setupStep: { flexDirection: "row", alignItems: "center", gap: 12 },
-  stepNum: { width: 26, height: 26, borderRadius: 13, justifyContent: "center", alignItems: "center" },
-  stepNumText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  stepText: { fontSize: 13, fontWeight: "600", flex: 1 },
-  setupBtn: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, marginTop: 4 },
-  setupBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
-  orDivider: { width: "100%", borderTopWidth: 1, paddingTop: 12, alignItems: "center" },
+  // Resume icon pattern (matching generated/uploaded resume cards on Home Screen)
+  resumeIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#FDA75815",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FDA75825",
+    overflow: "hidden",
+  },
+  resumeIcon: {
+    width: 28,
+    height: 28,
+  },
+  companyMonogramBox: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(253, 167, 88, 0.16)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 13,
+  },
+  companyMonogramText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#573353",
+    letterSpacing: 0.5,
+  },
+  emptyLogoBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
 
   // States
   centered: { paddingVertical: 80, alignItems: "center", gap: 12 },
@@ -968,4 +1705,91 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, fontWeight: "600", textAlign: "center" },
   retryBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   retryText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+
+  // User Custom Scraper Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  scrapeModalCard: {
+    width: "100%",
+    borderRadius: 24,
+    padding: 22,
+    borderWidth: 1.2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  scrapeModalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    gap: 12,
+  },
+  scrapeModalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  scrapeModalSubtitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  scrapeInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 18,
+  },
+  scrapeInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  scrapeModalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  scrapeCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  scrapeCancelText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  scrapeSubmitBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 12,
+    shadowColor: "#FDA758",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  scrapeSubmitText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
 });

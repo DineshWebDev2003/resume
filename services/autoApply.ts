@@ -223,6 +223,23 @@ export function checkAutoApplyEligibility(
   if (!settings.enabled || settings.paused) {
     return { eligible: false, status: 'Matched', reason: 'Auto Apply is off or paused.', matchScore };
   }
+
+  // 1. Check for expired or closed listings
+  const jobText = `${job.title} ${job.description || ''}`.toLowerCase();
+  if (/expired|closed|position filled|no longer accepting|applications? closed|job inactive/i.test(jobText)) {
+    return skip('Job posting has expired or is closed.');
+  }
+
+  // 2. 7-Day Freshness filter (Last 1 week only)
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const rawDate = (job as any).postedAt || (job as any).pubDate || (job as any).created || (job as any).date;
+  if (rawDate) {
+    const postTime = new Date(rawDate).getTime();
+    if (!isNaN(postTime) && (Date.now() - postTime) > ONE_WEEK_MS) {
+      return skip('Job was posted more than 7 days ago (1-week limit).');
+    }
+  }
+
   if (roles.length === 0) {
     return { eligible: false, status: 'Matched', reason: 'Add at least 1 job role first.', matchScore };
   }

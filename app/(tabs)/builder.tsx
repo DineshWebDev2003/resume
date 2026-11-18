@@ -103,18 +103,18 @@ export default function BuilderLanding() {
       title: "Voice Assistant",
       description: "Just speak and let AI structure your experience live.",
       icon: Mic,
-      color: Theme.colors.secondary,
+      color: Theme.colors.primary,
       mode: "voice",
-      image: require("../../assets/images/quick-action/microphone.webp"),
+      image: require("@/assets/images/voice-ai-transparent.png"),
     },
     {
       title: "ATS AI Score",
       description:
         "Check your resume compatibility score and get improvement tips.",
       icon: FileSearch,
-      color: "#10b981",
+      color: Theme.colors.primaryDeep,
       mode: "ats",
-      image: require("../../assets/images/quick-action/hiring.webp"),
+      image: require("@/assets/images/ats-scanner-transparent.png"),
     },
   ];
 
@@ -172,6 +172,47 @@ export default function BuilderLanding() {
           </TouchableOpacity>
         </View>
 
+        {/* Continue Edit Card if existing drafts exist */}
+        {myResumes.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(50)} style={styles.continueEditSection}>
+            <TouchableOpacity
+              style={[
+                styles.continueEditCard,
+                { backgroundColor: colors.surface, borderColor: Theme.colors.primary },
+              ]}
+              activeOpacity={0.88}
+              onPress={() =>
+                router.push(
+                  myResumes[0].type === "ats"
+                    ? "/builder/ats"
+                    : ({
+                        pathname: "/builder/manual",
+                        params: { resumeId: myResumes[0].id },
+                      } as any)
+                )
+              }
+            >
+              <View style={[styles.continueEditIconWrap, { backgroundColor: Theme.colors.primary }]}>
+                <Pen size={18} color="#FFFFFF" strokeWidth={2.4} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                  <Text style={[styles.continueEditTitle, { color: colors.text }]}>Continue Edit</Text>
+                  <View style={styles.continueEditBadge}>
+                    <Text style={styles.continueEditBadgeText}>ACTIVE DRAFT</Text>
+                  </View>
+                </View>
+                <Text style={[styles.continueEditSub, { color: colors.textMuted }]} numberOfLines={1}>
+                  {myResumes[0].name || "My Resume Draft"} • Tap to resume editing
+                </Text>
+              </View>
+              <View style={[styles.continueEditArrow, { backgroundColor: Theme.colors.primary + "18" }]}>
+                <ChevronRight size={18} color={Theme.colors.primary} strokeWidth={2.5} />
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
         <View style={styles.railWrap}>
           <ScrollView
             horizontal
@@ -190,8 +231,7 @@ export default function BuilderLanding() {
                   styles.railCard,
                   {
                     width: railCardWidth,
-                    backgroundColor: colors.surface,
-                    borderColor: option.color + "45",
+                    backgroundColor: "#FFFFFF",
                   },
                 ]}
                 onPress={() => {
@@ -209,12 +249,7 @@ export default function BuilderLanding() {
                   });
                 }}
               >
-                <View
-                  style={[
-                    styles.railIcon,
-                    { backgroundColor: option.color + "18" },
-                  ]}
-                >
+                <View style={styles.railIcon}>
                   {option.image ? (
                     <ExpoImage
                       source={option.image}
@@ -290,7 +325,7 @@ export default function BuilderLanding() {
                   <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                     <View style={styles.resumeIconBox}>
                       <ExpoImage
-                        source={require("@/assets/images/cv.webp")}
+                        source={require("@/assets/images/resume-portfolio-transparent.png")}
                         style={styles.resumeIcon}
                         contentFit="contain"
                       />
@@ -392,7 +427,60 @@ export default function BuilderLanding() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 140 },
-  header: { marginBottom: 32 },
+  header: { marginBottom: 24 },
+  continueEditSection: {
+    marginBottom: 24,
+  },
+  continueEditCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    shadowColor: "#573353",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  continueEditIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  continueEditTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  continueEditBadge: {
+    backgroundColor: "rgba(253, 167, 88, 0.2)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  continueEditBadgeText: {
+    color: "#FC9D45",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  continueEditSub: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  continueEditArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+  },
   filterBtn: {
     width: 42,
     height: 42,
@@ -415,8 +503,13 @@ const styles = StyleSheet.create({
     height: 228,
     padding: 14,
     borderRadius: 20,
-    borderWidth: 1.2,
-    ...Theme.shadow,
+    borderWidth: 0,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#573353",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   railIcon: {
     width: 88,
@@ -424,6 +517,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "transparent",
     marginBottom: 10,
   },
   railTitle: {

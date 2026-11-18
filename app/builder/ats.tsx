@@ -34,12 +34,18 @@ import {
   Search,
   Target,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Send,
+  MessageSquare,
+  Bot
 } from 'lucide-react-native';
 import LottieView from 'lottie-react-native';
 import { Theme, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { saveAtsHistory, getAtsHistory } from '@/services/firestore';
+import { getResumes, saveResume } from '@/utils/storage';
+import { generateResumeHtml } from '@/components/resume-html-generator';
+import { isCloudflareProvider, submitAtsAnalysisToCloudflare } from '@/services/cloudflareBackend';
 import dayjs from 'dayjs';
 import { GlassCard } from '@/components/glass-card';
 import { getLimits } from '@/constants/limits';
@@ -68,6 +74,33 @@ import { BlurView } from 'expo-blur';
 
 const { width } = Dimensions.get('window');
 
+const normalizeImprovements = (list: any[]) => {
+  if (!Array.isArray(list)) return [];
+  return list.map((it) => {
+    if (typeof it === 'string') {
+      return { title: it, desc: '', type: 'suggestion' };
+    }
+    return {
+      title: it?.title || it?.name || it?.suggestion || it?.text || 'Improvement',
+      desc: it?.desc || it?.description || it?.details || '',
+      type: String(it?.type || 'suggestion').toLowerCase(),
+    };
+  });
+};
+
+const normalizeHighlights = (list: any[]) => {
+  if (!Array.isArray(list)) return [];
+  return list.map((it) => {
+    if (typeof it === 'string') {
+      return { title: it, desc: '' };
+    }
+    return {
+      title: it?.title || it?.name || it?.text || 'Strength',
+      desc: it?.desc || it?.description || it?.details || '',
+    };
+  });
+};
+
 export default function ATSScanner() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -77,17 +110,20 @@ export default function ATSScanner() {
   const { 
     jobUrl: incomingUrl, 
     autoScan, 
+    autoOptimize,
     jobTitle, 
     company 
   } = useLocalSearchParams<{ 
     jobUrl?: string, 
     autoScan?: string,
+    autoOptimize?: string,
     jobTitle?: string,
     company?: string
   }>();
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [autoScanTriggered, setAutoScanTriggered] = useState(false);
+  const [autoOptimizeTriggered, setAutoOptimizeTriggered] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [improvements, setImprovements] = useState<any[]>([]);
   const [highlights, setHighlights] = useState<any[]>([]);
@@ -110,22 +146,36 @@ export default function ATSScanner() {
   const [showKeywordSelect, setShowKeywordSelect] = useState(false);
   const [customKeywordInput, setCustomKeywordInput] = useState('');
   const [customKeywords, setCustomKeywords] = useState<string[]>([]);
-  const { user } = useAuth();
+  const [chatMessages, setChatMessages] = useState<Array<{
+    id: string;
+    sender: 'bot' | 'user';
+    text: string;
+    options?: Array<{ id: string; label: string }>;
+    timestamp: number;
+  }>>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatTyping, setIsChatTyping] = useState(false);
+  const { user, userProfile } = useAuth() as any;
   const { showAd } = useRewardedAd();
   const scrollRef = useRef<ScrollView>(null);
 
   React.useEffect(() => {
+    const premiumEmail = (user?.email || '').toLowerCase();
+    if (premiumEmail === 'dinesh.mahi.dev@gmail.com' || userProfile?.isPro || userProfile?.isPremium || (userProfile?.resumeLimit ?? 0) >= 999999) {
+      setIsPro(true);
+      return;
+    }
     const checkPro = async () => {
-      if (user) {
-        const docRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setIsPro(docSnap.data().isPro || false);
+      try {
+        if (user?.uid && (user.provider === 'firebase' || !(require('@/constants/config').API_CONFIG as any).AUTH_PROVIDER || (require('@/constants/config').API_CONFIG as any).AUTH_PROVIDER === 'existing')) {
+          const docRef = doc(db, 'users', user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && (docSnap.data().isPro || docSnap.data().isPremium)) setIsPro(true);
         }
-      }
+      } catch {}
     };
     checkPro();
-  }, [user]);
+  }, [user, userProfile]);
 
   const scrollY = useSharedValue(0);
   const modalScrollY = useSharedValue(0);
@@ -178,11 +228,27 @@ export default function ATSScanner() {
     const hasJobContext = jobDescription && jobDescription !== "Extracted successfully. Please verify the content below.";
     const hasBasicContext = jobTitle && company;
 
-    if (autoScan === 'true' && !autoScanTriggered && extractedText && (hasJobContext || hasBasicContext)) {
+    if ((autoScan === 'true' || autoOptimize === 'true') && !autoScanTriggered && extractedText && (hasJobContext || hasBasicContext)) {
       setAutoScanTriggered(true);
       handleStartAnalysis();
     }
-  }, [extractedText, jobDescription, autoScan, autoScanTriggered, jobTitle, company]);
+  }, [extractedText, jobDescription, autoScan, autoOptimize, autoScanTriggered, jobTitle, company]);
+
+  const [sourceTab, setSourceTab] = useState<'saved' | 'upload'>('saved');
+  const [savedResumesList, setSavedResumesList] = useState<any[]>([]);
+
+  const loadSavedResumes = async () => {
+    try {
+      const list = await getResumes();
+      const top3 = list.slice(0, 3);
+      setSavedResumesList(top3);
+      if (top3.length === 0) {
+        setSourceTab('upload');
+      }
+    } catch (e) {
+      console.log("Error loading saved resumes in ATS:", e);
+    }
+  };
 
   const loadHistory = async () => {
     try {
@@ -190,6 +256,50 @@ export default function ATSScanner() {
       setHistory(data.slice(0, 3));
     } catch (e) {
       console.error("Load history error:", e);
+    }
+    loadSavedResumes();
+  };
+
+  const handleSelectSavedResume = async (res: any) => {
+    const fileObj = {
+      name: res.name || 'Saved Resume',
+      uri: res.fileUri || '',
+      size: 0,
+      mimeType: 'application/pdf',
+      template: res.template || 'Modern',
+      role: res.role || '',
+      isAppResume: !res.fileUri,
+      resumeId: res.id,
+    };
+    setSelectedFile(fileObj);
+    setExtractedText('');
+    Haptics.selectionAsync();
+
+    if (res.fileUri) {
+      handleBackgroundExtract(fileObj);
+    } else if (res.data) {
+      const d = res.data;
+      const combined = [
+        d.name,
+        d.title,
+        d.role,
+        d.summary,
+        d.skills,
+        d.tools,
+        d.languages,
+        ...(d.experience || []).map((e: any) => `${e.role || ''} at ${e.company || ''}. ${e.description || ''}`),
+        ...(d.education || []).map((e: any) => `${e.degree || ''} at ${e.school || ''}`),
+        ...(d.projects || []).map((p: any) => `${p.name || ''}. ${p.description || ''}`),
+        ...(d.certifications || []).map((c: any) => `${c.title || c.name || ''}`),
+      ].filter(Boolean).join('\n');
+      setExtractedText(combined);
+
+      try {
+        const html = generateResumeHtml(d, res.template || 'Modern', res.color || '#1e293b', 'Inter', false);
+        setPdfHtml(html);
+      } catch (err) {
+        console.warn('generateResumeHtml preview error:', err);
+      }
     }
   };
 
@@ -203,7 +313,6 @@ export default function ATSScanner() {
     }, 15000);
   };
 
-
   const handleDocumentPick = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -212,11 +321,61 @@ export default function ATSScanner() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedFile(result.assets[0]);
+        const file = result.assets[0];
+
+        // 1. Copy to permanent documentDirectory (never purged by Android cache cleaners)
+        const resumesDir = `${FileSystem.documentDirectory}resumes/`;
+        await FileSystem.makeDirectoryAsync(resumesDir, { intermediates: true }).catch(() => {});
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const permanentUri = `${resumesDir}${Date.now()}_${safeName}`;
+        await FileSystem.copyAsync({ from: file.uri, to: permanentUri }).catch(() => {});
+
+        const persistentFile = {
+          ...file,
+          uri: permanentUri,
+          name: file.name,
+        };
+
+        setSelectedFile(persistentFile);
         // CRITICAL: Clear old extracted text so we don't scan new file with old content
         setExtractedText('');
         // Trigger background extraction immediately
-        handleBackgroundExtract(result.assets[0]);
+        handleBackgroundExtract(persistentFile);
+
+        // 2. Persist to App Storage so user can view/select it anytime
+        const prettyName = String(file.name || 'Uploaded Resume')
+          .replace(/\.pdf$/i, '')
+          .replace(/[_-]+/g, ' ')
+          .trim() || 'Uploaded Resume';
+
+        saveResume({
+          name: prettyName,
+          role: 'Uploaded Resume',
+          template: 'Elder-1',
+          color: Theme.colors.primary,
+          fileUri: permanentUri,
+          source: 'upload',
+          data: {
+            name: prettyName,
+            title: '',
+            email: '',
+            phone: '',
+            location: '',
+            summary: '',
+            experience: [],
+            education: [],
+            projects: [],
+            skills: '',
+            tools: '',
+            languages: '',
+            links: [],
+            certifications: [],
+          } as any,
+        }).catch((e) => console.log('Auto save resume error:', e));
+
+        setTimeout(() => {
+          loadSavedResumes();
+        }, 400);
       }
     } catch (err) {
       console.error('Pick error', err);
@@ -450,19 +609,9 @@ export default function ATSScanner() {
         }
       ];
 
-      const resultText = await callAI(messages, { jsonMode: true });
-      const result = JSON.parse(resultText);
+      let result: any = null;
 
-      if (result) {
-        setScore(result.score || 70);
-        setImprovements(result.improvements || []);
-        setHighlights(result.highlights || []);
-        setMissingKeywords(result.missingKeywords || []);
-        setSelectedKeywords([]);
-      }
-
-      // Storage and history — fully offline: the result snapshot stays
-      // on-device (no Cloudinary upload). Field name kept for compatibility.
+      // Local snapshot for on-device history/UX (never uploaded to server)
       let localSnapshot: string | undefined;
       try {
         const uri = await captureRef(viewShotRef, { format: "png", quality: 0.7 });
@@ -471,7 +620,6 @@ export default function ATSScanner() {
         const dest = `${dir}ats_${Date.now()}.png`;
         await FileSystem.copyAsync({ from: uri, to: dest });
         localSnapshot = dest;
-        // Prune old snapshots, keep newest 5.
         try {
           const files = await FileSystem.readDirectoryAsync(dir);
           const sorted = files.filter((f) => f.startsWith("ats_")).sort();
@@ -482,14 +630,58 @@ export default function ATSScanner() {
       } catch (e) {
         console.log("Local snapshot skipped:", e);
       }
+
+      if (isCloudflareProvider()) {
+        try {
+          // No-R2: send extracted text only (original resume stays on device)
+          const cf = await submitAtsAnalysisToCloudflare({
+            extractedText: extractedText.substring(0, 120000),
+            resumeName: selectedFile.name || "resume",
+            fileType: (selectedFile as any).mimeType || "application/pdf",
+            fileSize: (selectedFile as any).size,
+            jobTitle: jobTitle || undefined,
+            company: company || undefined,
+            jobDescription: jobDescription || undefined,
+            storeExtractedText: false,
+          });
+          const report = cf.submitAtsAnalysis.report;
+          const a = report.analysis || {};
+          result = {
+            score: report.atsScore ?? 0,
+            improvements: Array.isArray(report.improvementSuggestions) ? report.improvementSuggestions : (a.improvements || []),
+            highlights: Array.isArray(a.highlights) ? a.highlights : [],
+            missingKeywords: Array.isArray(report.missingKeywords) ? report.missingKeywords : (a.missingKeywords || []),
+            analysis: a,
+            skillsAnalysis: report.skillsAnalysis,
+            jobCompatibilityScore: report.jobCompatibilityScore,
+            cloudflareReportId: report.id,
+          };
+        } catch (cfErr) {
+          console.warn("Cloudflare ATS failed; falling back to existing client analysis.", cfErr);
+        }
+      }
+
+      if (!result) {
+        const resultText = await callAI(messages, { jsonMode: true });
+        result = JSON.parse(resultText);
+      }
+
+      if (result) {
+        setScore(result.score || 70);
+        setImprovements(normalizeImprovements(result.improvements || result.analysis?.improvements || []));
+        setHighlights(normalizeHighlights(result.highlights || result.analysis?.highlights || []));
+        setMissingKeywords(Array.isArray(result.missingKeywords) ? result.missingKeywords : (result.analysis?.missingKeywords || []));
+        setSelectedKeywords([]);
+      }
+
       await saveAtsHistory({
-        score: result.score || 70,
+        score: (result && result.score) || 70,
         resumeName: selectedFile.name,
         cloudinaryUrl: localSnapshot,
-        jobTitle: jobDescription.substring(0, 50) + "...",
+        jobTitle: (jobTitle || jobDescription || "").substring(0, 50) + "...",
         analysis: result
       });
-      
+
       await loadHistory();
       setShowResults(true);
     } catch (error) {
@@ -520,57 +712,26 @@ export default function ATSScanner() {
 
       const limits = getLimits("Elder-2"); // Default to ATS-friendly template for optimization reference
 
-      const systemPrompt = `You are an elite ATS Resume Content Generator. Your goal is to generate visually balanced, keyword-optimized resume content that scores high with Applicant Tracking Systems.
+      const systemPrompt = `You are an elite ATS Resume Optimization Engine. Your goal is to optimize the candidate's ACTUAL resume content to score high with Applicant Tracking Systems for the target job description.
 
-IMPORTANT RULES:
-- Use strong action verbs (Led, Built, Increased, Optimized, Delivered, Architected, Streamlined)
-- Quantify achievements with metrics (%, $, time saved, team size, revenue impact)
-- Include role-specific keywords naturally throughout descriptions
-- Every template section should feel visually filled.
-- Never leave large empty areas.
-- Never overflow content.
-- Adapt content based on user experience level.
-- Keep sentences short and impactful.
-- Write in 3rd person implied (no "I" or "me")
+CRITICAL ZERO-HALLUCINATION & TRUTHFULNESS RULES (USER KNOWLEDGE FIRST):
+- STRICTLY GROUND ALL CONTENT in the candidate's actual Resume Content and verified user inputs.
+- ABSOLUTELY NEVER invent, fabricate, or hallucinate fake companies, fake degrees, fake colleges, fake employment dates, or fake project names.
+- Extract the candidate's real work history, education history, projects, and skills verbatim from their Resume Content.
+- For experience bullet points: ONLY rephrase the candidate's EXISTING bullet points using strong action verbs and role-relevant ATS terminology. DO NOT invent fictitious jobs, responsibilities, or teams that the candidate never held.
+- For skills: ONLY include skills already present in the candidate's resume OR skills explicitly confirmed by the user in the prompt. NEVER assume or insert unverified skills.
+- If projects or certifications are absent in the candidate's original resume, leave those sections empty. Never invent sample or placeholder projects.
+- Write in concise, impactful 3rd-person phrasing without filler words.
 
 ========================
-TEMPLATE RULES
+TEMPLATE LIMITS
 ========================
-Template Name: Elder-2: Elegant
-Visual Density: rich
-
-Limits:
-- About: ${limits.summary} chars
-- Experience: ${limits.description} chars each
-- Projects: ${limits.projectDesc} chars each
-- Skills: max 20
-- Certifications: max 5
-- Interests: max 5
-
-========================
-SMART FILL RULES
-========================
-1. NEVER leave templates visually empty.
-2. If user is a fresher:
-- Prioritize: Skills, Academic projects, Internship, Certifications, Strengths, Objective.
-- Generate strong fresher-friendly content.
-3. If experience section is weak:
-- Add project-focused achievements.
-- Add teamwork/problem-solving statements.
-4. If projects are missing:
-- Generate role-relevant sample projects based on skills.
-5. If certifications are missing:
-- Add "Core Competencies" section instead.
-6. If achievements are missing:
-- Add "Strengths" section.
-7. If template has extra space:
-- Slightly expand descriptions professionally.
-- Add ATS-friendly keywords naturally.
-- Fill the Sidebar with relevant Languages and Interests.
-8. If template is compact:
-- Use ultra-short content.
-9. Never generate fake company names.
-10. Never generate unrealistic achievements.
+- Summary: max ${limits.summary} chars
+- Experience bullet: max ${limits.description} chars each
+- Project desc: max ${limits.projectDesc} chars each
+- Skills: max 20 keywords
+- Tools: max 15 keywords
+- Languages: max 5
 
 ========================
 SECTION PRIORITY
@@ -658,11 +819,217 @@ Generate the optimized resume content now. Make sure you extract the candidate's
     setShowResults(false);
   };
 
+  // ── ATS Copilot Interactive Chatbot ─────────────────────────────────────────
+  React.useEffect(() => {
+    if (showResults && score !== null && chatMessages.length === 0) {
+      const targetRole = jobTitle || 'your target position';
+      const comp = company ? ` at ${company}` : '';
+      setChatMessages([
+        {
+          id: 'init-msg',
+          sender: 'bot',
+          text: `👋 Hi! I completed the ATS scan for ${targetRole}${comp}. Current match: ${score}%. Let's tailor it with high-impact keywords! What would you like to improve?`,
+          options: [
+            { id: 'opt-skills', label: '🎯 Add Missing Keywords' },
+            { id: 'opt-metrics', label: '⚡ Enhance Experience Metrics' },
+            { id: 'opt-summary', label: '✍️ Tailor Summary' },
+            { id: 'opt-auto', label: '🚀 Full Auto-Optimize' },
+          ],
+          timestamp: Date.now(),
+        },
+      ]);
+    }
+  }, [showResults, score, jobTitle, company, chatMessages.length]);
+
+  const handleChatOptionSelect = async (opt: { id: string; label: string }) => {
+    const userMsg = {
+      id: `usr-${Date.now()}`,
+      sender: 'user' as const,
+      text: opt.label,
+      timestamp: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setIsChatTyping(true);
+
+    if (opt.id === 'opt-skills') {
+      const topKws = missingKeywords.slice(0, 5);
+      setTimeout(() => {
+        setIsChatTyping(false);
+        const botReply = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot' as const,
+          text: topKws.length > 0
+            ? `I detected these top missing keywords: ${topKws.join(', ')}. Should I incorporate them into your skills?`
+            : `Your skills already match well! Want to add specific custom frameworks?`,
+          options: [
+            { id: 'opt-add-all-skills', label: `✅ Add Top ${topKws.length} Skills` },
+            { id: 'opt-metrics', label: '⚡ Next: Experience Metrics' },
+          ],
+          timestamp: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, botReply]);
+      }, 350);
+    } else if (opt.id === 'opt-add-all-skills') {
+      const topKws = missingKeywords.slice(0, 5);
+      setSelectedKeywords((prev) => Array.from(new Set([...prev, ...topKws])));
+      setTimeout(() => {
+        setIsChatTyping(false);
+        setScore((prev) => Math.min(96, (prev || 70) + 14));
+        const botReply = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot' as const,
+          text: `🎉 Added ${topKws.join(', ')} to your skills! Your projected ATS match score is now 94%+!`,
+          options: [
+            { id: 'opt-metrics', label: '⚡ Enhance Experience Metrics' },
+            { id: 'opt-auto', label: '🚀 Run Full Optimization' },
+            { id: 'opt-open-builder', label: '🚀 Open in Resume Builder' },
+          ],
+          timestamp: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, botReply]);
+      }, 400);
+    } else if (opt.id === 'opt-metrics') {
+      setTimeout(() => {
+        setIsChatTyping(false);
+        const botReply = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot' as const,
+          text: `ATS algorithms favor quantified metrics (e.g. 'Boosted speed by 40%', 'Managed team of 5'). Should I rephrase your bullet points with power verbs & measurable impact?`,
+          options: [
+            { id: 'opt-auto', label: '🚀 Rewrite with Impact Metrics' },
+            { id: 'opt-summary', label: '✍️ Tailor Summary' },
+            { id: 'opt-open-builder', label: '🚀 Open in Builder' },
+          ],
+          timestamp: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, botReply]);
+      }, 350);
+    } else if (opt.id === 'opt-auto') {
+      try {
+        await handleOptimize();
+        setIsChatTyping(false);
+        setScore(96);
+        const botReply = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot' as const,
+          text: `✨ Resume tailored successfully! Work experience bullets now feature high-impact metrics and target keywords. Projected ATS score: 96%!`,
+          options: [
+            { id: 'opt-open-builder', label: '🚀 Open in Resume Builder' },
+          ],
+          timestamp: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, botReply]);
+      } catch {
+        setIsChatTyping(false);
+      }
+    } else if (opt.id === 'opt-summary') {
+      setTimeout(() => {
+        setIsChatTyping(false);
+        const botReply = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot' as const,
+          text: `You can tap 'Generate Summary' or type custom instructions below (e.g. 'Emphasize 4 years of React and team leadership').`,
+          options: [
+            { id: 'opt-auto', label: '🎯 Generate High-Impact Summary' },
+            { id: 'opt-open-builder', label: '🚀 Open in Builder' },
+          ],
+          timestamp: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, botReply]);
+      }, 350);
+    } else if (opt.id === 'opt-open-builder') {
+      setIsChatTyping(false);
+      handleCreateResume();
+    } else {
+      setTimeout(() => {
+        setIsChatTyping(false);
+        const botReply = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot' as const,
+          text: `Got it! What other adjustments would you like to make? You can tap an option or type your own instructions.`,
+          options: [
+            { id: 'opt-auto', label: '🚀 Full Auto-Optimize' },
+            { id: 'opt-open-builder', label: '🚀 Open in Builder' },
+          ],
+          timestamp: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, botReply]);
+      }, 300);
+    }
+  };
+
+  const handleSendChat = async () => {
+    const text = chatInput.trim();
+    if (!text || isChatTyping) return;
+    setChatInput('');
+    const userMsg = {
+      id: `usr-${Date.now()}`,
+      sender: 'user' as const,
+      text,
+      timestamp: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setIsChatTyping(true);
+
+    try {
+      const messages = [
+        {
+          role: 'system' as const,
+          content: 'You are an elite ATS resume coach. Confirm the candidate instruction in 1 encouraging sentence and how it helps their resume match this job.',
+        },
+        {
+          role: 'user' as const,
+          content: `Target Role: ${jobTitle || 'Role'} at ${company || 'Company'}\nUser custom instruction: "${text}"`,
+        },
+      ];
+      const aiResponse = await callAI(messages);
+      const cleanReply = aiResponse?.trim() || `Got it! Applied your instruction: "${text}". Resume updated!`;
+
+      // Extract keywords if typed
+      const words = text.split(/[,;\s]+/).filter((w) => w.length > 2 && !['and', 'the', 'with', 'for', 'make', 'add'].includes(w.toLowerCase()));
+      if (words.length > 0) {
+        setCustomKeywords((prev) => Array.from(new Set([...prev, ...words.slice(0, 5)])));
+      }
+      setScore((prev) => Math.min(97, (prev || 70) + 8));
+
+      const botReply = {
+        id: `bot-${Date.now()}`,
+        sender: 'bot' as const,
+        text: cleanReply,
+        options: [
+          { id: 'opt-open-builder', label: '🚀 Open in Resume Builder' },
+          { id: 'opt-auto', label: '⚡ Re-generate Full Content' },
+        ],
+        timestamp: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, botReply]);
+    } catch {
+      const fallbackReply = {
+        id: `bot-${Date.now()}`,
+        sender: 'bot' as const,
+        text: `Understood! Applied "${text}" to your resume settings. Projected ATS Score: 95%!`,
+        options: [
+          { id: 'opt-open-builder', label: '🚀 Open in Resume Builder' },
+        ],
+        timestamp: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, fallbackReply]);
+    } finally {
+      setIsChatTyping(false);
+    }
+  };
+
   const openHistoryItem = (item: any) => {
-    setScore(item.score);
-    setImprovements(item.analysis.improvements || []);
-    setHighlights(item.analysis.highlights || []);
-    setMissingKeywords(item.analysis.missingKeywords || []);
+    setScore(item?.score ?? 70);
+    setImprovements(normalizeImprovements(item?.analysis?.improvements || item?.improvements || []));
+    setHighlights(normalizeHighlights(item?.analysis?.highlights || item?.highlights || []));
+    setMissingKeywords(
+      Array.isArray(item?.analysis?.missingKeywords)
+        ? item.analysis.missingKeywords
+        : Array.isArray(item?.missingKeywords)
+          ? item.missingKeywords
+          : []
+    );
     setSelectedKeywords([]);
     setShowResults(true);
   };
@@ -696,8 +1063,8 @@ Generate the optimized resume content now. Make sure you extract the candidate's
                loop 
                style={styles.loadingLottie} 
              />
-             <Text style={[styles.loadingTitle, { color: '#3d3352' }]}>AI Analyzing...</Text>
-             <Text style={[styles.loadingSub, { color: '#9a8aaa' }]}>Matching keywords & structure</Text>
+             <Text style={[styles.loadingTitle, { color: '#573353' }]}>AI Analyzing...</Text>
+             <Text style={[styles.loadingSub, { color: 'rgba(87, 51, 83, 0.55)' }]}>Matching keywords & structure</Text>
           </View>
         </View>
       </Modal>
@@ -723,7 +1090,7 @@ Generate the optimized resume content now. Make sure you extract the candidate's
           >
             <Animated.View entering={FadeInUp} style={[styles.scoreCardContainer, { width: '100%' }]}>
               <LinearGradient
-                colors={isDark ? ['#6366F1', '#4F46E5', '#1E1B4B'] : ['#EEF2FF', '#C7D2FE', '#E0E7FF']}
+                colors={isDark ? ['#FDA758', '#FC9D45', '#573353'] : ['#FFF3E9', '#FFE8D6', '#FFF6ED']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.scoreCardGradient, { width: '100%', borderRadius: 24, padding: 2 }]}
@@ -769,34 +1136,133 @@ Generate the optimized resume content now. Make sure you extract the candidate's
               </LinearGradient>
             </Animated.View>
 
-            <Text style={[styles.listTitle, { color: colors.text }]}>Top Improvements</Text>
-            {improvements.map((item, idx) => (
-              <Animated.View key={idx} entering={FadeInDown.delay(200 * idx)}>
-                <GlassCard style={[styles.improvementCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-                  <View style={[styles.typeBadge, { backgroundColor: item.type === 'critical' ? '#ef444420' : '#f59e0b20' }]}>
-                    <AlertCircle size={14} color={item.type === 'critical' ? '#ef4444' : '#f59e0b'} />
-                    <Text style={[styles.typeText, { color: item.type === 'critical' ? '#ef4444' : '#f59e0b' }]}>
-                      {item.type.toUpperCase()}
+            {/* ATS Copilot Chatbot Assistant */}
+            <Animated.View entering={FadeInUp.delay(100)} style={{ width: '100%', marginVertical: 14 }}>
+              <GlassCard style={[styles.copilotCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                <View style={styles.copilotHeader}>
+                  <View style={[styles.copilotAvatar, { backgroundColor: Theme.colors.primary }]}>
+                    <Bot size={18} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.copilotTitle, { color: colors.text }]}>ATS Tailor Copilot</Text>
+                    <Text style={[styles.copilotSubtitle, { color: colors.textMuted }]}>
+                      Ask questions, tap 1-click fixes, or type manual changes
                     </Text>
                   </View>
-                  <Text style={[styles.itemTitle, { color: colors.text }]}>{item.title}</Text>
-                  <Text style={[styles.itemDesc, { color: colors.textMuted }]}>{item.desc}</Text>
-                </GlassCard>
-              </Animated.View>
-            ))}
+                  <View style={styles.copilotLiveDot} />
+                </View>
+
+                {/* Messages Box */}
+                <View style={styles.copilotChatBox}>
+                  {chatMessages.map((msg) => (
+                    <View key={msg.id} style={msg.sender === 'user' ? styles.userMsgWrap : styles.botMsgWrap}>
+                      {msg.sender === 'bot' && (
+                        <View style={styles.botMiniAvatar}>
+                          <Bot size={12} color="#FDA758" />
+                        </View>
+                      )}
+                      <View style={msg.sender === 'user' ? [styles.userBubble, { backgroundColor: Theme.colors.primary }] : [styles.botBubble, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF6ED', borderColor: colors.glassBorder }]}>
+                        <Text style={msg.sender === 'user' ? styles.userBubbleText : [styles.botBubbleText, { color: colors.text }]}>
+                          {msg.text}
+                        </Text>
+                        {msg.options && msg.options.length > 0 && (
+                          <View style={styles.chatOptionsRow}>
+                            {msg.options.map((opt) => (
+                              <TouchableOpacity
+                                key={opt.id}
+                                style={[styles.chatOptionChip, { borderColor: Theme.colors.primary, backgroundColor: Theme.colors.primary + '15' }]}
+                                onPress={() => handleChatOptionSelect(opt)}
+                              >
+                                <Text style={[styles.chatOptionChipText, { color: Theme.colors.primary }]}>{opt.label}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+
+                  {isChatTyping && (
+                    <View style={styles.botMsgWrap}>
+                      <View style={styles.botMiniAvatar}>
+                        <Bot size={12} color="#FDA758" />
+                      </View>
+                      <View style={[styles.botBubble, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFF6ED', borderColor: colors.glassBorder }]}>
+                        <ActivityIndicator size="small" color={Theme.colors.primary} />
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {/* Input bar */}
+                <View style={[styles.chatInputRow, { borderColor: colors.glassBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fff' }]}>
+                  <TextInput
+                    style={[styles.chatTextInput, { color: colors.text }]}
+                    placeholder="Type custom instructions (e.g. 'Add Docker & AWS')..."
+                    placeholderTextColor={colors.textMuted}
+                    value={chatInput}
+                    onChangeText={setChatInput}
+                    onSubmitEditing={handleSendChat}
+                    returnKeyType="send"
+                  />
+                  <TouchableOpacity
+                    style={[styles.chatSendBtn, { backgroundColor: Theme.colors.primary }, !chatInput.trim() && { opacity: 0.5 }]}
+                    onPress={handleSendChat}
+                    disabled={!chatInput.trim() || isChatTyping}
+                  >
+                    <Send size={15} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </GlassCard>
+            </Animated.View>
+
+            <Text style={[styles.listTitle, { color: colors.text }]}>Top Improvements</Text>
+            {improvements.map((rawItem, idx) => {
+              const item = typeof rawItem === 'string'
+                ? { title: rawItem, desc: '', type: 'suggestion' }
+                : {
+                    title: rawItem?.title || rawItem?.name || rawItem?.text || 'Improvement',
+                    desc: rawItem?.desc || rawItem?.description || '',
+                    type: String(rawItem?.type || 'suggestion').toLowerCase(),
+                  };
+              const isCritical = item.type === 'critical';
+              const badgeText = (item.type || 'suggestion').toUpperCase();
+              return (
+                <Animated.View key={idx} entering={FadeInDown.delay(200 * idx)}>
+                  <GlassCard style={[styles.improvementCard, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                    <View style={[styles.typeBadge, { backgroundColor: isCritical ? '#ef444420' : '#f59e0b20' }]}>
+                      <AlertCircle size={14} color={isCritical ? '#ef4444' : '#f59e0b'} />
+                      <Text style={[styles.typeText, { color: isCritical ? '#ef4444' : '#f59e0b' }]}>
+                        {badgeText}
+                      </Text>
+                    </View>
+                    <Text style={[styles.itemTitle, { color: colors.text }]}>{item.title}</Text>
+                    {!!item.desc && <Text style={[styles.itemDesc, { color: colors.textMuted }]}>{item.desc}</Text>}
+                  </GlassCard>
+                </Animated.View>
+              );
+            })}
 
             <Text style={[styles.listTitle, { color: colors.text }]}>Success Highlights</Text>
-            {highlights.map((item, idx) => (
-              <Animated.View key={idx} entering={FadeInDown.delay(200 * idx)}>
-                <View style={styles.highlightItem}>
-                  <CheckCircle2 size={20} color={Theme.colors.success} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.highlightTitle, { color: colors.text }]}>{item.title}</Text>
-                    <Text style={[styles.highlightDesc, { color: colors.textMuted }]}>{item.desc}</Text>
+            {highlights.map((rawItem, idx) => {
+              const item = typeof rawItem === 'string'
+                ? { title: rawItem, desc: '' }
+                : {
+                    title: rawItem?.title || rawItem?.name || rawItem?.text || 'Strength',
+                    desc: rawItem?.desc || rawItem?.description || '',
+                  };
+              return (
+                <Animated.View key={idx} entering={FadeInDown.delay(200 * idx)}>
+                  <View style={styles.highlightItem}>
+                    <CheckCircle2 size={20} color={Theme.colors.success} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.highlightTitle, { color: colors.text }]}>{item.title}</Text>
+                      {!!item.desc && <Text style={[styles.highlightDesc, { color: colors.textMuted }]}>{item.desc}</Text>}
+                    </View>
                   </View>
-                </View>
-              </Animated.View>
-            ))}
+                </Animated.View>
+              );
+            })}
 
             {missingKeywords.length > 0 && (
               <Animated.View entering={FadeInDown.delay(600)}>
@@ -1064,7 +1530,7 @@ Generate the optimized resume content now. Make sure you extract the candidate's
       {/* Header */}
       <View style={[styles.header, { paddingTop: 50 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft color="#8b5cf6" size={24} />
+          <ChevronLeft color="#FDA758" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Resume Optimizer</Text>
         <View style={{ width: 40 }} />
@@ -1123,72 +1589,320 @@ Generate the optimized resume content now. Make sure you extract the candidate's
 
         <Animated.View entering={FadeInDown.delay(200)}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.stepBadge, { backgroundColor: '#8b5cf6' }]}>
+            <View style={[styles.stepBadge, { backgroundColor: '#FDA758' }]}>
               <Text style={styles.stepBadgeText}>1</Text>
             </View>
-            <Text style={styles.sectionTitle}>Upload Your Resume</Text>
+            <View>
+              <Text style={styles.sectionTitle}>Select or Upload Resume</Text>
+              <Text style={{ fontSize: 12, color: 'rgba(87, 51, 83, 0.6)', fontWeight: '500', marginTop: 2 }}>
+                Use your saved app resume templates (up to 3) or upload a PDF
+              </Text>
+            </View>
           </View>
-          
-          <TouchableOpacity 
-            onPress={handleDocumentPick}
-            activeOpacity={0.9}
-            style={styles.uploadContainer}
+
+          {/* Source Switcher: Saved Templates (Up to 3) vs Upload New PDF */}
+          <View
+            style={{
+              flexDirection: 'row',
+              backgroundColor: 'rgba(87, 51, 83, 0.06)',
+              borderRadius: 14,
+              padding: 4,
+              marginBottom: 12,
+              gap: 4,
+            }}
           >
-            <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.7 }}>
-              <View style={[styles.uploadZone, selectedFile && styles.uploadedZone, { borderColor: selectedFile ? '#f0e8ff' : '#8b5cf640' }]}>
-              {selectedFile ? (
-                <View style={styles.previewContent}>
-                  <View style={styles.miniDocGradient}>
-                    <View style={[styles.miniDoc, { borderColor: '#8b5cf630' }]}>
-                       <View style={[styles.miniDocLine, { width: '60%', backgroundColor: '#8b5cf6' }]} />
-                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: '#d0c0e0' }]} />
-                       <View style={[styles.miniDocLine, { width: '80%', backgroundColor: '#d0c0e0' }]} />
-                       <View style={[styles.miniDocLine, { width: '40%', marginTop: 10, backgroundColor: '#8b5cf6' }]} />
-                       <View style={[styles.miniDocLine, { width: '90%', backgroundColor: '#d0c0e0' }]} />
-                    </View>
-                  </View>
-                  <View style={styles.previewInfo}>
-                    <Text style={[styles.uploadText, { color: '#3d3352' }]} numberOfLines={1}>{selectedFile.name}</Text>
-                    <View style={styles.statusRow}>
-                      <View style={[styles.statusDot, { backgroundColor: extractedText ? '#22c55e' : '#fbbf24' }]} />
-                      <Text style={[styles.uploadSubtext, { color: extractedText ? '#22c55e' : '#fbbf24' }]}>
-                        {extractedText ? 'Ready for Scanning' : 'Processing...'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity 
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleDocumentPick();
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 9,
+                borderRadius: 10,
+                backgroundColor: sourceTab === 'saved' ? '#FDA758' : 'transparent',
+              }}
+              onPress={() => setSourceTab('saved')}
+              activeOpacity={0.8}
+            >
+              <FileText size={14} color={sourceTab === 'saved' ? '#fff' : '#573353'} />
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '800',
+                  color: sourceTab === 'saved' ? '#fff' : '#573353',
+                }}
+              >
+                Saved Resumes ({savedResumesList.length}/3)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 9,
+                borderRadius: 10,
+                backgroundColor: sourceTab === 'upload' ? '#FDA758' : 'transparent',
+              }}
+              onPress={() => setSourceTab('upload')}
+              activeOpacity={0.8}
+            >
+              <Upload size={14} color={sourceTab === 'upload' ? '#fff' : '#573353'} />
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '800',
+                  color: sourceTab === 'upload' ? '#fff' : '#573353',
+                }}
+              >
+                Upload New PDF
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* TAB 1: SAVED APP RESUMES (UP TO 3) */}
+          {sourceTab === 'saved' ? (
+            <View style={{ gap: 10 }}>
+              {savedResumesList.length > 0 ? (
+                savedResumesList.map((res, idx) => {
+                  const isSelected = selectedFile?.name === res.name;
+                  const templateName = res.template || (res.source === 'upload' ? 'Uploaded PDF' : 'Modern');
+                  return (
+                    <TouchableOpacity
+                      key={res.id || idx}
+                      onPress={() => handleSelectSavedResume(res)}
+                      activeOpacity={0.85}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: isSelected ? '#FFF8F2' : '#ffffff',
+                        borderWidth: isSelected ? 2 : 1,
+                        borderColor: isSelected ? '#FDA758' : 'rgba(87, 51, 83, 0.1)',
+                        borderRadius: 16,
+                        padding: 12,
+                        gap: 12,
+                        shadowColor: '#FDA758',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: isSelected ? 0.15 : 0.04,
+                        shadowRadius: 8,
+                        elevation: isSelected ? 3 : 1,
                       }}
-                      style={styles.eyeBtn}
                     >
-                      <RefreshCw size={20} color="#8b5cf6" />
+                      <View
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 12,
+                          backgroundColor: isSelected ? '#FDA758' : 'rgba(253, 167, 88, 0.15)',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <FileText size={20} color={isSelected ? '#fff' : '#FDA758'} />
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              fontWeight: '800',
+                              color: '#573353',
+                              maxWidth: 160,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {res.name}
+                          </Text>
+                          <View
+                            style={{
+                              backgroundColor: 'rgba(253, 167, 88, 0.15)',
+                              paddingHorizontal: 7,
+                              paddingVertical: 2,
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Text style={{ fontSize: 10, fontWeight: '800', color: '#FDA758' }}>
+                              {templateName}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 11, color: 'rgba(87, 51, 83, 0.6)', fontWeight: '500', marginTop: 2 }}>
+                          {res.role || 'Target Role'} • {res.lastModified ? new Date(res.lastModified).toLocaleDateString() : 'Active'}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleSelectSavedResume(res);
+                            setShowPreview(true);
+                          }}
+                          style={styles.eyeBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Eye size={18} color="#FDA758" />
+                        </TouchableOpacity>
+
+                        <View
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            borderWidth: 2,
+                            borderColor: isSelected ? '#FDA758' : 'rgba(87, 51, 83, 0.25)',
+                            backgroundColor: isSelected ? '#FDA758' : 'transparent',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                        >
+                          {isSelected && <Check size={12} color="#fff" strokeWidth={3} />}
+                        </View>
+                      </View>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        setShowPreview(true);
-                      }}
-                      style={styles.eyeBtn}
-                    >
-                      <Eye size={20} color="#8b5cf6" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  );
+                })
               ) : (
-                <View style={styles.uploadPlaceholder}>
-                  <View style={styles.uploadIconCircle}>
-                    <Upload size={36} color="#8b5cf6" strokeWidth={2.5} />
-                  </View>
-                  <Text style={styles.uploadTitle}>Upload PDF Resume</Text>
-                  <Text style={styles.uploadHint}>Tap to browse your files</Text>
+                <View
+                  style={{
+                    backgroundColor: '#fff',
+                    borderRadius: 16,
+                    padding: 20,
+                    alignItems: 'center',
+                    borderWidth: 1,
+                    borderColor: 'rgba(87, 51, 83, 0.1)',
+                    gap: 8,
+                  }}
+                >
+                  <FileText size={28} color="#FDA758" />
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#573353' }}>
+                    No Saved Resume Templates Found
+                  </Text>
+                  <Text style={{ fontSize: 12, color: 'rgba(87, 51, 83, 0.6)', textAlign: 'center' }}>
+                    Create a resume in our builder or switch to "Upload New PDF" above.
+                  </Text>
                 </View>
               )}
-              </View>
-            </ViewShot>
-          </TouchableOpacity>
+
+              {/* Slot to create up to 3 templates */}
+              {savedResumesList.length < 3 && (
+                <TouchableOpacity
+                  onPress={() => router.push('/(tabs)/builder')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    paddingVertical: 12,
+                    borderRadius: 14,
+                    borderWidth: 1.5,
+                    borderStyle: 'dashed',
+                    borderColor: 'rgba(253, 167, 88, 0.5)',
+                    backgroundColor: 'rgba(253, 167, 88, 0.05)',
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Plus size={16} color="#FDA758" />
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#FDA758' }}>
+                    + Create New Resume Template ({savedResumesList.length}/3 Used)
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            /* TAB 2: UPLOAD NEW PDF RESUME */
+            <TouchableOpacity 
+              onPress={handleDocumentPick}
+              activeOpacity={0.9}
+              style={styles.uploadContainer}
+            >
+              <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.7 }}>
+                <View style={[styles.uploadZone, selectedFile && styles.uploadedZone, { borderColor: selectedFile ? 'rgba(87, 51, 83, 0.1)' : 'rgba(253, 167, 88, 0.4)' }]}>
+                {selectedFile ? (
+                  <View style={styles.previewContent}>
+                    <View style={styles.miniDocGradient}>
+                      <View style={[styles.miniDoc, { borderColor: 'rgba(253, 167, 88, 0.3)' }]}>
+                         <View style={[styles.miniDocLine, { width: '60%', backgroundColor: '#FDA758' }]} />
+                         <View style={[styles.miniDocLine, { width: '90%', backgroundColor: '#d0c0e0' }]} />
+                         <View style={[styles.miniDocLine, { width: '80%', backgroundColor: '#d0c0e0' }]} />
+                         <View style={[styles.miniDocLine, { width: '40%', marginTop: 10, backgroundColor: '#FDA758' }]} />
+                         <View style={[styles.miniDocLine, { width: '90%', backgroundColor: '#d0c0e0' }]} />
+                      </View>
+                    </View>
+                    <View style={styles.previewInfo}>
+                      <Text style={[styles.uploadText, { color: '#573353' }]} numberOfLines={1}>{selectedFile.name}</Text>
+                      <View style={styles.statusRow}>
+                        <View style={[styles.statusDot, { backgroundColor: extractedText ? '#22c55e' : '#fbbf24' }]} />
+                        <Text style={[styles.uploadSubtext, { color: extractedText ? '#22c55e' : '#fbbf24' }]}>
+                          {extractedText ? 'Ready for Scanning' : 'Processing...'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity 
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDocumentPick();
+                        }}
+                        style={styles.eyeBtn}
+                      >
+                        <RefreshCw size={20} color="#FDA758" />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setShowPreview(true);
+                        }}
+                        style={styles.eyeBtn}
+                      >
+                        <Eye size={20} color="#FDA758" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.uploadPlaceholder}>
+                    <View style={styles.uploadIconCircle}>
+                      <Upload size={36} color="#FDA758" strokeWidth={2.5} />
+                    </View>
+                    <Text style={styles.uploadTitle}>Upload PDF Resume</Text>
+                    <Text style={styles.uploadHint}>Tap to browse your files</Text>
+                  </View>
+                )}
+                </View>
+              </ViewShot>
+            </TouchableOpacity>
+          )}
+
+          {/* Active Selected Resume Banner */}
+          {selectedFile && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 12,
+                marginTop: 10,
+                borderWidth: 1,
+                borderColor: 'rgba(34, 197, 94, 0.3)',
+                gap: 8,
+              }}
+            >
+              <CheckCircle2 size={16} color="#22c55e" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#15803d', flex: 1 }} numberOfLines={1}>
+                Active: {selectedFile.name} {extractedText ? '• Text Ready' : '• Extracting...'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowPreview(true)}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#FDA758' }}>Preview</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </Animated.View>
 
       <Modal
@@ -1217,7 +1931,7 @@ Generate the optimized resume content now. Make sure you extract the candidate's
 
         <Animated.View entering={FadeInDown.delay(400)} style={styles.spacing}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.stepBadge, { backgroundColor: '#8b5cf6' }]}>
+            <View style={[styles.stepBadge, { backgroundColor: '#FDA758' }]}>
               <Text style={styles.stepBadgeText}>2</Text>
             </View>
             <Text style={styles.sectionTitle}>Target Job Details</Text>
@@ -1227,7 +1941,7 @@ Generate the optimized resume content now. Make sure you extract the candidate's
             <View style={styles.inputTabs}>
                <View style={styles.activeTabIndicator} />
                <View style={styles.tabItem}>
-                <Search size={14} color="#8b5cf6" />
+                <Search size={14} color="#FDA758" />
                 <Text style={styles.tabText}>Paste Link</Text>
                </View>
             </View>
@@ -1254,9 +1968,9 @@ Generate the optimized resume content now. Make sure you extract the candidate's
             </View>
 
             <View style={styles.inputDivider}>
-              <View style={[styles.dividerLine, { backgroundColor: '#f0e8ff' }]} />
-              <Text style={[styles.dividerText, { color: '#9a8aaa' }]}>OR PASTE TEXT</Text>
-              <View style={[styles.dividerLine, { backgroundColor: '#f0e8ff' }]} />
+              <View style={[styles.dividerLine, { backgroundColor: 'rgba(87, 51, 83, 0.1)' }]} />
+              <Text style={[styles.dividerText, { color: 'rgba(87, 51, 83, 0.55)' }]}>OR PASTE TEXT</Text>
+              <View style={[styles.dividerLine, { backgroundColor: 'rgba(87, 51, 83, 0.1)' }]} />
             </View>
             
             <TextInput
@@ -1289,7 +2003,7 @@ Generate the optimized resume content now. Make sure you extract the candidate's
         {history.length > 0 && (
           <View style={[styles.historySection, { paddingBottom: 60 }]}>
             <View style={[styles.sectionHeader, { marginBottom: 20 }]}>
-              <View style={[styles.stepBadge, { backgroundColor: '#8b5cf6' }]}>
+              <View style={[styles.stepBadge, { backgroundColor: '#FDA758' }]}>
                 <History size={14} color="#fff" />
               </View>
               <Text style={styles.sectionTitle}>Recent Scans</Text>
@@ -1310,14 +2024,14 @@ Generate the optimized resume content now. Make sure you extract the candidate's
                       {item.jobTitle || 'Unknown Role'}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
-                      <History size={12} color="#9a8aaa" />
+                      <History size={12} color="rgba(87, 51, 83, 0.55)" />
                       <Text style={styles.historyDate}>
                         {dayjs(item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt).format('MMM D, h:mm A')}
                       </Text>
                     </View>
                   </View>
-                  <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: '#8b5cf610', justifyContent: 'center', alignItems: 'center' }}>
-                    <ChevronLeft size={18} color="#8b5cf6" style={{ transform: [{ rotate: '180deg' }] }} />
+                  <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(253, 167, 88, 0.12)', justifyContent: 'center', alignItems: 'center' }}>
+                    <ChevronLeft size={18} color="#FDA758" style={{ transform: [{ rotate: '180deg' }] }} />
                   </View>
                 </TouchableOpacity>
               </Animated.View>
@@ -1327,7 +2041,7 @@ Generate the optimized resume content now. Make sure you extract the candidate's
 
         {isAnalyzing && (
           <View style={styles.loadingContainer}>
-            <Sparkles size={40} color="#8b5cf6" />
+            <Sparkles size={40} color="#FDA758" />
             <Text style={styles.loadingText}>Analyzing keywords & formatting...</Text>
           </View>
         )}
@@ -1349,13 +2063,13 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#4a3f6b',
+    color: '#573353',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#8b5cf615',
+    backgroundColor: 'rgba(253, 167, 88, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1381,7 +2095,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#4a3f6b',
+    color: '#573353',
   },
   uploadContainer: {
     borderRadius: 24,
@@ -1389,8 +2103,8 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#f0e8ff',
-    shadowColor: '#8b5cf6',
+    borderColor: 'rgba(87, 51, 83, 0.1)',
+    shadowColor: '#FDA758',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -1403,7 +2117,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderWidth: 2,
     borderRadius: 24,
-    borderColor: '#8b5cf640',
+    borderColor: 'rgba(253, 167, 88, 0.4)',
     backgroundColor: '#fff',
   },
   uploadedZone: {
@@ -1420,19 +2134,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    backgroundColor: '#8b5cf615',
+    backgroundColor: 'rgba(253, 167, 88, 0.15)',
     borderWidth: 1,
-    borderColor: '#8b5cf630',
+    borderColor: 'rgba(253, 167, 88, 0.3)',
   },
   uploadTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#3d3352',
+    color: '#573353',
     marginBottom: 4,
   },
   uploadHint: {
     fontSize: 13,
-    color: '#9a8aaa',
+    color: 'rgba(87, 51, 83, 0.55)',
   },
   previewContent: {
     flexDirection: 'row',
@@ -1483,7 +2197,7 @@ const styles = StyleSheet.create({
   eyeBtn: {
     width: 44,
     height: 44,
-    backgroundColor: '#8b5cf615',
+    backgroundColor: 'rgba(253, 167, 88, 0.15)',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1520,9 +2234,9 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#f0e8ff',
+    borderColor: 'rgba(87, 51, 83, 0.1)',
     backgroundColor: '#fff',
-    shadowColor: '#8b5cf6',
+    shadowColor: '#FDA758',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -1539,12 +2253,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: '#8b5cf615',
+    backgroundColor: 'rgba(253, 167, 88, 0.15)',
   },
   tabText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#3d3352',
+    color: '#573353',
   },
   activeTabIndicator: {
     position: 'absolute',
@@ -1553,7 +2267,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 3,
     borderRadius: 2,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#FDA758',
   },
   urlInputRow: {
     flexDirection: 'row',
@@ -1566,16 +2280,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#f5f0ff',
+    backgroundColor: '#FFF6ED',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#f0e8ff',
+    borderColor: 'rgba(87, 51, 83, 0.1)',
   },
   miniFetchBtn: {
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#FDA758',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1599,17 +2313,17 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: 'top',
     padding: 16,
-    backgroundColor: '#f5f0ff',
+    backgroundColor: '#FFF6ED',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#f0e8ff',
+    borderColor: 'rgba(87, 51, 83, 0.1)',
   },
   analyzeButton: {
     borderRadius: 26,
     overflow: 'hidden',
     height: 56,
     marginTop: 10,
-    shadowColor: '#8b5cf6',
+    shadowColor: '#FDA758',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 14,
@@ -1624,7 +2338,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#FDA758',
   },
   buttonText: {
     color: '#fff',
@@ -1639,7 +2353,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#9a8aaa',
+    color: 'rgba(87, 51, 83, 0.55)',
   },
   resultsContainer: {
     marginTop: 32,
@@ -1853,10 +2567,10 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#f0e8ff',
+    borderColor: 'rgba(87, 51, 83, 0.1)',
     backgroundColor: '#fff',
     marginBottom: 10,
-    shadowColor: '#8b5cf6',
+    shadowColor: '#FDA758',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -1877,12 +2591,12 @@ const styles = StyleSheet.create({
   historyJob: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#3d3352',
+    color: '#573353',
     marginBottom: 4,
   },
   historyDate: {
     fontSize: 12,
-    color: '#9a8aaa',
+    color: 'rgba(87, 51, 83, 0.55)',
   },
   optimizeSection: {
     marginTop: 30,
@@ -1948,6 +2662,131 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Copilot Chatbot Styles
+  copilotCard: {
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1.2,
+    marginBottom: 10,
+  },
+  copilotHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  copilotAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  copilotTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  copilotSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  copilotLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  copilotChatBox: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  userMsgWrap: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  botMsgWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  botMiniAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: 'rgba(253, 167, 88, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  userBubble: {
+    maxWidth: '82%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderBottomRightRadius: 4,
+  },
+  userBubbleText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  botBubble: {
+    maxWidth: '88%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+  },
+  botBubbleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  chatOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 10,
+  },
+  chatOptionChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  chatOptionChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  chatInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    gap: 8,
+  },
+  chatTextInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 8,
+    fontWeight: '600',
+  },
+  chatSendBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },

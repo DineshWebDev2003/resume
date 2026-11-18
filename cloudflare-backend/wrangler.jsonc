@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "resume-ats-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "API_PROVIDER_DEFAULT": "existing",
+    "FIREBASE_PROJECT_ID": "resume-app-a3c51",
+    "R2_ENABLED": "false"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "resume_ats_db",
+      "database_id": "ff4ed118-f399-47a3-869f-459a7e7d2e72",
+      "migrations_dir": "migrations"
+    }
+  ]
+  // R2 ready (enable after payment): uncomment and set bucket_name, then set R2_ENABLED=true
+  // "r2_buckets": [{ "binding": "RESUME_BUCKET", "bucket_name": "resume-elite-files" }]
+}

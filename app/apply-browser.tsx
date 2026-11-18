@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -7,6 +7,8 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
+  Modal,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
@@ -21,6 +23,10 @@ import {
   ShieldAlert,
   Upload,
   UserCheck,
+  FileText,
+  Check,
+  X,
+  Sparkles,
 } from 'lucide-react-native';
 import { Colors, Theme } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -36,6 +42,8 @@ import {
 } from '@/services/applyAutofill';
 import type { ATSKind, QuestionItem } from '@/services/autofill/types';
 import { delay } from '@/services/quickApplyQueue';
+import { useJobStore } from '@/hooks/use-job-store';
+import { getResumes, UserResume } from '@/utils/storage';
 
 /**
  * Quick Apply + Smart Autofill browser.
@@ -67,6 +75,18 @@ export default function ApplyBrowserScreen() {
   const [confirmAsk, setConfirmAsk] = useState(false);
   const [lastFieldCount, setLastFieldCount] = useState(0);
   const [newFieldsHint, setNewFieldsHint] = useState(false);
+  const [savedResumes, setSavedResumes] = useState<UserResume[]>([]);
+  const [showResumeModal, setShowResumeModal] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    getResumes().then((list) => {
+      if (isMounted) setSavedResumes(list || []);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const askedRef = useRef(false);
   const lastInjectRef = useRef(0);
@@ -119,6 +139,16 @@ export default function ApplyBrowserScreen() {
     }
   };
 
+  const handleSelectAppResume = (resItem: UserResume) => {
+    const name = resItem.name || resItem.title || `Resume ${resItem.resumeNumber || ''}`;
+    setPickedResume(name);
+    setShowResumeModal(false);
+    Alert.alert(
+      'Resume Selected from App',
+      `"${name}" is ready. When the employer form opens file upload, select this resume. Your profile details will autofill automatically.`,
+    );
+  };
+
   const persistSubmitted = async (filledCount: number, source: 'quick_apply' | 'external_browser') => {
     if (!auth.currentUser) {
       Alert.alert('Login Required', 'Please login to track this application.');
@@ -136,6 +166,24 @@ export default function ApplyBrowserScreen() {
         ats,
         filledFieldsCount: filledCount,
       });
+
+      // ── Instant Live Sync to useJobStore & Jobs Tracker ──
+      try {
+        useJobStore.getState().saveJob({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          url: url,
+          logo: job.logo,
+          status: 'applied',
+          appliedAt: Date.now(),
+        });
+        useJobStore.getState().updateJobStatus(job.id, 'applied');
+      } catch (storeErr) {
+        console.warn('Job store sync warning:', storeErr);
+      }
+
       setSubmitted(true);
     } catch (e: any) {
       Alert.alert('Tracking failed', e?.message || toUserError('SUBMISSION_FAILED'));
@@ -319,11 +367,25 @@ export default function ApplyBrowserScreen() {
             <Text style={styles.warnText}>
               {toUserError('RESUME_UPLOAD_REQUIRED')}
               {uploadCount > 0 ? ` (${uploadCount} file field${uploadCount > 1 ? 's' : ''})` : ''}
-              {pickedResume ? `\nSelected: ${pickedResume}` : ''}
+              {pickedResume ? `\n✓ Attached: ${pickedResume}` : ''}
             </Text>
-            <TouchableOpacity onPress={handlePickResume} style={styles.pickBtn}>
-              <Text style={styles.pickText}>{pickedResume ? 'Change file' : 'Select resume'}</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              {savedResumes.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowResumeModal(true)}
+                  style={[styles.pickBtn, { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary }]}
+                >
+                  <FileText size={13} color="#fff" />
+                  <Text style={[styles.pickText, { color: '#fff', fontWeight: '800' }]}>
+                    App Resumes ({savedResumes.length})
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={handlePickResume} style={styles.pickBtn}>
+                <Upload size={13} color="#b45309" />
+                <Text style={styles.pickText}>{pickedResume ? 'Browse Other' : 'Browse Phone'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         {questions.length > 0 && (
@@ -373,13 +435,22 @@ export default function ApplyBrowserScreen() {
             domStorageEnabled
             sharedCookiesEnabled
             thirdPartyCookiesEnabled
+            userAgent={
+              Platform.OS === 'android'
+                ? "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                : undefined
+            }
             allowsBackForwardNavigationGestures
             onLoadEnd={() => {
               setLoading(false);
               const next = detectATS(url);
               if (next !== 'unknown') setAts(next);
-              // Controlled signal scan per page (no autofill loop).
+              // Controlled signal scan per page
               webRef.current?.injectJavaScript(buildPageSignalJS(url));
+              // Auto-fill on page load just like Chrome extensions (Simplify/Teal)
+              setTimeout(() => {
+                injectAutofill();
+              }, 500);
             }}
             onNavigationStateChange={(nav) => {
               setUrl(nav.url);
@@ -425,11 +496,11 @@ export default function ApplyBrowserScreen() {
           <Text style={[styles.footerBtnText, { color: colors.text }]}>Chrome</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.footerBtn, { borderColor: colors.glassBorder, backgroundColor: colors.surface }]}
+          style={[styles.footerBtn, { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary, flex: 1.2 }]}
           onPress={injectAutofill}
         >
-          <ClipboardPaste size={15} color={colors.text} />
-          <Text style={[styles.footerBtnText, { color: colors.text }]}>Autofill</Text>
+          <ClipboardPaste size={15} color="#fff" />
+          <Text style={[styles.footerBtnText, { color: '#fff', fontWeight: '900' }]}>⚡ 1-Tap Fill</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.footerBtn, styles.appliedBtn, { backgroundColor: '#10b981' }]}
@@ -439,6 +510,77 @@ export default function ApplyBrowserScreen() {
           <Text style={[styles.footerBtnText, { color: '#fff' }]}>Mark Applied</Text>
         </TouchableOpacity>
       </View>
+
+      {/* App Saved Resumes Picker Modal */}
+      <Modal
+        visible={showResumeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowResumeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <FileText size={18} color={Theme.colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Choose App Resume</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowResumeModal(false)} style={styles.modalCloseBtn}>
+                <X size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalDesc, { color: colors.textMuted }]}>
+              Select one of your saved resumes to attach when applying:
+            </Text>
+
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+              {savedResumes.map((resItem, idx) => {
+                const displayName = resItem.name || resItem.title || `Resume ${resItem.resumeNumber || idx + 1}`;
+                const isSelected = pickedResume === displayName;
+                return (
+                  <TouchableOpacity
+                    key={resItem.id || idx}
+                    onPress={() => handleSelectAppResume(resItem)}
+                    style={[
+                      styles.resumeItemCard,
+                      { backgroundColor: isSelected ? 'rgba(253, 167, 88, 0.12)' : colors.background },
+                      isSelected && { borderColor: Theme.colors.primary, borderWidth: 1.5 },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.resumeItemIconBg}>
+                      <FileText size={18} color={Theme.colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.resumeItemTitle, { color: colors.text }]}>
+                        {displayName}
+                      </Text>
+                      <Text style={[styles.resumeItemSubtitle, { color: colors.textMuted }]}>
+                        {resItem.source === 'upload' ? 'Uploaded PDF' : 'Resume Elite Builder'} •{' '}
+                        {resItem.lastModified ? new Date(resItem.lastModified).toLocaleDateString() : 'Active'}
+                      </Text>
+                    </View>
+                    {isSelected && <Check size={18} color={Theme.colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.modalBrowseBtn, { borderColor: colors.glassBorder }]}
+              onPress={() => {
+                setShowResumeModal(false);
+                handlePickResume();
+              }}
+            >
+              <Upload size={14} color={colors.text} />
+              <Text style={[styles.modalBrowseText, { color: colors.text }]}>
+                Browse Other Files on Phone
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -494,4 +636,55 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontWeight: '800' },
   ghostBtn: { marginTop: 8, padding: 10 },
   ghostText: { fontSize: 12, fontWeight: '700' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '75%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '800' },
+  modalCloseBtn: { padding: 4 },
+  modalDesc: { fontSize: 13, marginBottom: 14 },
+  resumeItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  resumeItemIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(253, 167, 88, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resumeItemTitle: { fontSize: 14, fontWeight: '700' },
+  resumeItemSubtitle: { fontSize: 11, marginTop: 2 },
+  modalBrowseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    marginTop: 10,
+  },
+  modalBrowseText: { fontSize: 13, fontWeight: '700' },
 });

@@ -14,6 +14,7 @@ import { useAutoApplySettings } from '@/hooks/use-auto-apply';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { getAutoApplyRecords } from '@/services/firestore';
+import { clearAutoApplyNotification } from '@/services/autoApplyNotifier';
 import {
   BellRing,
   Briefcase,
@@ -146,7 +147,10 @@ export default function AutoApplySettingsScreen() {
               </View>
               <Switch
                 value={settings.enabled}
-                onValueChange={(on) => save({ enabled: on, paused: on ? false : settings.paused })}
+                onValueChange={(on) => {
+                  if (!on) clearAutoApplyNotification();
+                  save({ enabled: on, paused: on ? false : settings.paused });
+                }}
                 trackColor={{ true: Theme.colors.primary }}
               />
             </View>

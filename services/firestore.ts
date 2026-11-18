@@ -1,4 +1,18 @@
 import { db, auth } from './firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_CONFIG } from '@/constants/config';
+
+async function getCurrentUserId() {
+  try {
+    const raw = await AsyncStorage.getItem('auth_user_v1');
+    if (raw) { const u = JSON.parse(raw); if (u?.uid) return u.uid as string; }
+  } catch {}
+  try { if ((API_CONFIG as any).AUTH_PROVIDER !== 'better-auth') return auth.currentUser?.uid || null; } catch {}
+  return null;
+}
+function currentUserLike(uid: string | null) {
+  return uid ? ({ uid, email: null } as any) : auth.currentUser;
+}
 import { DEFAULT_AUTO_APPLY_SETTINGS } from '@/constants/autoApply';
 import type { AutoApplySettings, AutoApplyStatus } from '@/constants/autoApply';
 import type { ApplicationRecord } from './autoApply';
@@ -32,6 +46,7 @@ export interface UserProfile {
   resumeLimit: number;
   referralCode: string;
   referralCount: number;
+  /** @deprecated Kept for backward compatibility. API keys are strictly device-local (AsyncStorage) and NEVER saved in Firestore database. */
   groqKey?: string;
   geminiKey?: string;
   pollinationsKey?: string;
@@ -46,60 +61,121 @@ export interface UserProfile {
 
 // Check and initialize user profile
 export const checkAndInitProfile = async (user: any) => {
-  const userDocRef = doc(db, 'users', user.uid);
-  const userDoc = await getDoc(userDocRef);
-
-  if (!userDoc.exists()) {
-    const referralCode = `RESUME-${user.uid.substring(0, 5).toUpperCase()}`;
-    const newProfile: UserProfile = {
-      userId: user.uid,
-      name: user.displayName || 'User',
-      email: user.email || '',
-      jobRoles: [],
-      location: '',
-      education: '',
-      resumeLimit: 3,
-      referralCode,
-      referralCount: 0,
-      onboardingCompleted: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    await setDoc(userDocRef, newProfile);
-    return newProfile;
+  if (!user?.uid) throw new Error('User not authenticated');
+  if ((API_CONFIG as any).AUTH_PROVIDER === 'better-auth') {
+    const email = (user.email || '').toLowerCase();
+    const premium = email === 'dinesh.mahi.dev@gmail.com';
+    return {
+      userId: user.uid, name: user.displayName || user.name || 'User', email: user.email || '',
+      jobRoles: [], location: '', education: '', resumeLimit: premium ? 999999 : 3,
+      referralCode: `RESUME-${String(user.uid).slice(0,5).toUpperCase()}`, referralCount: 0,
+      onboardingCompleted: true, isPro: premium, isPremium: premium, plan: premium ? 'premium_unlimited' : 'free',
+    } as any;
   }
-  return userDoc.data() as UserProfile;
+
+  const referralCode = `RESUME-${user.uid.substring(0, 5).toUpperCase()}`;
+  const defaultProfile: UserProfile = {
+    userId: user.uid,
+    name: user.displayName || 'User',
+    email: user.email || '',
+    jobRoles: [],
+    location: '',
+    education: '',
+    resumeLimit: 3,
+    referralCode,
+    referralCount: 0,
+    onboardingCompleted: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    const userDocRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userDocRef);
+
+    if (!userDoc.exists()) {
+      const newProfile: UserProfile = {
+        userId: user.uid,
+        name: user.displayName || 'User',
+        email: user.email || '',
+        jobRoles: [],
+        location: '',
+        education: '',
+        resumeLimit: 3,
+        referralCode,
+        referralCount: 0,
+        onboardingCompleted: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      try {
+        await setDoc(userDocRef, newProfile);
+      } catch (e) {
+        // Suppress permission errors if security rules restrict writing
+      }
+      await AsyncStorage.setItem(`user_profile_${user.uid}`, JSON.stringify(newProfile));
+      return newProfile;
+    }
+    const data = userDoc.data() as UserProfile;
+    await AsyncStorage.setItem(`user_profile_${user.uid}`, JSON.stringify(data));
+    return data;
+  } catch (err: any) {
+    // If Firestore throws missing or insufficient permissions, gracefully fall back to local storage
+    try {
+      const cached = await AsyncStorage.getItem(`user_profile_${user.uid}`);
+      if (cached) return JSON.parse(cached) as UserProfile;
+    } catch {}
+    return defaultProfile;
+  }
 };
 
 // Update user profile
 export const updateUserProfile = async (data: Partial<UserProfile>) => {
-  const user = auth.currentUser;
-  if (!user) throw new Error('User not authenticated');
+  const uid = await getCurrentUserId();
+  const user = currentUserLike(uid);
+  if (!user) return;
+  if ((API_CONFIG as any).AUTH_PROVIDER === 'better-auth') return;
 
-  const userDocRef = doc(db, 'users', user.uid);
-  const docSnap = await getDoc(userDocRef);
-  if (!docSnap.exists()) {
-    const referralCode = `RESUME-${user.uid.substring(0, 5).toUpperCase()}`;
-    await setDoc(userDocRef, {
-      userId: user.uid,
-      name: user.displayName || 'User',
-      email: user.email || '',
-      jobRoles: [],
-      location: '',
-      education: '',
-      resumeLimit: 3,
-      referralCode,
-      referralCount: 0,
-      onboardingCompleted: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      ...data,
-    });
-  } else {
-    await setDoc(userDocRef, {
-      ...data,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+  // Persist locally first so user experience is fast and never blocked by permission rules
+  try {
+    const cached = await AsyncStorage.getItem(`user_profile_${user.uid}`);
+    const existing = cached ? JSON.parse(cached) : {};
+    const merged = { ...existing, ...data, userId: user.uid, updatedAt: new Date().toISOString() };
+    await AsyncStorage.setItem(`user_profile_${user.uid}`, JSON.stringify(merged));
+    if (data.onboardingCompleted) {
+      await AsyncStorage.setItem('onboarding_completed', 'true');
+    }
+  } catch {}
+
+  try {
+    const userDocRef = doc(db, 'users', user.uid);
+    const docSnap = await getDoc(userDocRef);
+    if (!docSnap.exists()) {
+      const referralCode = `RESUME-${user.uid.substring(0, 5).toUpperCase()}`;
+      await setDoc(userDocRef, {
+        userId: user.uid,
+        name: user.displayName || 'User',
+        email: user.email || '',
+        jobRoles: [],
+        location: '',
+        education: '',
+        resumeLimit: 3,
+        referralCode,
+        referralCount: 0,
+        onboardingCompleted: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        ...data,
+      });
+    } else {
+      await setDoc(userDocRef, {
+        ...data,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+  } catch (err: any) {
+    // Gracefully handle Firestore missing/insufficient permissions without throwing
+    console.warn('[Firestore] Profile updated locally (cloud permission fallback):', err?.message || err);
   }
 };
 
@@ -211,6 +287,17 @@ export const saveJobApplication = async (job: any) => {
     appliedAt: serverTimestamp(),
     status: 'Applied', // Default status
     statusColor: '#F59E0B'
+  });
+};
+
+export const updateJobApplicationStatus = async (appDocId: string, status: string, statusColor?: string) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+  const appRef = doc(db, 'job_applications', appDocId);
+  await updateDoc(appRef, {
+    status,
+    statusColor: statusColor || (status === 'Offer' ? '#10B981' : status === 'Interview' ? '#8B5CF6' : status === 'Archived' ? '#6B7280' : '#F59E0B'),
+    updatedAt: serverTimestamp(),
   });
 };
 

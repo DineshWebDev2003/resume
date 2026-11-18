@@ -6,6 +6,7 @@ import { Theme, Colors } from '@/constants/theme';
 import { saveJobApplication } from '@/services/firestore';
 import { saveAutoApplyRecord } from '@/services/firestore';
 import { useAutoApplySettings } from '@/hooks/use-auto-apply';
+import { useJobStore } from '@/hooks/use-job-store';
 import { AutoApplyBadge } from '@/components/AutoApplyBadge';
 import { calculateMatchScore, getAutoApplyContext, processJobForAutoApply } from '@/services/autoApply';
 import type { ApplicationRecord } from '@/services/autoApply';
@@ -27,7 +28,8 @@ import {
   Sparkles,
   Smile,
   Frown,
-  ExternalLink
+  ExternalLink,
+  Mic,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInUp, FadeIn, Layout, BounceIn } from 'react-native-reanimated';
@@ -41,6 +43,7 @@ export default function JobDetailsScreen() {
   const colors = isDark ? Colors.dark : Colors.light;
 
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const { updateJobStatus } = useJobStore();
   const appState = useRef(AppState.currentState);
   const [clickedApply, setClickedApply] = useState(false);
 
@@ -65,12 +68,11 @@ export default function JobDetailsScreen() {
   };
 
   useEffect(() => {
-    // If navigated with autoApply parameter, trigger handleApply automatically
+    // If navigated with autoApply parameter, trigger autofill browser directly
     if (params.autoApply === 'true') {
-      // Small timeout to let screen render and prevent navigation races
       setTimeout(() => {
-        handleApply();
-      }, 500);
+        handleAutofillApply();
+      }, 350);
     }
   }, [params.autoApply]);
 
@@ -246,6 +248,7 @@ export default function JobDetailsScreen() {
     }
 
     try {
+      updateJobStatus(job.id, 'applied');
       await saveJobApplication({
         id: job.id,
         title: job.title as string,
@@ -297,12 +300,16 @@ export default function JobDetailsScreen() {
           
           <View style={styles.metaRow}>
             <View style={[styles.metaBadge, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-              <MapPin size={12} color={Theme.colors.secondary} />
+              <MapPin size={12} color={Theme.colors.primary} />
               <Text style={[styles.metaText, { color: colors.text }]}>{job.location}</Text>
             </View>
             <View style={[styles.metaBadge, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
-              <Briefcase size={12} color={Theme.colors.primary} />
+              <Briefcase size={12} color="#573353" />
               <Text style={[styles.metaText, { color: colors.text }]}>Full-time</Text>
+            </View>
+            <View style={[styles.metaBadge, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+              <Calendar size={12} color="#573353" />
+              <Text style={[styles.metaText, { color: colors.text }]}>{params.postedAt || "Recently Posted"}</Text>
             </View>
           </View>
         </Animated.View>
@@ -313,7 +320,7 @@ export default function JobDetailsScreen() {
             colors={[colors.surface, colors.surface + 'dd']}
             style={[styles.infoCard, { borderColor: colors.glassBorder }]}
           >
-            <IndianRupee size={22} color={Theme.colors.secondary} />
+            <IndianRupee size={22} color="#10b981" />
             <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Salary Package</Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>{job.salary}</Text>
           </LinearGradient>
@@ -404,16 +411,17 @@ export default function JobDetailsScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* Footer Actions */}
+      {/* Footer Actions (Professional & High Contrast) */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16, borderTopColor: colors.glassBorder, backgroundColor: colors.background + 'f5' }]}>
         <View style={styles.footerActionRow}>
           <TouchableOpacity 
-            style={[styles.applyBtn, { flex: 1, flexDirection: 'row', gap: 8 }]}
+            style={[styles.applyBtn, { flex: 1, flexDirection: 'row', gap: 8, backgroundColor: Theme.colors.primary }]}
             onPress={() => router.push({
               pathname: '/builder/ats',
               params: { 
                 jobUrl: job.applyLink, 
                 autoScan: 'true',
+                autoOptimize: 'true',
                 jobTitle: job.title,
                 company: job.company
               }
@@ -424,19 +432,35 @@ export default function JobDetailsScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.outlineBtn, { flex: 1, flexDirection: 'row', gap: 6, backgroundColor: Theme.colors.secondary }]}
+            style={[styles.outlineBtn, { flex: 1, flexDirection: 'row', gap: 6, backgroundColor: '#573353', borderColor: '#573353' }]}
             onPress={handleApply}
           >
-            <ExternalLink size={16} color="#fff" />
-            <Text style={styles.outlineBtnText}>Apply Now</Text>
+            <ExternalLink size={16} color="#FDA758" />
+            <Text style={[styles.outlineBtnText, { color: '#FFFFFF' }]}>Apply Direct</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity
-          style={[styles.outlineBtn, { flexDirection: 'row', gap: 6, backgroundColor: Theme.colors.primary, marginTop: 10 }]}
+          style={[styles.outlineBtn, { flexDirection: 'row', gap: 8, backgroundColor: '#29319F', borderColor: '#29319F', marginTop: 10 }]}
           onPress={handleAutofillApply}
         >
-          <ExternalLink size={15} color="#fff" />
-          <Text style={[styles.outlineBtnText, { color: '#fff' }]}>Quick Apply — Autofill in App</Text>
+          <Zap size={15} color="#FDA758" fill="#FDA758" />
+          <Text style={[styles.outlineBtnText, { color: '#FFFFFF' }]}>Quick Apply — Autofill in App</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.outlineBtn, { flexDirection: 'row', gap: 8, backgroundColor: '#8B5CF6', borderColor: '#8B5CF6', marginTop: 8 }]}
+          onPress={() => router.push({
+            pathname: '/builder/voice',
+            params: {
+              mode: 'interview',
+              role: job.title,
+              company: job.company,
+              description: job.description || '',
+            },
+          })}
+        >
+          <Mic size={15} color="#FFFFFF" />
+          <Text style={[styles.outlineBtnText, { color: '#FFFFFF' }]}>🎤 AI Mock Interview Practice</Text>
         </TouchableOpacity>
       </View>
 

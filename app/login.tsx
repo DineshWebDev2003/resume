@@ -1,146 +1,169 @@
-import React from "react";
+import React, { useState } from "react";
 import {
-  Dimensions,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
-  Image,
-  Alert,
+  useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import Animated, { FadeInDown, FadeInUp, SlideInDown } from "react-native-reanimated";
-import { signInWithGoogle } from "@/services/auth";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  LogIn, Sparkles, ShieldCheck, Zap, FileText, Briefcase,
-  Star, Target, Award
-} from "lucide-react-native";
+import { ShieldAlert, Sparkles } from "lucide-react-native";
+import { auth, signInWithGoogle, signOut } from "@/services/auth";
 
-const { width, height } = Dimensions.get("window");
+// Pixel True — Habit App Design Tokens
+const C = {
+  bg: "#FFF3E9",
+  surface: "#FFFFFF",
+  text: "#573353",
+  muted: "rgba(87, 51, 83, 0.55)",
+  faint: "rgba(87, 51, 83, 0.1)",
+  primary: "#FDA758",
+  primaryDeep: "#FC9D45",
+  inputBg: "#FFF6ED",
+  white: "#FFFFFF",
+};
 
-const DECORATIVE_ICONS = [
-  { Icon: Star, x: 0.08, y: 0.12, size: 20, opacity: 0.15 },
-  { Icon: Award, x: 0.85, y: 0.08, size: 24, opacity: 0.12 },
-  { Icon: Target, x: 0.78, y: 0.22, size: 16, opacity: 0.1 },
-  { Icon: Briefcase, x: 0.12, y: 0.28, size: 18, opacity: 0.1 },
-  { Icon: Sparkles, x: 0.9, y: 0.38, size: 14, opacity: 0.15 },
-  { Icon: FileText, x: 0.05, y: 0.45, size: 22, opacity: 0.08 },
-];
-
-const DECORATIVE_DOTS = [
-  { x: 0.2, y: 0.05, size: 8, opacity: 0.12 },
-  { x: 0.7, y: 0.15, size: 12, opacity: 0.08 },
-  { x: 0.3, y: 0.35, size: 6, opacity: 0.15 },
-  { x: 0.88, y: 0.5, size: 10, opacity: 0.1 },
-  { x: 0.15, y: 0.55, size: 14, opacity: 0.06 },
-  { x: 0.6, y: 0.06, size: 5, opacity: 0.2 },
-];
+const TRACKING = { letterSpacing: -0.3 };
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const sc = Math.min(width / 414, 1.25);
+  const p = (n: number) => Math.round(n * sc);
+
+  const [busy, setBusy] = useState(false);
 
   const handleGoogleLogin = async () => {
+    if (busy) return;
+    setBusy(true);
+
     try {
       await signInWithGoogle();
-      console.log("Successfully signed in to Firebase");
-    } catch (e) {
-      console.error("Login Error:", e);
+      console.log("Successfully authenticated with Google");
+      router.replace("/(tabs)");
+    } catch (e: any) {
+      console.warn("Google Sign-In Notice:", e?.message || e);
+      // Fallback for development / Expo Go where native Google module isn't linked
       Alert.alert(
-        "Sign In Options",
-        "Google Sign-In is not fully configured or supported in this development build. Would you like to enter as a guest/developer?",
+        "Development Sign-In",
+        "Google Sign-In native module requires a custom development client build. Continue to app?",
         [
           { text: "Cancel", style: "cancel" },
-          { 
-            text: "Continue as Guest", 
+          {
+            text: "Continue to App",
             onPress: () => {
               router.replace("/(tabs)");
-            }
-          }
+            },
+          },
         ]
       );
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <LinearGradient
-        colors={['#fff0eb', '#fff8f5', '#fff']}
-        locations={[0, 0.35, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+    <View style={[styles.container, { width, height }]}>
       <StatusBar style="dark" />
 
-      {/* Decorative Elements */}
-      {DECORATIVE_ICONS.map(({ Icon: IconCmp, x, y, size, opacity }, idx) => (
-        <View key={`icon-${idx}`} style={[styles.decorIcon, { left: `${x * 100}%`, top: `${y * 100}%` }]}>
-          <IconCmp size={size} color="#8b5cf6" opacity={opacity} />
-        </View>
-      ))}
-      {DECORATIVE_DOTS.map(({ x, y, size, opacity }, idx) => (
-        <View key={`dot-${idx}`} style={[styles.decorDot, { left: `${x * 100}%`, top: `${y * 100}%`, width: size, height: size, opacity }]} />
-      ))}
+      {/* Full Cover Background Illustration (Fresh modern vector artwork) */}
+      <Image
+        source={require("@/assets/images/login-illustration-new.png")}
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 0,
+          width: width,
+          height: height * 0.68,
+        }}
+        resizeMode="cover"
+      />
 
-      {/* Top decorative curve */}
-      <View style={styles.topCurve} />
+      {/* Smooth Fade to Cream Gradient */}
+      <LinearGradient
+        colors={[
+          "rgba(255,243,233,0)",
+          "rgba(255,243,233,0.45)",
+          "rgba(255,243,233,0.92)",
+          "#FFF3E9",
+          "#FFF3E9",
+        ]}
+        locations={[0.15, 0.38, 0.6, 0.75, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
-      {/* Logo + Brand */}
-      <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.brandSection}>
-        <View style={styles.logoOuter}>
-          <View style={styles.logoGlow} />
-          <View style={styles.logoWrap}>
-            <Image source={require("@/assets/images/icon.png")} style={styles.logo} resizeMode="contain" />
-          </View>
+      {/* Top Header Tag */}
+      <View style={[styles.topHeader, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.brandPill}>
+          <Sparkles size={13} color={C.primaryDeep} />
+          <Text style={styles.brandPillText}>AI RESUME &amp; ATS CAREER HUB</Text>
         </View>
-        <Text style={styles.brandName}>
-          Resume <Text style={{ color: "#8b5cf6" }}>Elite</Text>
+      </View>
+
+      {/* Center Welcome Title */}
+      <View style={styles.centerHero}>
+        <Text style={[styles.welcomeSuper, TRACKING]}>WELCOME TO</Text>
+        <Text style={[styles.welcomeTitle, TRACKING]}>Resume{"\n"}Elite</Text>
+        <Text style={[styles.welcomeSubtitle, TRACKING]}>
+          Build recruiter-certified ATS resumes and discover verified high-paying roles.
         </Text>
-        <Text style={styles.tagline}>AI-Powered Resume Builder</Text>
+      </View>
 
-      </Animated.View>
+      {/* Bottom Actions Container (Google Auth Only) */}
+      <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+        {/* Google Sign-In Button */}
+        <Pressable
+          onPress={handleGoogleLogin}
+          disabled={busy}
+          style={({ pressed }) => [
+            styles.googleBtn,
+            {
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+              opacity: busy ? 0.8 : 1,
+            },
+          ]}
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color={C.text} />
+          ) : (
+            <View style={styles.googleIconBox}>
+              <Text style={styles.googleIconG}>G</Text>
+            </View>
+          )}
 
-      {/* Feature cards */}
-      <Animated.View entering={FadeInUp.delay(350).springify()} style={styles.featureGrid}>
-        <View style={styles.featureCard}>
-          <View style={[styles.featIcon, { backgroundColor: "#8b5cf612" }]}>
-            <Zap size={20} color="#8b5cf6" />
-          </View>
-          <Text style={styles.featTitle}>AI Voice</Text>
-          <Text style={styles.featDesc}>Speak your resume</Text>
+          <Text style={[styles.googleBtnText, TRACKING]}>
+            {busy ? "Signing in..." : "Continue with Google"}
+          </Text>
+        </Pressable>
+
+        {/* Terms & Privacy Footnote */}
+        <View style={styles.termsRow}>
+          <Text style={[styles.termsText, TRACKING]}>
+            {"By continuing, you agree to our "}
+            <Text
+              style={styles.termsLink}
+              onPress={() => router.push("/terms")}
+            >
+              Terms
+            </Text>
+            {" & "}
+            <Text
+              style={styles.termsLink}
+              onPress={() => router.push("/privacy")}
+            >
+              Privacy Policy
+            </Text>
+          </Text>
         </View>
-        <View style={styles.featureCard}>
-          <View style={[styles.featIcon, { backgroundColor: "#8b5cf612" }]}>
-            <ShieldCheck size={20} color="#8b5cf6" />
-          </View>
-          <Text style={styles.featTitle}>ATS Scan</Text>
-          <Text style={styles.featDesc}>Pass any filter</Text>
-        </View>
-        <View style={styles.featureCard}>
-          <View style={[styles.featIcon, { backgroundColor: "#8b5cf612" }]}>
-            <Sparkles size={20} color="#8b5cf6" />
-          </View>
-          <Text style={styles.featTitle}>Export</Text>
-          <Text style={styles.featDesc}>PDF / DOCX</Text>
-        </View>
-      </Animated.View>
-
-      {/* Bottom CTA */}
-      <Animated.View entering={SlideInDown.delay(500).springify().damping(22)} style={styles.bottomSection}>
-        <TouchableOpacity activeOpacity={0.85} onPress={handleGoogleLogin} style={styles.googleBtn}>
-          <LogIn color="#fff" size={20} />
-          <Text style={styles.googleBtnText}>Continue with Google</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.footer}>
-          By continuing, you agree to our{' '}
-          <Text style={styles.link} onPress={() => router.push("/terms")}>Terms</Text>
-          {' & '}
-          <Text style={styles.link} onPress={() => router.push("/privacy")}>Privacy</Text>
-        </Text>
-      </Animated.View>
+      </View>
     </View>
   );
 }
@@ -148,146 +171,117 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: C.bg,
+  },
+  topHeader: {
     paddingHorizontal: 24,
-    justifyContent: "space-between",
-  },
-  decorIcon: {
-    position: "absolute",
-  },
-  decorDot: {
-    position: "absolute",
-    borderRadius: 999,
-    backgroundColor: "#8b5cf6",
-  },
-  topCurve: {
-    position: "absolute",
-    top: -height * 0.1,
-    right: -60,
-    width: width * 1.2,
-    height: height * 0.35,
-    borderRadius: 200,
-    backgroundColor: "#8b5cf606",
-  },
-  brandSection: {
     alignItems: "center",
-    paddingTop: height * 0.07,
   },
-  logoOuter: {
-    position: "relative",
-    marginBottom: 22,
-  },
-  logoGlow: {
-    position: "absolute",
-    top: -10,
-    left: -10,
-    right: -10,
-    bottom: -10,
-    borderRadius: 30,
-    backgroundColor: "#8b5cf615",
-  },
-  logoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: "#fff",
-    borderWidth: 1.5,
-    borderColor: "#f0e8ff",
-    shadowColor: "#8b5cf6",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-    padding: 14,
-  },
-  logo: {
-    width: "100%",
-    height: "100%",
-  },
-  brandName: {
-    fontSize: 38,
-    fontWeight: "900",
-    color: "#3d3352",
-    letterSpacing: -1,
-    marginBottom: 6,
-  },
-  tagline: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#9a8aaa",
-    marginBottom: 14,
-  },
-
-  featureGrid: {
+  brandPill: {
     flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 4,
-  },
-  featureCard: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#f0e8ff",
-    padding: 16,
     alignItems: "center",
-    shadowColor: "#8b5cf6",
+    gap: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(87, 51, 83, 0.1)",
+    shadowColor: "#573353",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  brandPillText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: C.primaryDeep,
+    letterSpacing: 0.8,
+  },
+  centerHero: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    marginTop: -20,
+  },
+  welcomeSuper: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: C.primaryDeep,
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  welcomeTitle: {
+    fontSize: 42,
+    lineHeight: 46,
+    fontWeight: "900",
+    color: C.text,
+    letterSpacing: -1,
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: C.muted,
+    marginTop: 12,
+    maxWidth: 320,
+  },
+  bottomContainer: {
+    paddingHorizontal: 24,
+    width: "100%",
+  },
+  googleBtn: {
+    height: 56,
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(87, 51, 83, 0.1)",
+    shadowColor: "#573353",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
   },
-  featIcon: {
-    width: 44,
-    height: 44,
+  googleIconBox: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#EA4335",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
   },
-  featTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#3d3352",
-    marginBottom: 2,
-  },
-  featDesc: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#9a8aaa",
-  },
-  bottomSection: {
-    marginBottom: 10,
-  },
-  googleBtn: {
-    backgroundColor: "#8b5cf6",
-    borderRadius: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 17,
-    marginBottom: 16,
-    shadowColor: "#8b5cf6",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    elevation: 10,
+  googleIconG: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#EA4335",
   },
   googleBtnText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
-    color: "#fff",
+    color: C.text,
   },
-  footer: {
-    fontSize: 12,
+  termsRow: {
+    marginTop: 16,
+    alignItems: "center",
+    paddingHorizontal: 10,
+  },
+  termsText: {
+    fontSize: 11.5,
     fontWeight: "600",
-    color: "#9a8aaa",
+    color: C.muted,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 16,
   },
-  link: {
-    color: "#8b5cf6",
+  termsLink: {
     textDecorationLine: "underline",
+    color: C.text,
     fontWeight: "700",
   },
 });

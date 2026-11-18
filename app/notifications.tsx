@@ -23,6 +23,7 @@ import {
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -200,14 +201,11 @@ export default function NotificationsScreen() {
           ))
         ) : (
           <View style={styles.emptyState}>
-            <View
-              style={[
-                styles.emptyIconCircle,
-                { backgroundColor: colors.surface },
-              ]}
-            >
-              <Bell size={40} color={colors.textMuted} />
-            </View>
+            <Image
+              source={require('@/assets/images/avatar-al.png')}
+              style={{ width: 100, height: 100, marginBottom: 16 }}
+              resizeMode="contain"
+            />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
               No notifications yet
             </Text>

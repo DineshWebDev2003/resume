@@ -194,19 +194,19 @@ export default function Dashboard() {
       id: "create",
       name: "Create",
       route: "/(tabs)/builder",
-      image: require("@/assets/images/quick-action/create-resume.webp"),
+      image: require("@/assets/images/resume-create-transparent.png"),
     },
     {
       id: "my",
       name: "My Resumes",
       route: "/my-resumes",
-      image: require("@/assets/images/quick-action/my resume.webp"),
+      image: require("@/assets/images/resume-portfolio-transparent.png"),
     },
     {
-      id: "jobs",
-      name: "My Jobs",
-      route: "/my-jobs",
-      image: require("@/assets/images/quick-action/my-jobs.webp"),
+      id: "ai",
+      name: "Voice AI",
+      route: "/builder/ai-flow",
+      image: require("@/assets/images/voice-ai-transparent.png"),
     },
   ];
 
@@ -232,11 +232,11 @@ export default function Dashboard() {
               ]}
             >
               <Image
-                source={{
-                  uri:
-                    user?.photoURL ||
-                    "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=600&auto=format&fit=crop&q=60",
-                }}
+                source={
+                  user?.photoURL
+                    ? { uri: user.photoURL }
+                    : require("@/assets/images/avatar-home.png")
+                }
                 style={styles.profilePic}
               />
             </TouchableOpacity>
@@ -280,7 +280,7 @@ export default function Dashboard() {
             activeOpacity={0.92}
           >
             <LinearGradient
-              colors={["#9d6bff", Theme.colors.primary, "#5b21b6"]}
+              colors={["#FDA758", "#FC9D45", "#573353"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.atsCard}
@@ -341,7 +341,7 @@ export default function Dashboard() {
                 </View>
                 <View style={styles.atsSideBadge}>
                   <ExpoImage
-                    source={require("@/assets/images/cv.webp")}
+                    source={require("@/assets/images/ats-scanner-transparent.png")}
                     style={styles.atsSideImage}
                     contentFit="contain"
                   />
@@ -502,7 +502,7 @@ export default function Dashboard() {
                 >
                   <View style={styles.jobSmallLogoWrap}>
                     <ExpoImage
-                      source={require("@/assets/images/cv.webp")}
+                      source={require("@/assets/images/resume-portfolio-transparent.png")}
                       style={{ width: 24, height: 24 }}
                       contentFit="contain"
                     />
@@ -536,7 +536,13 @@ export default function Dashboard() {
                     {resume.type === "builder" ? (
                       <TouchableOpacity
                         onPress={async () =>
-                          await exportToPDF(resume.data, resume.template)
+                          await exportToPDF(
+                            resume.data,
+                            resume.template,
+                            resume.color || "#573353",
+                            "Inter",
+                            resume.name ? `${resume.name}.pdf` : undefined,
+                          )
                         }
                         style={styles.applyBtnSmall}
                       >
@@ -638,7 +644,7 @@ export default function Dashboard() {
                       />
                     ) : (
                       <ExpoImage
-                        source={require("@/assets/case.webp")}
+                        source={require("@/assets/images/onboard-community.png")}
                         style={{ width: 22, height: 22 }}
                         contentFit="contain"
                       />
@@ -712,7 +718,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 140,
   },
   stickyHeader: {
     position: "absolute",
@@ -1343,7 +1349,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   atsActionText: {
-    color: "#1e1b4b",
+    color: "#573353",
     fontSize: 13,
     fontWeight: "900",
   },

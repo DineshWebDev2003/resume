@@ -24,7 +24,7 @@ export async function ensureNotifierSetup(): Promise<boolean> {
         name: 'Auto Apply status',
         importance: Notifications.AndroidImportance.LOW,
         vibrationPattern: [0],
-        lightColor: '#8b5cf6',
+        lightColor: '#FDA758',
       });
     }
     const { status } = await Notifications.getPermissionsAsync();
@@ -77,9 +77,9 @@ export async function refreshAutoApplyNotification(
           `${matched} matched • ${appliedList.length} applied • ` +
           `${today}/${MAX_AUTO_APPLY_PER_DAY} today`,
         data: { screen: 'auto-apply-settings' },
-        sticky: true,
-        autoDismiss: false,
-        color: '#8b5cf6',
+        sticky: false,
+        autoDismiss: true,
+        color: '#FDA758',
       },
       trigger: null,
     });
@@ -89,9 +89,32 @@ export async function refreshAutoApplyNotification(
   }
 }
 
-/** Remove the status-bar card (Auto Apply OFF / logged out). */
+/** Remove the status-bar card (Auto Apply OFF / logged out / dismissed). */
 export async function clearAutoApplyNotification(): Promise<void> {
   try {
     await Notifications.dismissNotificationAsync(STATUS_ID);
+    await Notifications.cancelScheduledNotificationAsync(STATUS_ID);
   } catch {}
+}
+
+/**
+ * Send an attractive local push notification when high ATS matching jobs are found.
+ */
+export async function notifyHighMatchJobs(count: number, topRole?: string): Promise<void> {
+  try {
+    const ok = setupDone ? true : await ensureNotifierSetup();
+    if (!ok || count <= 0) return;
+    const roleText = topRole ? `${topRole} ` : '';
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `🎯 ${count} New Jobs Match Your Resume!`,
+        body: `We found ${count} ${roleText}opportunities with high ATS compatibility. Tap to view and tailor your resume.`,
+        data: { screen: 'jobs' },
+        color: '#FDA758',
+      },
+      trigger: null,
+    });
+  } catch (e: any) {
+    console.log('[Job Match Alert] Notification error:', e?.message || e);
+  }
 }

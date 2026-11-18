@@ -16,7 +16,20 @@ export type QuickApplyField =
   | 'linkedin'
   | 'portfolio'
   | 'github'
-  | 'website';
+  | 'website'
+  | 'workAuthorization'
+  | 'visaRequired'
+  | 'noticePeriod'
+  | 'yearsOfExperience'
+  | 'currentTitle'
+  | 'currentCompany'
+  | 'degree'
+  | 'major'
+  | 'university'
+  | 'salaryExpectation'
+  | 'gender'
+  | 'disability'
+  | 'veteran';
 
 export type ApplyStatus = 'pending' | 'review_required' | 'submitted' | 'failed' | 'unknown';
 
@@ -34,6 +47,19 @@ export interface MinimalApplyProfile {
   portfolio: string;
   github: string;
   website: string;
+  workAuthorization?: string;
+  visaRequired?: string;
+  noticePeriod?: string;
+  yearsOfExperience?: string;
+  currentTitle?: string;
+  currentCompany?: string;
+  degree?: string;
+  major?: string;
+  university?: string;
+  salaryExpectation?: string;
+  gender?: string;
+  disability?: string;
+  veteran?: string;
 }
 
 export interface AutofillFieldResult {

@@ -83,8 +83,8 @@ export async function checkStoreUpdate(): Promise<(UpdateInfo & { storeUrl: stri
         cfg.storeUrl ||
         'https://play.google.com/store/apps/details?id=com.resumeelite.app',
     };
-  } catch (e) {
-    console.log('[Update] Store check failed:', e);
+  } catch (e: any) {
+    // Degrade silently if settings/app_config has restricted Firestore permissions
     return null;
   }
 }

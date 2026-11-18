@@ -33,9 +33,22 @@ export interface ApplyProfile {
   linkedin?: string;
   github?: string;
   website?: string;
+  workAuthorization?: string;
+  visaRequired?: string;
+  noticePeriod?: string;
+  yearsOfExperience?: string;
+  currentTitle?: string;
+  currentCompany?: string;
+  degree?: string;
+  major?: string;
+  university?: string;
+  salaryExpectation?: string;
+  gender?: string;
+  disability?: string;
+  veteran?: string;
 }
 
-/** Pull name/email/phone/location from users/{uid} + first resume. Minimum data only. */
+/** Pull comprehensive candidate data from users/{uid} + active resume. Full coverage matching Chrome extensions. */
 export async function getApplyProfile(): Promise<ApplyProfile> {
   let name = auth.currentUser?.displayName || '';
   let email = auth.currentUser?.email || '';
@@ -49,6 +62,19 @@ export async function getApplyProfile(): Promise<ApplyProfile> {
   let title = '';
   let summary = '';
   let skills = '';
+  let workAuthorization = 'Yes';
+  let visaRequired = 'No';
+  let noticePeriod = 'Immediate';
+  let yearsOfExperience = '3';
+  let currentTitle = '';
+  let currentCompany = '';
+  let degree = "Bachelor's Degree";
+  let major = 'Computer Science';
+  let university = '';
+  let salaryExpectation = 'Competitive';
+  let gender = 'Decline to self-identify';
+  let disability = 'No';
+  let veteran = 'No';
 
   try {
     const uid = auth.currentUser?.uid;
@@ -84,9 +110,25 @@ export async function getApplyProfile(): Promise<ApplyProfile> {
         links.find((l) => `${l.label || ''} ${l.url || ''}`.toLowerCase().includes(k))?.url || '';
       const first = links[0]?.url || '';
       if (!portfolio) portfolio = find('portfolio') || find('website') || first;
-      linkedin = find('linkedin');
-      github = find('github');
-      website = find('website') || first;
+      linkedin = find('linkedin') || linkedin;
+      github = find('github') || github;
+      website = find('website') || first || website;
+
+      // Experience extraction
+      if (Array.isArray(d.experience) && d.experience.length > 0) {
+        const exp = d.experience[0];
+        currentTitle = exp.title || exp.position || title;
+        currentCompany = exp.company || '';
+        yearsOfExperience = String(Math.max(1, d.experience.length * 2));
+      }
+
+      // Education extraction
+      if (Array.isArray(d.education) && d.education.length > 0) {
+        const edu = d.education[0];
+        degree = edu.degree || degree;
+        major = edu.fieldOfStudy || edu.major || major;
+        university = edu.institution || edu.school || university;
+      }
     }
   } catch {}
 
@@ -99,13 +141,26 @@ export async function getApplyProfile(): Promise<ApplyProfile> {
     phone,
     location,
     city,
-    title,
+    title: currentTitle || title,
     summary,
     skills,
     portfolio,
     linkedin,
     github,
     website,
+    workAuthorization,
+    visaRequired,
+    noticePeriod,
+    yearsOfExperience,
+    currentTitle: currentTitle || title,
+    currentCompany,
+    degree,
+    major,
+    university,
+    salaryExpectation,
+    gender,
+    disability,
+    veteran,
   };
 }
 
@@ -124,6 +179,19 @@ export function toMinimalProfile(p: ApplyProfile): MinimalApplyProfile {
     portfolio: p.portfolio || '',
     github: p.github || '',
     website: p.website || p.portfolio || '',
+    workAuthorization: p.workAuthorization || 'Yes',
+    visaRequired: p.visaRequired || 'No',
+    noticePeriod: p.noticePeriod || 'Immediate',
+    yearsOfExperience: p.yearsOfExperience || '3',
+    currentTitle: p.currentTitle || p.title || '',
+    currentCompany: p.currentCompany || '',
+    degree: p.degree || "Bachelor's Degree",
+    major: p.major || 'Computer Science',
+    university: p.university || '',
+    salaryExpectation: p.salaryExpectation || 'Competitive',
+    gender: p.gender || 'Decline to self-identify',
+    disability: p.disability || 'No',
+    veteran: p.veteran || 'No',
   };
 }
 

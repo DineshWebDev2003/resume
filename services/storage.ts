@@ -5,13 +5,21 @@ const KEYS = {
   GEMINI_API_KEY: 'user_gemini_api_key',
   POLLINATIONS_API_KEY: 'user_pollinations_api_key',
   LLAMA_API_KEY: 'user_llama_api_key',
+  OPENROUTER_API_KEY: 'user_openrouter_api_key',
+  CEREBRAS_API_KEY: 'user_cerebras_api_key',
+  MISTRAL_API_KEY: 'user_mistral_api_key',
+  DEEPSEEK_API_KEY: 'user_deepseek_api_key',
+  TOGETHER_API_KEY: 'user_together_api_key',
+  AI_CONSOLE_STATUS: 'user_ai_console_status',
+  AI_CONSOLE_LAST_ERROR: 'user_ai_console_last_error',
   PREFERRED_PROVIDER: 'user_preferred_provider',
   RESUME_VERSIONS: 'resume_versions',
   IMPORT_HISTORY: 'resume_import_history',
 };
 
 /** 'auto' = full fallback chain. A specific id = try it first, chain as backup. */
-export type PreferredProvider = 'auto' | 'groq' | 'gemini' | 'pollinations' | 'meta-llama';
+export type PreferredProvider = 'auto' | 'groq' | 'gemini' | 'openrouter' | 'cerebras' | 'mistral' | 'deepseek' | 'together' | 'pollinations' | 'meta-llama';
+export type AiConsoleStatus = 'active' | 'paused' | 'insufficient_quota';
 
 export const UserStorage = {
   saveGroqKey: async (key: string) => {
@@ -26,6 +34,36 @@ export const UserStorage = {
   getGeminiKey: async () => {
     return await AsyncStorage.getItem(KEYS.GEMINI_API_KEY);
   },
+  saveOpenRouterKey: async (key: string) => {
+    await AsyncStorage.setItem(KEYS.OPENROUTER_API_KEY, key);
+  },
+  getOpenRouterKey: async () => {
+    return await AsyncStorage.getItem(KEYS.OPENROUTER_API_KEY);
+  },
+  saveCerebrasKey: async (key: string) => {
+    await AsyncStorage.setItem(KEYS.CEREBRAS_API_KEY, key);
+  },
+  getCerebrasKey: async () => {
+    return await AsyncStorage.getItem(KEYS.CEREBRAS_API_KEY);
+  },
+  saveMistralKey: async (key: string) => {
+    await AsyncStorage.setItem(KEYS.MISTRAL_API_KEY, key);
+  },
+  getMistralKey: async () => {
+    return await AsyncStorage.getItem(KEYS.MISTRAL_API_KEY);
+  },
+  saveDeepSeekKey: async (key: string) => {
+    await AsyncStorage.setItem(KEYS.DEEPSEEK_API_KEY, key);
+  },
+  getDeepSeekKey: async () => {
+    return await AsyncStorage.getItem(KEYS.DEEPSEEK_API_KEY);
+  },
+  saveTogetherKey: async (key: string) => {
+    await AsyncStorage.setItem(KEYS.TOGETHER_API_KEY, key);
+  },
+  getTogetherKey: async () => {
+    return await AsyncStorage.getItem(KEYS.TOGETHER_API_KEY);
+  },
   savePollinationsKey: async (key: string) => {
     await AsyncStorage.setItem(KEYS.POLLINATIONS_API_KEY, key);
   },
@@ -38,20 +76,55 @@ export const UserStorage = {
   getLlamaKey: async () => {
     return await AsyncStorage.getItem(KEYS.LLAMA_API_KEY);
   },
+  saveAiConsoleStatus: async (status: AiConsoleStatus) => {
+    await AsyncStorage.setItem(KEYS.AI_CONSOLE_STATUS, status);
+  },
+  getAiConsoleStatus: async (): Promise<AiConsoleStatus> => {
+    const s = await AsyncStorage.getItem(KEYS.AI_CONSOLE_STATUS);
+    if (s === 'paused' || s === 'insufficient_quota') return s;
+    return 'active';
+  },
+  saveAiConsoleError: async (err: string) => {
+    await AsyncStorage.setItem(KEYS.AI_CONSOLE_LAST_ERROR, err);
+  },
+  getAiConsoleError: async () => {
+    return await AsyncStorage.getItem(KEYS.AI_CONSOLE_LAST_ERROR);
+  },
   savePreferredProvider: async (p: PreferredProvider) => {
     await AsyncStorage.setItem(KEYS.PREFERRED_PROVIDER, p);
   },
   getPreferredProvider: async (): Promise<PreferredProvider> => {
     const v = await AsyncStorage.getItem(KEYS.PREFERRED_PROVIDER);
-    return v === 'groq' || v === 'gemini' || v === 'pollinations' || v === 'meta-llama'
-      ? v
-      : 'auto';
+    const valid = ['groq', 'gemini', 'openrouter', 'cerebras', 'mistral', 'deepseek', 'together', 'pollinations', 'meta-llama'];
+    return (valid.includes(v as string)) ? (v as PreferredProvider) : 'auto';
+  },
+  /** Parses user key input, supporting comma-separated and line-separated multiple keys */
+  parseMultiKeys: (rawKeyString: string | null | undefined): string[] => {
+    if (!rawKeyString) return [];
+    return rawKeyString
+      .split(/[\r\n,]+/)
+      .map(k => k.trim())
+      .filter(k => k.length > 5 && !k.startsWith('YOUR_'));
   },
   clearKeys: async () => {
     await AsyncStorage.removeItem(KEYS.GROQ_API_KEY);
     await AsyncStorage.removeItem(KEYS.GEMINI_API_KEY);
+    await AsyncStorage.removeItem(KEYS.OPENROUTER_API_KEY);
+    await AsyncStorage.removeItem(KEYS.CEREBRAS_API_KEY);
+    await AsyncStorage.removeItem(KEYS.MISTRAL_API_KEY);
+    await AsyncStorage.removeItem(KEYS.DEEPSEEK_API_KEY);
+    await AsyncStorage.removeItem(KEYS.TOGETHER_API_KEY);
     await AsyncStorage.removeItem(KEYS.POLLINATIONS_API_KEY);
     await AsyncStorage.removeItem(KEYS.LLAMA_API_KEY);
+    await AsyncStorage.setItem(KEYS.AI_CONSOLE_STATUS, 'active');
+  },
+
+  saveUserRole: async (role: 'job_seeker' | 'recruiter') => {
+    await AsyncStorage.setItem('user_app_role', role);
+  },
+  getUserRole: async (): Promise<'job_seeker' | 'recruiter'> => {
+    const role = await AsyncStorage.getItem('user_app_role');
+    return (role as 'job_seeker' | 'recruiter') || 'job_seeker';
   },
   
   saveResumeVersion: async (name: string, data: any) => {

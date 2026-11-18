@@ -13,7 +13,9 @@ workflows:
         GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m"
     scripts:
       - name: Install dependencies
-        script: npm install --legacy-peer-deps
+        script: |
+          npm install --legacy-peer-deps
+          npm install react-native-svg@15.12.1 --legacy-peer-deps
 
       - name: Fix Image Assets (sips)
         script: |
@@ -61,9 +63,9 @@ workflows:
             SIGN_ARGS="-Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore -Pandroid.injected.signing.store.password=${CM_KEYSTORE_PASSWORD:-resume123} -Pandroid.injected.signing.key.alias=${CM_KEY_ALIAS:-key} -Pandroid.injected.signing.key.password=${CM_KEY_PASSWORD:-resume123}"
           fi
           echo "Building Release AAB for Google Play..."
-          ./gradlew bundleRelease $SIGN_ARGS
+          ./gradlew bundleRelease $SIGN_ARGS --stacktrace
           echo "Building Release APK for direct install..."
-          ./gradlew assembleRelease $SIGN_ARGS
+          ./gradlew assembleRelease $SIGN_ARGS --stacktrace
 
     artifacts:
       - android/app/build/outputs/bundle/release/*.aab
@@ -88,7 +90,9 @@ workflows:
         GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m"
     scripts:
       - name: Install dependencies
-        script: npm install --legacy-peer-deps
+        script: |
+          npm install --legacy-peer-deps
+          npm install react-native-svg@15.12.1 --legacy-peer-deps
 
       - name: Fix Image Assets (sips)
         script: |
@@ -121,9 +125,9 @@ workflows:
               -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
               -Pandroid.injected.signing.store.password="${CM_KEYSTORE_PASSWORD:-resume123}" \
               -Pandroid.injected.signing.key.alias="${CM_KEY_ALIAS:-key}" \
-              -Pandroid.injected.signing.key.password="${CM_KEY_PASSWORD:-resume123}"
+              -Pandroid.injected.signing.key.password="${CM_KEY_PASSWORD:-resume123}" --stacktrace
           else
-            ./gradlew bundleRelease
+            ./gradlew bundleRelease --stacktrace
           fi
 
     artifacts:
@@ -145,7 +149,9 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
     scripts:
       - name: Install dependencies
-        script: npm install --legacy-peer-deps
+        script: |
+          npm install --legacy-peer-deps
+          npm install react-native-svg@15.12.1 --legacy-peer-deps
 
       - name: Fix Image Assets (sips)
         script: |

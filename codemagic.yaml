@@ -9,6 +9,8 @@ workflows:
         - google_play # Defined in Codemagic UI for signing credentials
       vars:
         PACKAGE_NAME: "com.resumeelite.app"
+        NODE_OPTIONS: "--max-old-space-size=4096"
+        GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m"
     scripts:
       - name: Install dependencies
         script: npm install --legacy-peer-deps
@@ -54,15 +56,14 @@ workflows:
         script: |
           cd android
           chmod +x gradlew
+          SIGN_ARGS=""
           if [ -n "$CM_KEYSTORE_BASE64" ] || [ -f "app/release.keystore" ]; then
-            ./gradlew bundleRelease assembleRelease \
-              -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
-              -Pandroid.injected.signing.store.password="${CM_KEYSTORE_PASSWORD:-resume123}" \
-              -Pandroid.injected.signing.key.alias="${CM_KEY_ALIAS:-key}" \
-              -Pandroid.injected.signing.key.password="${CM_KEY_PASSWORD:-resume123}"
-          else
-            ./gradlew bundleRelease assembleRelease
+            SIGN_ARGS="-Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore -Pandroid.injected.signing.store.password=${CM_KEYSTORE_PASSWORD:-resume123} -Pandroid.injected.signing.key.alias=${CM_KEY_ALIAS:-key} -Pandroid.injected.signing.key.password=${CM_KEY_PASSWORD:-resume123}"
           fi
+          echo "Building Release AAB for Google Play..."
+          ./gradlew bundleRelease $SIGN_ARGS
+          echo "Building Release APK for direct install..."
+          ./gradlew assembleRelease $SIGN_ARGS
 
     artifacts:
       - android/app/build/outputs/bundle/release/*.aab
@@ -71,7 +72,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - dineshwebdev2003@gmail.com
+          - dineshmahi02@gmail.com
 
   android-aab-only:
     name: Android Release AAB Only (Google Play Store)
@@ -83,6 +84,8 @@ workflows:
         - google_play
       vars:
         PACKAGE_NAME: "com.resumeelite.app"
+        NODE_OPTIONS: "--max-old-space-size=4096"
+        GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m"
     scripts:
       - name: Install dependencies
         script: npm install --legacy-peer-deps
@@ -129,7 +132,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - dineshwebdev2003@gmail.com
+          - dineshmahi02@gmail.com
 
   android-debug:
     name: Android Debug APK
@@ -139,6 +142,7 @@ workflows:
       node: 20
       vars:
         PACKAGE_NAME: "com.resumeelite.app"
+        NODE_OPTIONS: "--max-old-space-size=4096"
     scripts:
       - name: Install dependencies
         script: npm install --legacy-peer-deps
@@ -164,4 +168,4 @@ workflows:
     publishing:
       email:
         recipients:
-          - dineshwebdev2003@gmail.com
+          - dineshmahi02@gmail.com

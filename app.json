@@ -35,7 +35,6 @@
     },
     "plugins": [
       "expo-router",
-      "react-native-iap",
       "@react-native-google-signin/google-signin",
       [
         "react-native-google-mobile-ads",

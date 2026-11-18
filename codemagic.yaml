@@ -54,6 +54,23 @@ workflows:
             echo "Release keystore path not found in environment. Using Codemagic UI signing or default release profile."
           fi
 
+      - name: Pre-flight Metro Bundle Test
+        script: |
+          echo "=== Testing Metro bundler before Gradle build ==="
+          npx expo export:embed \
+            --platform android \
+            --dev false \
+            --entry-file node_modules/expo-router/entry.js \
+            --bundle-output /tmp/test_bundle.js \
+            --assets-dest /tmp/test_assets \
+            --reset-cache 2>&1 || {
+              echo "=== METRO BUNDLE FAILED ==="
+              echo "The above error is the REAL reason the build fails."
+              exit 1
+            }
+          echo "=== Metro bundle succeeded! ==="
+          rm -rf /tmp/test_bundle.js /tmp/test_assets
+
       - name: Build Android Release (AAB + APK)
         script: |
           cd android
@@ -115,6 +132,22 @@ workflows:
           if [ -n "$CM_KEYSTORE_BASE64" ]; then
             echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore 2>/dev/null || echo "$CM_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore 2>/dev/null || true
           fi
+
+      - name: Pre-flight Metro Bundle Test
+        script: |
+          echo "=== Testing Metro bundler before Gradle build ==="
+          npx expo export:embed \
+            --platform android \
+            --dev false \
+            --entry-file node_modules/expo-router/entry.js \
+            --bundle-output /tmp/test_bundle.js \
+            --assets-dest /tmp/test_assets \
+            --reset-cache 2>&1 || {
+              echo "=== METRO BUNDLE FAILED ==="
+              exit 1
+            }
+          echo "=== Metro bundle succeeded! ==="
+          rm -rf /tmp/test_bundle.js /tmp/test_assets
 
       - name: Build Release AAB Only
         script: |

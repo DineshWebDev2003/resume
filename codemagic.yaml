@@ -1,221 +1,167 @@
 workflows:
-  android-all:
-    name: Android AAB + Debug (Single Build)
+  android-release:
+    name: Android Release (AAB + Release APK)
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      node: latest
+      node: 20
       groups:
-        - google_play # Defined in Codemagic UI for signing
+        - google_play # Defined in Codemagic UI for signing credentials
       vars:
         PACKAGE_NAME: "com.resumeelite.app"
     scripts:
       - name: Install dependencies
-        script: npm install
+        script: npm install --legacy-peer-deps
+
       - name: Fix Image Assets (sips)
         script: |
           for file in assets/images/*.png; do
             sips -s format png "$file" --out "$file" || true
           done
+
       - name: Inject API Keys
         script: |
-          sed -i '' "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts
+          if [ -n "$GROQ_API_KEY" ]; then
+            sed -i '' "s/YOUR_REMOTE_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || sed -i "s/YOUR_REMOTE_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || true
+            sed -i '' "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || sed -i "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || true
+          fi
+          if [ -n "$GEMINI_API_KEY" ]; then
+            sed -i '' "s/YOUR_REMOTE_KEY/$GEMINI_API_KEY/g" constants/config.ts 2>/dev/null || sed -i "s/YOUR_REMOTE_KEY/$GEMINI_API_KEY/g" constants/config.ts 2>/dev/null || true
+          fi
+
       - name: Expo Prebuild
         script: CI=1 npx expo prebuild --clean
-      - name: Prepare Release Keystore
+
+      - name: Prepare Release Keystore & Fingerprint
         script: |
           if [ -n "$CM_KEYSTORE_BASE64" ]; then
             echo "Decoding Base64 Keystore from environment variables..."
-            echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore
+            echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore 2>/dev/null || echo "$CM_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore 2>/dev/null || true
             export CM_KEYSTORE_PATH="android/app/release.keystore"
-            export CM_KEY_ALIAS="key"
-            export CM_KEYSTORE_PASSWORD="resume123"
-            export CM_KEY_PASSWORD="resume123"
+            export CM_KEY_ALIAS="${CM_KEY_ALIAS:-key}"
+            export CM_KEYSTORE_PASSWORD="${CM_KEYSTORE_PASSWORD:-resume123}"
+            export CM_KEY_PASSWORD="${CM_KEY_PASSWORD:-resume123}"
           fi
-
+          
           if [ -n "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
             echo "Extracting SHA-1 from keystore..."
-            keytool -list -v -keystore "$CM_KEYSTORE_PATH" -alias "$CM_KEY_ALIAS" -storepass "$CM_KEYSTORE_PASSWORD" | grep SHA1
+            keytool -list -v -keystore "$CM_KEYSTORE_PATH" -alias "${CM_KEY_ALIAS:-key}" -storepass "${CM_KEYSTORE_PASSWORD:-resume123}" 2>/dev/null | grep SHA1 || true
           else
-            echo "Release keystore path not found in environment. Ensure Android code signing is enabled in Codemagic UI."
+            echo "Release keystore path not found in environment. Using Codemagic UI signing or default release profile."
           fi
-      - name: Build Debug APK + Release AAB/APK
+
+      - name: Build Android Release (AAB + APK)
         script: |
           cd android
           chmod +x gradlew
-          # 1. Debug APK (no signing needed)
-          ./gradlew assembleDebug
-          # 2. Release AAB + APK (signed)
-          if [ -n "$CM_KEYSTORE_BASE64" ]; then
+          if [ -n "$CM_KEYSTORE_BASE64" ] || [ -f "app/release.keystore" ]; then
             ./gradlew bundleRelease assembleRelease \
               -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
-              -Pandroid.injected.signing.store.password=resume123 \
-              -Pandroid.injected.signing.key.alias=key \
-              -Pandroid.injected.signing.key.password=resume123
+              -Pandroid.injected.signing.store.password="${CM_KEYSTORE_PASSWORD:-resume123}" \
+              -Pandroid.injected.signing.key.alias="${CM_KEY_ALIAS:-key}" \
+              -Pandroid.injected.signing.key.password="${CM_KEY_PASSWORD:-resume123}"
           else
             ./gradlew bundleRelease assembleRelease
           fi
+
     artifacts:
-      - android/app/build/outputs/apk/debug/*.apk
       - android/app/build/outputs/bundle/release/*.aab
       - android/app/build/outputs/apk/release/*.apk
+
     publishing:
       email:
         recipients:
-          - your-email@example.com
+          - dineshwebdev2003@gmail.com
 
-  android-debug:
-    name: Android Debug Build
-    max_build_duration: 30
+  android-aab-only:
+    name: Android Release AAB Only (Google Play Store)
+    max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      node: latest
+      node: 20
+      groups:
+        - google_play
       vars:
         PACKAGE_NAME: "com.resumeelite.app"
     scripts:
       - name: Install dependencies
-        script: npm install
+        script: npm install --legacy-peer-deps
+
       - name: Fix Image Assets (sips)
         script: |
           for file in assets/images/*.png; do
             sips -s format png "$file" --out "$file" || true
           done
+
+      - name: Inject API Keys
+        script: |
+          if [ -n "$GROQ_API_KEY" ]; then
+            sed -i '' "s/YOUR_REMOTE_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || sed -i "s/YOUR_REMOTE_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || true
+            sed -i '' "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || sed -i "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts 2>/dev/null || true
+          fi
+
       - name: Expo Prebuild
         script: CI=1 npx expo prebuild --clean
+
+      - name: Prepare Release Keystore
+        script: |
+          if [ -n "$CM_KEYSTORE_BASE64" ]; then
+            echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore 2>/dev/null || echo "$CM_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore 2>/dev/null || true
+          fi
+
+      - name: Build Release AAB Only
+        script: |
+          cd android
+          chmod +x gradlew
+          if [ -n "$CM_KEYSTORE_BASE64" ] || [ -f "app/release.keystore" ]; then
+            ./gradlew bundleRelease \
+              -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+              -Pandroid.injected.signing.store.password="${CM_KEYSTORE_PASSWORD:-resume123}" \
+              -Pandroid.injected.signing.key.alias="${CM_KEY_ALIAS:-key}" \
+              -Pandroid.injected.signing.key.password="${CM_KEY_PASSWORD:-resume123}"
+          else
+            ./gradlew bundleRelease
+          fi
+
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab
+
+    publishing:
+      email:
+        recipients:
+          - dineshwebdev2003@gmail.com
+
+  android-debug:
+    name: Android Debug APK
+    max_build_duration: 30
+    instance_type: mac_mini_m1
+    environment:
+      node: 20
+      vars:
+        PACKAGE_NAME: "com.resumeelite.app"
+    scripts:
+      - name: Install dependencies
+        script: npm install --legacy-peer-deps
+
+      - name: Fix Image Assets (sips)
+        script: |
+          for file in assets/images/*.png; do
+            sips -s format png "$file" --out "$file" || true
+          done
+
+      - name: Expo Prebuild
+        script: CI=1 npx expo prebuild --clean
+
       - name: Build Android Debug APK
         script: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
-      - name: Get Android Fingerprints
-        script: |
-          cd android
-          ./gradlew signingReport | grep -A 5 "debug"
+
     artifacts:
       - android/app/build/outputs/apk/debug/*.apk
+
     publishing:
       email:
         recipients:
-          - your-email@example.com
-
-  android-aab:
-    name: Android AAB Only
-    max_build_duration: 60
-    instance_type: mac_mini_m1
-    environment:
-      node: latest
-      groups:
-        - google_play # Defined in Codemagic UI for signing
-      vars:
-        PACKAGE_NAME: "com.resumeelite.app"
-    scripts:
-      - name: Install dependencies
-        script: npm install
-      - name: Fix Image Assets (sips)
-        script: |
-          for file in assets/images/*.png; do
-            sips -s format png "$file" --out "$file" || true
-          done
-      - name: Inject API Keys
-        script: |
-          sed -i '' "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts
-      - name: Expo Prebuild
-        script: CI=1 npx expo prebuild --clean
-      - name: Prepare Release Keystore
-        script: |
-          if [ -n "$CM_KEYSTORE_BASE64" ]; then
-            echo "Decoding Base64 Keystore from environment variables..."
-            echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore
-            export CM_KEYSTORE_PATH="android/app/release.keystore"
-            export CM_KEY_ALIAS="key"
-            export CM_KEYSTORE_PASSWORD="resume123"
-            export CM_KEY_PASSWORD="resume123"
-          fi
-          if [ -n "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
-            keytool -list -v -keystore "$CM_KEYSTORE_PATH" -alias "$CM_KEY_ALIAS" -storepass "$CM_KEYSTORE_PASSWORD" | grep SHA1
-          else
-            echo "Release keystore path not found in environment. Ensure Android code signing is enabled in Codemagic UI."
-          fi
-      - name: Build Release AAB Only
-        script: |
-          cd android
-          chmod +x gradlew
-          if [ -n "$CM_KEYSTORE_BASE64" ]; then
-            ./gradlew bundleRelease \
-              -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
-              -Pandroid.injected.signing.store.password=resume123 \
-              -Pandroid.injected.signing.key.alias=key \
-              -Pandroid.injected.signing.key.password=resume123
-          else
-            ./gradlew bundleRelease
-          fi
-    artifacts:
-      - android/app/build/outputs/bundle/release/*.aab
-    publishing:
-      email:
-        recipients:
-          - your-email@example.com
-
-  android-release:
-    name: Android Release Build
-    max_build_duration: 60
-    instance_type: mac_mini_m1
-    environment:
-      node: latest
-      groups:
-        - google_play # Defined in Codemagic UI for signing
-      vars:
-        PACKAGE_NAME: "com.resumeelite.app"
-    scripts:
-      - name: Install dependencies
-        script: npm install
-
-      - name: Fix Image Assets (sips)
-        script: |
-          for file in assets/images/*.png; do
-            sips -s format png "$file" --out "$file" || true
-          done
-      - name: Inject API Keys
-        script: |
-          sed -i '' "s/YOUR_GROQ_API_KEY/$GROQ_API_KEY/g" constants/config.ts
-      - name: Expo Prebuild
-        script: CI=1 npx expo prebuild --clean
-      - name: Get Release SHA-1 Fingerprint & Prepare Keystore
-        script: |
-          if [ -n "$CM_KEYSTORE_BASE64" ]; then
-            echo "Decoding Base64 Keystore from environment variables..."
-            echo "$CM_KEYSTORE_BASE64" | base64 -D > android/app/release.keystore
-            export CM_KEYSTORE_PATH="android/app/release.keystore"
-            export CM_KEY_ALIAS="key"
-            export CM_KEYSTORE_PASSWORD="resume123"
-            export CM_KEY_PASSWORD="resume123"
-          fi
-          
-          if [ -n "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
-            echo "Extracting SHA-1 from keystore..."
-            keytool -list -v -keystore "$CM_KEYSTORE_PATH" -alias "$CM_KEY_ALIAS" -storepass "$CM_KEYSTORE_PASSWORD" | grep SHA1
-          else
-            echo "Release keystore path not found in environment. Ensure Android code signing is enabled in Codemagic UI."
-          fi
-      - name: Build Android Release
-        script: |
-          cd android
-          chmod +x gradlew
-          if [ -n "$CM_KEYSTORE_BASE64" ]; then
-            # Use manual injected signing parameters
-            ./gradlew bundleRelease assembleRelease \
-              -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
-              -Pandroid.injected.signing.store.password=resume123 \
-              -Pandroid.injected.signing.key.alias=key \
-              -Pandroid.injected.signing.key.password=resume123
-          else
-            # Rely on Codemagic Managed UI Signing
-            ./gradlew bundleRelease assembleRelease
-          fi
-    artifacts:
-      - android/app/build/outputs/bundle/release/*.aab
-      - android/app/build/outputs/apk/release/*.apk
-    publishing:
-      email:
-        recipients:
-          - your-email@example.com
+          - dineshwebdev2003@gmail.com

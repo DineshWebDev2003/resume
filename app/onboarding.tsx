@@ -66,6 +66,7 @@ export default function OnboardingScreen() {
   const [primaryRole, setPrimaryRole] = useState<string | null>(null);
   const [groqKey, setGroqKey] = useState("");
   const [geminiKey, setGeminiKey] = useState("");
+  const [deepSeekKey, setDeepSeekKey] = useState("");
   const [hasExistingSetup, setHasExistingSetup] = useState(false);
 
   // ─── Pre-populate Existing Profile Data (Allow Onboarding to be Re-fillable) ───
@@ -73,14 +74,16 @@ export default function OnboardingScreen() {
     let isMounted = true;
     (async () => {
       try {
-        const [savedGroq, savedGemini, completedFlag] = await Promise.all([
+        const [savedGroq, savedGemini, savedDeepSeek, completedFlag] = await Promise.all([
           UserStorage.getGroqKey(),
           UserStorage.getGeminiKey(),
+          UserStorage.getDeepSeekKey(),
           AsyncStorage.getItem("onboarding_completed"),
         ]);
 
         if (savedGroq) setGroqKey(savedGroq);
         if (savedGemini) setGeminiKey(savedGemini);
+        if (savedDeepSeek) setDeepSeekKey(savedDeepSeek);
         if (completedFlag === "true") setHasExistingSetup(true);
 
         // Fetch user profile from hook or AsyncStorage cache
@@ -186,6 +189,7 @@ export default function OnboardingScreen() {
 
       if (groqKey.trim()) await UserStorage.saveGroqKey(groqKey.trim());
       if (geminiKey.trim()) await UserStorage.saveGeminiKey(geminiKey.trim());
+      if (deepSeekKey.trim()) await UserStorage.saveDeepSeekKey(deepSeekKey.trim());
 
       // Save locally for guest or authenticated users
       try {
@@ -219,6 +223,7 @@ export default function OnboardingScreen() {
       // Save API keys locally on device
       if (groqKey.trim()) await UserStorage.saveGroqKey(groqKey.trim());
       if (geminiKey.trim()) await UserStorage.saveGeminiKey(geminiKey.trim());
+      if (deepSeekKey.trim()) await UserStorage.saveDeepSeekKey(deepSeekKey.trim());
 
       const profileData: any = {
         isIT: isIT !== null ? isIT : true,
@@ -348,7 +353,7 @@ export default function OnboardingScreen() {
                     </Text>
 
                     <ExpoImage
-                      source={require("@/assets/images/onboard-habits.png")}
+                      source={require("@/assets/images/onboard-field-career.png")}
                       style={styles.stepImage}
                       contentFit="contain"
                     />
@@ -421,7 +426,7 @@ export default function OnboardingScreen() {
                   </Text>
 
                   <ExpoImage
-                    source={require("@/assets/images/onboard-progress.png")}
+                    source={require("@/assets/images/onboard-target-roles.png")}
                     style={styles.stepImage}
                     contentFit="contain"
                   />
@@ -556,7 +561,7 @@ export default function OnboardingScreen() {
                   </Text>
 
                   <ExpoImage
-                    source={require("@/assets/images/onboard-community.png")}
+                    source={require("@/assets/images/ats-scanner-transparent.png")}
                     style={styles.stepImage}
                     contentFit="contain"
                   />
@@ -599,6 +604,27 @@ export default function OnboardingScreen() {
                       placeholderTextColor="#c0b0d0"
                       value={geminiKey}
                       onChangeText={setGeminiKey}
+                      secureTextEntry
+                    />
+                  </View>
+
+                  <View style={[styles.apiCard, { marginTop: 14 }]}>
+                    <View style={styles.apiHeader}>
+                      <Text style={styles.apiTitle}>DeepSeek API Key (V3 & R1)</Text>
+                      <TouchableOpacity
+                        style={styles.apiLink}
+                        onPress={() => openLink("https://platform.deepseek.com/api_keys")}
+                      >
+                        <LinkIcon size={12} color="#FDA758" />
+                        <Text style={styles.apiLinkText}>GET KEY</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="sk-..."
+                      placeholderTextColor="#c0b0d0"
+                      value={deepSeekKey}
+                      onChangeText={setDeepSeekKey}
                       secureTextEntry
                     />
                   </View>

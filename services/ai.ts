@@ -121,6 +121,31 @@ export async function testProviderKey(
       return { success: false, message: `OpenRouter HTTP ${res.status}`, quotaAvailable: false };
     }
 
+    if (provider === 'deepseek') {
+      const res = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${primaryKey}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+        }),
+      });
+      if (res.ok) {
+        return { success: true, message: `DeepSeek active & ready! (${keys.length} key${keys.length > 1 ? 's' : ''})`, quotaAvailable: true };
+      }
+      if (res.status === 402) {
+        return { success: false, message: 'DeepSeek insufficient balance / credits (402).', quotaAvailable: false };
+      }
+      if (res.status === 401) {
+        return { success: false, message: 'Invalid DeepSeek API key (401).', quotaAvailable: false };
+      }
+      return { success: false, message: `DeepSeek error HTTP ${res.status}`, quotaAvailable: false };
+    }
+
     if (provider === 'cerebras') {
       const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
         method: 'POST',
@@ -254,7 +279,7 @@ export async function callAI(
   }
 }
 
-const CHAIN_ORDER: ProviderId[] = ['groq', 'gemini', 'openrouter', 'cerebras', 'pollinations', 'meta-llama'];
+const CHAIN_ORDER: ProviderId[] = ['groq', 'gemini', 'deepseek', 'cerebras', 'openrouter', 'pollinations', 'meta-llama'];
 
 async function callProviderDirect(id: ProviderId, messages: ChatMessage[], jsonMode: boolean) {
   switch (id) {
@@ -262,6 +287,12 @@ async function callProviderDirect(id: ProviderId, messages: ChatMessage[], jsonM
       return await callGroq(messages, jsonMode);
     case 'gemini':
       return await callGemini(messages, jsonMode);
+    case 'deepseek':
+      return await callDeepSeek(messages, jsonMode);
+    case 'cerebras':
+      return await callCerebras(messages, jsonMode);
+    case 'openrouter':
+      return await callOpenRouter(messages, jsonMode);
     case 'pollinations':
       return await callPollinations(messages, jsonMode);
     case 'meta-llama':
@@ -537,6 +568,122 @@ async function callMetaLlama(messages: ChatMessage[], jsonMode: boolean) {
     markError('meta-llama', e);
     throw e;
   }
+}
+
+async function callDeepSeek(messages: ChatMessage[], jsonMode: boolean) {
+  const userKeyStr = await UserStorage.getDeepSeekKey();
+  const userKeys = UserStorage.parseMultiKeys(userKeyStr);
+  const keysToTry = userKeys.filter(k => k && !k.startsWith("YOUR_"));
+  if (keysToTry.length === 0) {
+    throw new Error('No DeepSeek API key found. Please add one in Profile -> API Config.');
+  }
+
+  for (const apiKey of keysToTry) {
+    try {
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages,
+          temperature: 0.2,
+          response_format: jsonMode ? { type: "json_object" } : undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        markSuccess('deepseek');
+        await UserStorage.saveAiConsoleStatus('active');
+        return data.choices[0].message.content;
+      }
+
+      const errText = await response.text();
+      console.log(`DeepSeek key failed: ${apiKey.substring(0, 8)}... - ${response.status}: ${errText}`);
+    } catch (e: any) {
+      console.log('DeepSeek request error:', e);
+    }
+  }
+  throw new Error('DeepSeek API request failed. Please check your key or balance.');
+}
+
+async function callOpenRouter(messages: ChatMessage[], jsonMode: boolean) {
+  const userKeyStr = await UserStorage.getOpenRouterKey();
+  const userKeys = UserStorage.parseMultiKeys(userKeyStr);
+  const keysToTry = userKeys.filter(k => k && !k.startsWith("YOUR_"));
+  if (keysToTry.length === 0) {
+    throw new Error('No OpenRouter API key found. Please add one in Profile -> API Config.');
+  }
+
+  for (const apiKey of keysToTry) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://github.com/DineshWebDev2003/resume',
+          'X-Title': 'NextGen Resume AI',
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          messages,
+          temperature: 0.2,
+          response_format: jsonMode ? { type: "json_object" } : undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        markSuccess('openrouter');
+        await UserStorage.saveAiConsoleStatus('active');
+        return data.choices[0].message.content;
+      }
+    } catch (e) {
+      console.log('OpenRouter error:', e);
+    }
+  }
+  throw new Error('OpenRouter API request failed.');
+}
+
+async function callCerebras(messages: ChatMessage[], jsonMode: boolean) {
+  const userKeyStr = await UserStorage.getCerebrasKey();
+  const userKeys = UserStorage.parseMultiKeys(userKeyStr);
+  const keysToTry = userKeys.filter(k => k && !k.startsWith("YOUR_"));
+  if (keysToTry.length === 0) {
+    throw new Error('No Cerebras API key found. Please add one in Profile -> API Config.');
+  }
+
+  for (const apiKey of keysToTry) {
+    try {
+      const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b',
+          messages,
+          temperature: 0.2,
+          response_format: jsonMode ? { type: "json_object" } : undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        markSuccess('cerebras');
+        await UserStorage.saveAiConsoleStatus('active');
+        return data.choices[0].message.content;
+      }
+    } catch (e) {
+      console.log('Cerebras error:', e);
+    }
+  }
+  throw new Error('Cerebras API request failed.');
 }
 
 export async function transcribeAudio(uri: string) {

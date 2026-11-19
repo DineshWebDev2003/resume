@@ -126,6 +126,9 @@ export async function hasConfiguredAiApiKey(): Promise<boolean> {
     const cerebras = await UserStorage.getCerebrasKey();
     if (cerebras && !cerebras.startsWith('YOUR_') && cerebras.trim().length > 5) return true;
 
+    const deepseek = await UserStorage.getDeepSeekKey();
+    if (deepseek && !deepseek.startsWith('YOUR_') && deepseek.trim().length > 5) return true;
+
     // 2. Remote / system keys
     try {
       const remote = await RemoteConfigService.getKeys();

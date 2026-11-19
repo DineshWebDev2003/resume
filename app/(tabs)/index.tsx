@@ -199,7 +199,7 @@ export default function Dashboard() {
       id: "jobs",
       name: "My Jobs",
       route: "/my-jobs",
-      image: require("@/assets/images/action-jobs.png"),
+      image: require("@/assets/images/action-jobs-transparent.png"),
     },
     {
       id: "my",

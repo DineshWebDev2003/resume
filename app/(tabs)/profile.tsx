@@ -269,6 +269,7 @@ export default function ProfileScreen() {
   const [userGeminiKey, setUserGeminiKey] = useState("");
   const [userOpenRouterKey, setUserOpenRouterKey] = useState("");
   const [userCerebrasKey, setUserCerebrasKey] = useState("");
+  const [userDeepSeekKey, setUserDeepSeekKey] = useState("");
   const [userPollinationsKey, setUserPollinationsKey] = useState("");
   const [userLlamaKey, setUserLlamaKey] = useState("");
   const [userPreferredProvider, setUserPreferredProvider] = useState<PreferredProvider>("auto");
@@ -318,11 +319,12 @@ export default function ProfileScreen() {
       // Load device-local keys and console status
       const loadDeviceKeys = async () => {
         try {
-          const [groq, gemini, orKey, cerKey, polli, llama, pref, status, err] = await Promise.all([
+          const [groq, gemini, orKey, cerKey, deepKey, polli, llama, pref, status, err] = await Promise.all([
             UserStorage.getGroqKey(),
             UserStorage.getGeminiKey(),
             UserStorage.getOpenRouterKey(),
             UserStorage.getCerebrasKey(),
+            UserStorage.getDeepSeekKey(),
             UserStorage.getPollinationsKey(),
             UserStorage.getLlamaKey(),
             UserStorage.getPreferredProvider(),
@@ -333,6 +335,7 @@ export default function ProfileScreen() {
           if (gemini) setUserGeminiKey(gemini);
           if (orKey) setUserOpenRouterKey(orKey);
           if (cerKey) setUserCerebrasKey(cerKey);
+          if (deepKey) setUserDeepSeekKey(deepKey);
           if (polli) setUserPollinationsKey(polli);
           if (llama) setUserLlamaKey(llama);
           setUserPreferredProvider(pref);
@@ -1877,6 +1880,73 @@ export default function ProfileScreen() {
                         </View>
                       </View>
 
+                      {/* DeepSeek Card */}
+                      <View style={[styles.apiKeyCardPro, { backgroundColor: colors.surface, borderColor: colors.glassBorder }]}>
+                        <View style={styles.apiKeyCardHeader}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <View style={[styles.provIconWrap, { backgroundColor: '#06B6D420' }]}>
+                              <Cpu size={16} color="#06B6D4" />
+                            </View>
+                            <View>
+                              <Text style={[styles.apiKeyCardTitle, { color: colors.text }]}>DeepSeek API Key</Text>
+                              <Text style={[styles.apiKeyCardSub, { color: colors.textMuted }]}>DeepSeek-V3 & R1 • Reasoning & Speed</Text>
+                            </View>
+                          </View>
+                          {getKeyCountText(userDeepSeekKey) ? (
+                            <View style={styles.apiMultiKeyBadge}>
+                              <CheckCircle2 size={11} color="#059669" />
+                              <Text style={styles.apiMultiKeyBadgeText}>PASTED</Text>
+                            </View>
+                          ) : (
+                            <Text style={[styles.statusText, { color: colors.textMuted }]}>Optional</Text>
+                          )}
+                        </View>
+
+                        <TextInput
+                          style={[
+                            styles.proKeyInput,
+                            { backgroundColor: colors.background, color: colors.text, borderColor: colors.glassBorder },
+                          ]}
+                          value={userDeepSeekKey}
+                          onChangeText={setUserDeepSeekKey}
+                          placeholder="sk-..."
+                          placeholderTextColor={colors.textMuted}
+                          secureTextEntry
+                        />
+
+                        <View style={styles.keyCardActionsRow}>
+                          <TouchableOpacity
+                            style={[styles.keyActionBtn, { backgroundColor: 'rgba(87, 51, 83, 0.08)' }]}
+                            onPress={async () => {
+                              try {
+                                const text = await Clipboard.getString();
+                                if (text) {
+                                  setUserDeepSeekKey(prev => (prev ? `${prev}, ${text}` : text));
+                                }
+                              } catch {}
+                            }}
+                          >
+                            <Text style={[styles.keyActionBtnText, { color: colors.text }]}>📋 Paste</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.keyActionBtn, { backgroundColor: '#10B98118' }]}
+                            onPress={() => handleTestKey('deepseek', userDeepSeekKey)}
+                          >
+                            <RefreshCw size={12} color="#059669" />
+                            <Text style={[styles.keyActionBtnText, { color: '#059669' }]}>Test Key</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.keyActionBtn, { backgroundColor: Theme.colors.primary + '18' }]}
+                            onPress={() => require('react-native').Linking.openURL('https://platform.deepseek.com/api_keys')}
+                          >
+                            <ExternalLink size={12} color={Theme.colors.primary} />
+                            <Text style={[styles.keyActionBtnText, { color: Theme.colors.primary }]}>Get Key (1 Tab)</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
                       {/* Save Button (100% On-Device Only) */}
                       <TouchableOpacity
                         style={[styles.saveBtn, { backgroundColor: Theme.colors.primary, marginTop: 10 }]}
@@ -1886,6 +1956,7 @@ export default function ProfileScreen() {
                             await UserStorage.saveGeminiKey(userGeminiKey);
                             await UserStorage.saveOpenRouterKey(userOpenRouterKey);
                             await UserStorage.saveCerebrasKey(userCerebrasKey);
+                            await UserStorage.saveDeepSeekKey(userDeepSeekKey);
                             await UserStorage.savePollinationsKey(userPollinationsKey);
                             await UserStorage.saveLlamaKey(userLlamaKey);
                             await UserStorage.savePreferredProvider(userPreferredProvider);
@@ -1911,6 +1982,7 @@ export default function ProfileScreen() {
                             setUserGeminiKey("");
                             setUserOpenRouterKey("");
                             setUserCerebrasKey("");
+                            setUserDeepSeekKey("");
                             setUserPollinationsKey("");
                             setUserLlamaKey("");
                             setUserPreferredProvider("auto");

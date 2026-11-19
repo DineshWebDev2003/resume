@@ -2,8 +2,8 @@
   "expo": {
     "name": "Resume Elite",
     "slug": "resume-elite",
-    "version": "1.0.4",
-    "orientation": "portrait",
+    "version": "1.0.5",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "resume",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 9,
+      "versionCode": 10,
       "permissions": [
         "com.google.android.gms.permission.AD_ID"
       ]
@@ -33,6 +33,19 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "./plugins/withAndroidFeatures",
+        [
+          {
+            "name": "android.hardware.screen.portrait",
+            "required": false
+          },
+          {
+            "name": "android.hardware.screen.landscape",
+            "required": false
+          }
+        ]
+      ],
       "expo-router",
       "@react-native-google-signin/google-signin",
       [

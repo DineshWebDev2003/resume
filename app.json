@@ -2,7 +2,7 @@
   "expo": {
     "name": "Resume Elite",
     "slug": "resume-elite",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "resume",
@@ -19,7 +19,7 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 10,
+      "versionCode": 11,
       "permissions": [
         "com.google.android.gms.permission.AD_ID"
       ]
@@ -47,6 +47,7 @@
         ]
       ],
       "expo-router",
+      "react-native-iap",
       "@react-native-google-signin/google-signin",
       [
         "react-native-google-mobile-ads",

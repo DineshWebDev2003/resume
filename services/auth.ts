@@ -2,10 +2,12 @@ import { auth } from './firebase';
 import { GoogleAuthProvider, signInWithCredential, updateProfile } from 'firebase/auth';
 
 let GoogleSignin: any = null;
+let statusCodes: any = null;
 try {
   // Use require for dynamic loading to prevent crash if native module isn't present
-  const GoogleSigninModule = require('@react-native-google-signin/google-signin').GoogleSignin;
-  GoogleSignin = GoogleSigninModule;
+  const gModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = gModule.GoogleSignin;
+  statusCodes = gModule.statusCodes;
   
   GoogleSignin.configure({
     webClientId: '721103059213-s9ru15vv3kk302tahf97dl0k70sj6a4c.apps.googleusercontent.com',
@@ -14,6 +16,8 @@ try {
 } catch (e) {
   console.warn('GoogleSignin native module not found. Please rebuild your native app.');
 }
+
+export { GoogleSignin, statusCodes, auth };
 
 export const signInWithGoogle = async () => {
   if (!GoogleSignin) {

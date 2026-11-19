@@ -14,7 +14,7 @@ import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ShieldAlert, Sparkles } from "lucide-react-native";
-import { auth, signInWithGoogle, signOut } from "@/services/auth";
+import { auth, signInWithGoogle, signOut, statusCodes, GoogleSignin } from "@/services/auth";
 
 // Pixel True — Habit App Design Tokens
 const C = {
@@ -49,20 +49,60 @@ export default function LoginScreen() {
       console.log("Successfully authenticated with Google");
       router.replace("/(tabs)");
     } catch (e: any) {
+      const code = String(e?.code || "");
+      const message = String(e?.message || "").toLowerCase();
+
+      // Check for user cancellation or back button press
+      const isCancelled =
+        code === String(statusCodes?.SIGN_IN_CANCELLED) ||
+        code === "SIGN_IN_CANCELLED" ||
+        code === "12501" ||
+        message.includes("cancel") ||
+        message.includes("sign_in_cancelled") ||
+        message.includes("cancelled");
+
+      if (isCancelled) {
+        // User dismissed the Google sign-in modal/picker — silently ignore without showing any popup
+        console.log("User cancelled Google Sign-In.");
+        return;
+      }
+
+      // If sign-in is already in progress, silently ignore
+      if (
+        code === String(statusCodes?.IN_PROGRESS) ||
+        code === "IN_PROGRESS" ||
+        code === "12502"
+      ) {
+        return;
+      }
+
       console.warn("Google Sign-In Notice:", e?.message || e);
-      // Fallback for development / Expo Go where native Google module isn't linked
-      Alert.alert(
-        "Development Sign-In",
-        "Google Sign-In native module requires a custom development client build. Continue to app?",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Continue to App",
-            onPress: () => {
-              router.replace("/(tabs)");
+
+      // Show development bypass alert ONLY when explicitly running in local dev (__DEV__)
+      // AND Google Sign-in native module isn't supported in the host environment (e.g. Expo Go)
+      if (__DEV__ && (!GoogleSignin || message.includes("not supported in this environment"))) {
+        Alert.alert(
+          "Development Sign-In",
+          "Google Sign-In native module requires a custom development client build. Continue to app?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Continue to App",
+              onPress: () => {
+                router.replace("/(tabs)");
+              },
             },
-          },
-        ]
+          ]
+        );
+        return;
+      }
+
+      // Real error in production
+      Alert.alert(
+        "Sign-In Error",
+        e?.message && !e?.message.includes("Google Sign-In is not supported")
+          ? e.message
+          : "Unable to complete Google Sign-In. Please check your internet connection and try again."
       );
     } finally {
       setBusy(false);

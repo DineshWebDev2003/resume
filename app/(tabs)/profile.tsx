@@ -295,6 +295,27 @@ export default function ProfileScreen() {
   periodRef.current = subBillingPeriod;
 
   useEffect(() => {
+    if (activeModal === "Subscription" || activeModal === "Premium") {
+      const refreshProducts = async () => {
+        try {
+          const IAP = require('react-native-iap');
+          if (IAP && typeof IAP.initConnection === 'function') {
+            const connected = await IAP.initConnection();
+            if (connected && typeof IAP.fetchProducts === 'function') {
+              setIapConnected(true);
+              const products = await IAP.fetchProducts({ skus: ['pro_plan'], type: 'subs' });
+              if (products && products.length > 0) {
+                setIapProducts(products);
+                console.log("[IAP] Refreshed products on modal open:", products);
+              }
+            }
+          }
+        } catch (e) {
+          console.log("[IAP] Refresh error on modal open:", e);
+        }
+      };
+      refreshProducts();
+    }
     if (activeModal === "My Referrals") {
       const fetchReferrals = async () => {
         setLoadingReferrals(true);
@@ -1125,7 +1146,7 @@ export default function ProfileScreen() {
                 </View>
               )}
 
-              {activeModal === "Subscription" && (() => {
+              {(activeModal === "Subscription" || activeModal === "Premium") && (() => {
                 // v15 product shape: id + subscriptionOfferDetailsAndroid
                 const findSubProduct = () =>
                   iapProducts.find((p: any) => (p.id || p.productId) === 'pro_plan');

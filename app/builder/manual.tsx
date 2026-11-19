@@ -25,6 +25,13 @@ import * as Print from "expo-print";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { exportToPDF } from "@/utils/resume-exporter";
+import {
+  canExportResume,
+  recordResumeExport,
+  promptPremiumForExport,
+  hasConfiguredAiApiKey,
+  promptMissingApiKey,
+} from "@/services/usageLimits";
 import { doc, getDoc } from "firebase/firestore";
 import {
   ArrowLeft,
@@ -1304,15 +1311,24 @@ export default function ManualBuilderScreen() {
   const handleDownloadPDF = async () => {
     if (isGenerating) return;
     try {
+      const { allowed, count } = await canExportResume();
+      if (!allowed) {
+        promptPremiumForExport(count);
+        return;
+      }
+
       setIsGenerating(true);
       const safeName = `Resume_${(data.name || "Resume").replace(/[^a-zA-Z0-9_-]/g, "_")}_${Date.now()}.pdf`;
-      await exportToPDF(
+      const exportedUri = await exportToPDF(
         getRenderData(),
         selectedTemplate,
         primaryColor,
         "Inter",
         safeName,
       );
+      if (exportedUri) {
+        await recordResumeExport();
+      }
     } catch (err: any) {
       console.error(err);
       Alert.alert("Error", err?.message || "Failed to generate PDF.");
@@ -1333,6 +1349,12 @@ export default function ManualBuilderScreen() {
   ) => {
     if (!text || text.trim().length < 5) {
       Alert.alert("Text too short", "Please enter more content to enhance.");
+      return;
+    }
+
+    const hasKey = await hasConfiguredAiApiKey();
+    if (!hasKey) {
+      promptMissingApiKey();
       return;
     }
 

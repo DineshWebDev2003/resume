@@ -15,6 +15,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { AudioService } from '@/services/audio';
 import { transcribeAudio, callAI } from '@/services/ai';
+import { hasConfiguredAiApiKey, promptMissingApiKey } from '@/services/usageLimits';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
   useSharedValue,
@@ -257,6 +258,12 @@ export default function VoiceAssistantScreen() {
   // ─── AI Greeting (onboarding with known fields / Interview Mode) ─────
   const handleAutoGreeting = async () => {
     try {
+      const hasKey = await hasConfiguredAiApiKey();
+      if (!hasKey) {
+        promptMissingApiKey();
+        return;
+      }
+
       if (isInterviewMode) {
         const greeting = `Welcome to your mock interview for the ${targetRole} position at ${targetCompany}! I'll be your Senior Hiring Manager. I will ask you realistic technical and situational questions, and provide immediate feedback on your responses. Let's begin: please introduce yourself and summarize your experience relevant to this role.`;
         setCurrentQuestion(greeting);

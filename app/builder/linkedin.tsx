@@ -17,6 +17,7 @@ import { db } from '@/services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useRewardedAd } from '@/hooks/use-rewarded-ad';
 import { callAI } from '@/services/ai';
+import { hasConfiguredAiApiKey, promptMissingApiKey } from '@/services/usageLimits';
 import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -129,6 +130,12 @@ export default function LinkedInSyncScreen() {
   };
 
   const handleAnalyzeProfile = async (rawText: string) => {
+    const hasKey = await hasConfiguredAiApiKey();
+    if (!hasKey) {
+      promptMissingApiKey();
+      return;
+    }
+
     if (!isPro) {
        Alert.alert(
          "Premium AI Sync",

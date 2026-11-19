@@ -13,7 +13,10 @@ export type AppEntitlements = {
   onboardingCompleted?: boolean;
 };
 
-export const PREMIUM_EMAILS = ["dinesh.mahi.dev@gmail.com"];
+export const PREMIUM_EMAILS = [
+  "dinesh.mahi.dev@gmail.com",
+  "dineshmahi02@gmail.com",
+];
 
 export function isPremiumUserEmail(email?: string | null) {
   if (!email) return false;

@@ -43,6 +43,13 @@ import LottieView from 'lottie-react-native';
 import { Theme, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { saveAtsHistory, getAtsHistory } from '@/services/firestore';
+import {
+  canPerformAtsScan,
+  recordAtsScan,
+  promptPremiumForAts,
+  hasConfiguredAiApiKey,
+  promptMissingApiKey,
+} from '@/services/usageLimits';
 import { getResumes, saveResume } from '@/utils/storage';
 import { generateResumeHtml } from '@/components/resume-html-generator';
 import { isCloudflareProvider, submitAtsAnalysisToCloudflare } from '@/services/cloudflareBackend';
@@ -554,15 +561,17 @@ export default function ATSScanner() {
       return;
     }
 
-    if (!isPro) {
-      Alert.alert(
-        "Premium AI Scan",
-        "ATS Analysis is a pro feature. Watch one short ad to unlock it for this scan?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Watch Ad", onPress: () => showAd(() => startAnalysis()) }
-        ]
-      );
+    // 1. Check AI API Key
+    const hasKey = await hasConfiguredAiApiKey();
+    if (!hasKey) {
+      promptMissingApiKey();
+      return;
+    }
+
+    // 2. Check ATS scan limit (free = 2 scans, pro = unlimited)
+    const { allowed, count, isPro: userIsPro } = await canPerformAtsScan();
+    if (!allowed && !isPro && !userIsPro) {
+      promptPremiumForAts(count);
       return;
     }
 
@@ -682,6 +691,8 @@ export default function ATSScanner() {
         analysis: result
       });
 
+      await recordAtsScan();
+
       await loadHistory();
       setShowResults(true);
     } catch (error) {
@@ -696,6 +707,12 @@ export default function ATSScanner() {
 
   const handleOptimize = async () => {
     if (!jobDescription || !extractedText) return;
+
+    const hasKey = await hasConfiguredAiApiKey();
+    if (!hasKey) {
+      promptMissingApiKey();
+      return;
+    }
 
     setIsOptimizing(true);
     try {

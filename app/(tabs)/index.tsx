@@ -5,6 +5,11 @@ import { signOut } from "@/services/auth";
 import { db } from "@/services/firebase";
 import { getAtsHistory } from "@/services/firestore";
 import { exportToPDF } from "@/utils/resume-exporter";
+import {
+  canExportResume,
+  recordResumeExport,
+  promptPremiumForExport,
+} from "@/services/usageLimits";
 import { getResumes } from "@/utils/storage";
 import {
   applyOtaUpdate,
@@ -535,15 +540,23 @@ export default function Dashboard() {
                     </Text>
                     {resume.type === "builder" ? (
                       <TouchableOpacity
-                        onPress={async () =>
-                          await exportToPDF(
+                        onPress={async () => {
+                          const { allowed, count } = await canExportResume();
+                          if (!allowed) {
+                            promptPremiumForExport(count);
+                            return;
+                          }
+                          const res = await exportToPDF(
                             resume.data,
                             resume.template,
                             resume.color || "#573353",
                             "Inter",
                             resume.name ? `${resume.name}.pdf` : undefined,
-                          )
-                        }
+                          );
+                          if (res) {
+                            await recordResumeExport();
+                          }
+                        }}
                         style={styles.applyBtnSmall}
                       >
                         <Download size={14} color="#fff" />

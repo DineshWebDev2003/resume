@@ -75,7 +75,7 @@ import { updateUserPhoto, signOut } from "@/services/auth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/services/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { UserStorage, type PreferredProvider } from "@/services/storage";
 import { getAIProviderStatus, testProviderKey, type ProviderLinkStatus } from "@/services/ai";
 import { getResumes } from "@/utils/storage";
@@ -218,6 +218,7 @@ export const EASY_PROVIDERS = [
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ modal?: string }>();
   const { user } = useAuth();
   const { toggleTheme } = useThemeStore();
   const colorScheme = useColorScheme();
@@ -236,6 +237,12 @@ export default function ProfileScreen() {
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState<"job_seeker" | "recruiter">("job_seeker");
+
+  useEffect(() => {
+    if (params?.modal) {
+      setActiveModal(params.modal);
+    }
+  }, [params?.modal]);
 
   useEffect(() => {
     UserStorage.getUserRole().then((r) => {

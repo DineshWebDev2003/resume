@@ -42,6 +42,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/hooks/use-auth";
 import { useRewardedAd } from "@/hooks/use-rewarded-ad";
 import { callAI } from "@/services/ai";
+import { hasConfiguredAiApiKey, promptMissingApiKey } from "@/services/usageLimits";
 import { db } from "@/services/firebase";
 import { ResizeMode, Video } from "expo-av";
 import { BlurView } from "expo-blur";
@@ -397,6 +398,12 @@ export default function AIInterviewScreen() {
   };
 
   const generateFinalStructure = async (allAnswers: any) => {
+    const hasKey = await hasConfiguredAiApiKey();
+    if (!hasKey) {
+      promptMissingApiKey();
+      return;
+    }
+
     if (!isPro) {
       Alert.alert(
         "Premium AI Feature",

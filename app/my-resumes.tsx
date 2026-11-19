@@ -24,6 +24,11 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { getResumes, deleteResume, saveResume } from '@/utils/storage';
 import { getAtsHistory } from '@/services/firestore';
 import { exportToPDF, shareResumeToWhatsApp, shareResumeViaEmail } from '@/utils/resume-exporter';
+import {
+  canExportResume,
+  recordResumeExport,
+  promptPremiumForExport,
+} from '@/services/usageLimits';
 import { ActivityIndicator } from 'react-native';
 
 const formatDate = (timestamp: any) => {
@@ -405,15 +410,23 @@ export default function MyResumesScreen() {
                  <View style={styles.chatMeta}>
                     {resume.type === "builder" && resume.source !== "upload" && (
                       <TouchableOpacity
-                        onPress={async () =>
-                          await exportToPDF(
+                        onPress={async () => {
+                          const { allowed, count } = await canExportResume();
+                          if (!allowed) {
+                            promptPremiumForExport(count);
+                            return;
+                          }
+                          const res = await exportToPDF(
                             resume.data,
                             resume.template,
                             resume.color,
                             "Inter",
                             resume.name ? `${resume.name}.pdf` : undefined,
-                          )
-                        }
+                          );
+                          if (res) {
+                            await recordResumeExport();
+                          }
+                        }}
                         style={styles.downloadIconBtn}
                       >
                         <Download size={18} color={colors.textMuted} />

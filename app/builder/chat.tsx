@@ -25,6 +25,7 @@ import {
     History,
 } from "lucide-react-native";
 import { saveChatSession, getChatSessions } from "@/services/firestore";
+import { hasConfiguredAiApiKey, promptMissingApiKey } from "@/services/usageLimits";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -435,6 +436,12 @@ export default function AIChatBuilder() {
   };
 
   const handleFinalSynthesis = async (allAnswers: any) => {
+    const hasKey = await hasConfiguredAiApiKey();
+    if (!hasKey) {
+      promptMissingApiKey();
+      return;
+    }
+
     if (!isPro) {
       Alert.alert(
         "Premium AI Feature",

@@ -19,9 +19,8 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 8,
+      "versionCode": 9,
       "permissions": [
-        "com.android.vending.BILLING",
         "com.google.android.gms.permission.AD_ID"
       ]
     },

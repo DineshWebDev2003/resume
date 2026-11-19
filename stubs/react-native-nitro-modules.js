@@ -10,3 +10,4 @@ module.exports = {
   NitroModules: stub,
   default: stub,
 };
+

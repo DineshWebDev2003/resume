@@ -196,10 +196,10 @@ export default function Dashboard() {
 
   const quickActions = [
     {
-      id: "create",
-      name: "Create",
-      route: "/(tabs)/builder",
-      image: require("@/assets/images/resume-create-transparent.png"),
+      id: "jobs",
+      name: "My Jobs",
+      route: "/my-jobs",
+      image: require("@/assets/images/action-jobs.png"),
     },
     {
       id: "my",
@@ -210,7 +210,7 @@ export default function Dashboard() {
     {
       id: "ai",
       name: "Voice AI",
-      route: "/builder/ai-flow",
+      route: "/builder/voice",
       image: require("@/assets/images/voice-ai-transparent.png"),
     },
   ];

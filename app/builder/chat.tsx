@@ -6,6 +6,11 @@ import { useRewardedAd } from "@/hooks/use-rewarded-ad";
 import { callAI, transcribeAudio } from "@/services/ai";
 import { AudioService } from "@/services/audio";
 import { db } from "@/services/firebase";
+import { getChatSessions, saveChatSession } from "@/services/firestore";
+import {
+    hasConfiguredAiApiKey,
+    promptMissingApiKey,
+} from "@/services/usageLimits";
 import { ResizeMode, Video } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,16 +21,14 @@ import {
     Bot,
     BrainCircuit,
     ChevronLeft,
+    History,
     Mic,
     Plus,
     Send,
     Sparkles,
     User,
     X,
-    History,
 } from "lucide-react-native";
-import { saveChatSession, getChatSessions } from "@/services/firestore";
-import { hasConfiguredAiApiKey, promptMissingApiKey } from "@/services/usageLimits";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -33,19 +36,19 @@ import {
     Dimensions,
     FlatList,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
-    Modal,
 } from "react-native";
 import Animated, {
     FadeInLeft,
     FadeInRight,
     FadeInUp,
-    Layout
+    Layout,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -173,7 +176,9 @@ export default function AIChatBuilder() {
   });
   const [stepHistory, setStepHistory] = useState<Record<string, any>>({});
   const [projType, setProjType] = useState<"project" | "cert">("project");
-  const [skillType, setSkillType] = useState<"technical" | "soft" | "tools">("technical");
+  const [skillType, setSkillType] = useState<"technical" | "soft" | "tools">(
+    "technical",
+  );
   const [localTools, setLocalTools] = useState<string[]>([]);
   const [videoEnded, setVideoEnded] = useState(false);
 
@@ -186,7 +191,7 @@ export default function AIChatBuilder() {
           if (docSnap.exists()) {
             const profile = docSnap.data();
             setIsPro(profile.isPro || false);
-            
+
             // Auto-populate full name
             if (profile.name) {
               setUserName(profile.name);
@@ -512,7 +517,7 @@ export default function AIChatBuilder() {
         messages: [...messages, thinkingMsg],
         collectedAnswers: allAnswers,
         resumeData: result,
-      }).catch(err => console.warn("Could not save chat session:", err));
+      }).catch((err) => console.warn("Could not save chat session:", err));
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -827,20 +832,30 @@ export default function AIChatBuilder() {
                     </View>
 
                     <View style={styles.skillsChipGrid}>
-                      {(skillType === "tools" ? localTools : localSkills).map((skill, index) => (
-                        <TouchableOpacity
-                          key={`skill-${index}`}
-                          style={styles.skillChip}
-                          onPress={() =>
-                            skillType === "tools"
-                              ? setLocalTools(localTools.filter((_, i) => i !== index))
-                              : setLocalSkills(localSkills.filter((_, i) => i !== index))
-                          }
-                        >
-                          <Text style={styles.skillChipText}>{skill}</Text>
-                          <X size={12} color="#fff" style={{ marginLeft: 6 }} />
-                        </TouchableOpacity>
-                      ))}
+                      {(skillType === "tools" ? localTools : localSkills).map(
+                        (skill, index) => (
+                          <TouchableOpacity
+                            key={`skill-${index}`}
+                            style={styles.skillChip}
+                            onPress={() =>
+                              skillType === "tools"
+                                ? setLocalTools(
+                                    localTools.filter((_, i) => i !== index),
+                                  )
+                                : setLocalSkills(
+                                    localSkills.filter((_, i) => i !== index),
+                                  )
+                            }
+                          >
+                            <Text style={styles.skillChipText}>{skill}</Text>
+                            <X
+                              size={12}
+                              color="#fff"
+                              style={{ marginLeft: 6 }}
+                            />
+                          </TouchableOpacity>
+                        ),
+                      )}
                     </View>
 
                     <View style={styles.videoInputRow}>
@@ -861,7 +876,10 @@ export default function AIChatBuilder() {
                             if (skillType === "tools") {
                               setLocalTools([...localTools, inputText.trim()]);
                             } else {
-                              setLocalSkills([...localSkills, inputText.trim()]);
+                              setLocalSkills([
+                                ...localSkills,
+                                inputText.trim(),
+                              ]);
                             }
                             setInputText("");
                           }
@@ -874,7 +892,10 @@ export default function AIChatBuilder() {
                             if (skillType === "tools") {
                               setLocalTools([...localTools, inputText.trim()]);
                             } else {
-                              setLocalSkills([...localSkills, inputText.trim()]);
+                              setLocalSkills([
+                                ...localSkills,
+                                inputText.trim(),
+                              ]);
                             }
                             setInputText("");
                           }
@@ -897,7 +918,12 @@ export default function AIChatBuilder() {
                             ]
                           : ["Git", "VS Code", "Figma", "Docker", "Postman"]
                       )
-                        .filter((s) => !(skillType === "tools" ? localTools : localSkills).includes(s))
+                        .filter(
+                          (s) =>
+                            !(
+                              skillType === "tools" ? localTools : localSkills
+                            ).includes(s),
+                        )
                         .map((s) => (
                           <TouchableOpacity
                             key={s}
@@ -919,14 +945,19 @@ export default function AIChatBuilder() {
                         { marginTop: 15, width: "100%" },
                       ]}
                       onPress={handleVideoStepSubmit}
-                      disabled={localSkills.length === 0 && localTools.length === 0 && !inputText.trim()}
+                      disabled={
+                        localSkills.length === 0 &&
+                        localTools.length === 0 &&
+                        !inputText.trim()
+                      }
                     >
                       <LinearGradient
                         colors={[Theme.colors.primary, Theme.colors.secondary]}
                         style={styles.videoNextGradient}
                       >
                         <Text style={styles.videoNextText}>
-                          Save {localSkills.length + localTools.length} Skills & Next
+                          Save {localSkills.length + localTools.length} Skills &
+                          Next
                         </Text>
                       </LinearGradient>
                     </TouchableOpacity>
@@ -1372,7 +1403,11 @@ export default function AIChatBuilder() {
               onPress={() => setShowHistory(true)}
               style={styles.backButton}
             >
-              <History color={colors.text} size={22} style={{ marginRight: 16 }} />
+              <History
+                color={colors.text}
+                size={22}
+                style={{ marginRight: 16 }}
+              />
             </TouchableOpacity>
           ),
         }}
@@ -1587,17 +1622,45 @@ export default function AIChatBuilder() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowHistory(false)}
       >
-        <View style={[styles.container, { backgroundColor: colors.background, padding: 20 }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingTop: Platform.OS === 'ios' ? 20 : 0 }}>
-            <Text style={[styles.headerText, { color: colors.text, fontSize: 24 }]}>Chat Sessions</Text>
-            <TouchableOpacity onPress={() => setShowHistory(false)} style={{ padding: 8 }}>
+        <View
+          style={[
+            styles.container,
+            { backgroundColor: colors.background, padding: 20 },
+          ]}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 20,
+              paddingTop: Platform.OS === "ios" ? 20 : 0,
+            }}
+          >
+            <Text
+              style={[styles.headerText, { color: colors.text, fontSize: 24 }]}
+            >
+              Chat Sessions
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowHistory(false)}
+              style={{ padding: 8 }}
+            >
               <X color={colors.text} size={24} />
             </TouchableOpacity>
           </View>
 
           {chatSessions.length === 0 ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ color: colors.textMuted }}>No chat sessions found.</Text>
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: colors.textMuted }}>
+                No chat sessions found.
+              </Text>
             </View>
           ) : (
             <FlatList
@@ -1611,18 +1674,31 @@ export default function AIChatBuilder() {
                     borderRadius: 16,
                     marginBottom: 12,
                     borderWidth: 1,
-                    borderColor: colors.glassBorder
+                    borderColor: colors.glassBorder,
                   }}
                   onPress={() => {
                     if (item.messages) setMessages(item.messages);
-                    if (item.collectedAnswers) setCollectedAnswers(item.collectedAnswers);
+                    if (item.collectedAnswers)
+                      setCollectedAnswers(item.collectedAnswers);
                     setCurrentStep(QUESTIONS.length - 1);
                     setVideoEnded(true);
                     setShowHistory(false);
                   }}
                 >
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 4 }}>Resume Chat Session</Text>
-                  <Text style={{ color: colors.textMuted, fontSize: 14 }}>{item.date || new Date(item.createdAt?.seconds * 1000).toLocaleString()}</Text>
+                  <Text
+                    style={{
+                      color: colors.text,
+                      fontSize: 16,
+                      fontWeight: "600",
+                      marginBottom: 4,
+                    }}
+                  >
+                    Resume Chat Session
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 14 }}>
+                    {item.date ||
+                      new Date(item.createdAt?.seconds * 1000).toLocaleString()}
+                  </Text>
                 </TouchableOpacity>
               )}
             />

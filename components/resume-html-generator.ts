@@ -1303,7 +1303,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Elder-3" || templateId === "Elder-13" || templateId === "linkedin") {
+  } else if (templateId === "Elder-3" || templateId === "linkedin") {
     // ELDER-3: LINKEDIN SIGNATURE (Top Header, Clean Blue)
     htmlContent = `
       <div class="page linkedin-layout">
@@ -1621,7 +1621,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Elder-7" || templateId === "Elder-14") {
+  } else if (templateId === "Elder-7") {
     // ELDER-7: MODERN SPLIT (Yellow Accents)
     const nameParts = (data.name || "").split(" ");
     const firstName = nameParts[0] || "";
@@ -2452,7 +2452,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Fresher-1" || templateId === "Fresher-6") {
+  } else if (templateId === "Fresher-1") {
     // FRESHER-1: BLOOM - Modern gradient accent, education-first for fresh graduates
     const internships = (data.experience || []).filter((e: any) => e.workType === "Internship");
     const otherExp = (data.experience || []).filter((e: any) => e.workType !== "Internship");
@@ -2632,7 +2632,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Fresher-2" || templateId === "Fresher-10") {
+  } else if (templateId === "Fresher-2") {
     // FRESHER-2: SPARK - Modern sidebar with internships showcase
     const internships = (data.experience || []).filter((e: any) => e.workType === "Internship");
     const otherExp = (data.experience || []).filter((e: any) => e.workType !== "Internship");
@@ -2757,7 +2757,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Fresher-3" || templateId === "Fresher-7") {
+  } else if (templateId === "Fresher-3") {
     // FRESHER-3: RISE - Project & skills first, academic achievements
     const internships = (data.experience || []).filter((e: any) => e.workType === "Internship");
     const achievements = data.achievements || [];
@@ -2896,7 +2896,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Fresher-4" || templateId === "Fresher-8") {
+  } else if (templateId === "Fresher-4") {
     // FRESHER-4: PRO - Professional two-column fresher layout
     const internships = (data.experience || []).filter((e: any) => e.workType === "Internship");
     const otherExp = (data.experience || []).filter((e: any) => e.workType !== "Internship");
@@ -3015,7 +3015,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Fresher-5" || templateId === "Fresher-9") {
+  } else if (templateId === "Fresher-5") {
     // FRESHER-5: BUILD - Achievement & extracurricular focused
     const internships = (data.experience || []).filter((e: any) => e.workType === "Internship");
     const achievements = data.achievements || [];
@@ -3170,7 +3170,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Elder-9" || templateId === "Rich-1") {
+  } else if (templateId === "Rich-1") {
     // RICH-1: CLASSIC EXECUTIVE - Traditional single-column, no images, black only
     htmlContent = `
       <div class="page" style="font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: #000; background: #fff; padding: 36pt 40pt;">
@@ -3256,7 +3256,7 @@ export const generateResumeHtml = (
         }
       </div>
     `;
-  } else if (templateId === "Elder-10" || templateId === "Rich-2") {
+  } else if (templateId === "Rich-2") {
     // RICH-2: COMPACT TWO-COLUMN - Dense layout, no images, black only
     htmlContent = `
       <div class="page" style="font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: #000; background: #fff; padding: 0;">
@@ -3347,7 +3347,7 @@ export const generateResumeHtml = (
         </div>
       </div>
     `;
-  } else if (templateId === "Elder-11" || templateId === "Rich-3") {
+  } else if (templateId === "Rich-3") {
     // RICH-3: MODERN MINIMAL - Clean single-column with generous whitespace, no images, black only
     htmlContent = `
       <div class="page" style="font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: #000; background: #fff; padding: 40pt 44pt;">
@@ -3433,7 +3433,7 @@ export const generateResumeHtml = (
         }
       </div>
     `;
-  } else if (templateId === "Elder-12" || templateId === "Rich-4") {
+  } else if (templateId === "Rich-4") {
     // RICH-4: STRUCTURED GRID - Grid-based layout with visual hierarchy, no images, black only
     htmlContent = `
       <div class="page" style="font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: #000; background: #fff; padding: 0;">

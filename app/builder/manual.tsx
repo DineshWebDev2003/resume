@@ -89,12 +89,6 @@ const AVAILABLE_TEMPLATES = [
   { id: "Elder-6", name: "Elder 6: Premium" },
   { id: "Elder-7", name: "Elder 7: Gold" },
   { id: "Elder-8", name: "Elder 8: Skyline" },
-  { id: "Elder-9", name: "Elder 9: Classic ATS" },
-  { id: "Elder-10", name: "Elder 10: Compact" },
-  { id: "Elder-11", name: "Elder 11: Minimal" },
-  { id: "Elder-12", name: "Elder 12: Grid" },
-  { id: "Elder-13", name: "Elder 13: Corporate" },
-  { id: "Elder-14", name: "Elder 14: Monolith" },
   { id: "Titan-1", name: "Titan 1: PRO" },
   { id: "Titan-2", name: "Titan 2: Dome" },
   { id: "Titan-3", name: "Titan 3: Split" },
@@ -113,11 +107,10 @@ const AVAILABLE_TEMPLATES = [
   { id: "Fresher-3", name: "Fresher 3: Rise" },
   { id: "Fresher-4", name: "Fresher 4: Pro" },
   { id: "Fresher-5", name: "Fresher 5: Build" },
-  { id: "Fresher-6", name: "Fresher 6: Tech" },
-  { id: "Fresher-7", name: "Fresher 7: Scholar" },
-  { id: "Fresher-8", name: "Fresher 8: Vanguard" },
-  { id: "Fresher-9", name: "Fresher 9: Apex" },
-  { id: "Fresher-10", name: "Fresher 10: Launch" },
+  { id: "Rich-1", name: "Rich 1: Classic" },
+  { id: "Rich-2", name: "Rich 2: Compact" },
+  { id: "Rich-3", name: "Rich 3: Modern" },
+  { id: "Rich-4", name: "Rich 4: Grid" },
 ];
 
 // ─── types ───────────────────────────────────────────────────────────────────
